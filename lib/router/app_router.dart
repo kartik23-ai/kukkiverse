@@ -6,6 +6,7 @@ import '../screens/onboarding/onboarding_screen.dart';
 import '../screens/auth/auth_screen.dart';
 import '../screens/premium/premium_screen.dart';
 import '../screens/main/main_screen.dart';
+import '../screens/desktop/desktop_shell.dart';
 import '../screens/search/search_screen.dart';
 import '../screens/player/player_screen.dart';
 import '../screens/lyrics/lyrics_screen.dart';
@@ -45,7 +46,16 @@ final appRouter = GoRouter(
     GoRoute(path: '/auth', builder: (_, __) => const AuthScreen()),
     GoRoute(path: '/premium', pageBuilder: (_, __) => rottyPage(child: const PremiumScreen(), from: AxisDirection.up)),
     GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
-    GoRoute(path: '/home', builder: (_, __) => const MainScreen()),
+    GoRoute(path: '/home', builder: (context, __) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth > 900) {
+            return const DesktopShell();
+          }
+          return const MainScreen();
+        },
+      );
+    }),
     GoRoute(
       path: '/search',
       pageBuilder: (_, __) => rottyPage(child: const SearchScreen(), from: AxisDirection.right),

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,13 +20,16 @@ late RottyAudioHandler _audioHandler;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Color(0xFF000000),
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  // Only set mobile-specific UI chrome on mobile platforms
+  if (Platform.isAndroid || Platform.isIOS) {
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF000000),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  }
 
   final storage = StorageService();
   await storage.init();
@@ -49,16 +53,22 @@ void main() async {
   RottyAudioEffects.infiniteBlend = StorageService().getBoolFlag('infinite_blend');
   RottyAudioEffects.applySoundSpace(storage.soundSpace);
 
-  _audioHandler = await AudioService.init(
-    builder: () => RottyAudioHandler(),
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.rottymusic.rotty_music.audio',
-      androidNotificationChannelName: 'ROTTY MUSIC',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
-      androidNotificationIcon: 'mipmap/ic_launcher',
-    ),
-  );
+  // AudioService.init with notification only on mobile
+  if (Platform.isAndroid || Platform.isIOS) {
+    _audioHandler = await AudioService.init(
+      builder: () => RottyAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.rottymusic.rotty_music.audio',
+        androidNotificationChannelName: 'ROTTY MUSIC',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: true,
+        androidNotificationIcon: 'mipmap/ic_launcher',
+      ),
+    );
+  } else {
+    // Desktop: no AudioService wrapper, just raw handler
+    _audioHandler = RottyAudioHandler();
+  }
 
   runApp(ProviderScope(
     overrides: [
