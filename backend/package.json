@@ -1,0 +1,16 @@
+{
+  "name": "rotty-ghost-proxy",
+  "version": "1.0.0",
+  "description": "Rotty Music Ghost Proxy — AES-256 encrypted music relay",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

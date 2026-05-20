@@ -1,0 +1,419 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../core/constants/api_constants.dart';
+import '../models/media_item.dart';
+import '../models/song_model.dart';
+
+class ApiService {
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+
+  final http.Client _client = http.Client();
+  ApiService._internal();
+
+  String _quality = '320kbps';
+  void setQuality(String quality) => _quality = quality;
+
+  static const _headers = {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+    'Accept': 'application/json',
+    'Referer': 'https://www.jiosaavn.com',
+  };
+
+  Uri _web(String call, Map<String, String> params) {
+    return Uri.parse('https://www.jiosaavn.com/api.php').replace(
+      queryParameters: {
+        '__call': call,
+        '_format': 'json',
+        '_marker': '0',
+        'ctx': 'web6dot0',
+        ...params,
+      },
+    );
+  }
+
+  Future<http.Response?> _get(Uri uri) async {
+    try {
+      final r = await _client.get(uri, headers: _headers).timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) return r;
+    } catch (_) {}
+    return null;
+  }
+
+  Future<List<SongModel>> searchSongs(String query, {int limit = 25, int page = 1}) async {
+    if (query.trim().isEmpty) return [];
+    final r = await _get(_web('search.getResults', {
+      'q': query.trim(),
+      'p': '$page',
+      'n': '$limit',
+      'type': 'song',
+    }));
+    if (r != null) return _parseWebSongs(r.body);
+    return _fallbackSumitSearch(query, limit);
+  }
+
+  Future<List<AlbumItem>> searchAlbums(String query, {int limit = 20}) async {
+    if (query.trim().isEmpty) return [];
+    final r = await _get(_web('search.getResults', {
+      'q': query.trim(),
+      'p': '1',
+      'n': '$limit',
+      'type': 'album',
+    }));
+    if (r == null) return _fallbackSumitAlbums(query, limit);
+    try {
+      final body = json.decode(r.body);
+      final results = body is Map ? body['results'] : null;
+      if (results is! List) return [];
+      return results.whereType<Map>().map((e) {
+        final m = Map<String, dynamic>.from(e);
+        return AlbumItem(
+          id: m['albumid']?.toString() ?? m['id']?.toString() ?? '',
+          name: m['title']?.toString() ?? m['album']?.toString() ?? 'Album',
+          image: SongModel.hiResImage(m['image']?.toString() ?? ''),
+          year: m['year']?.toString() ?? '',
+          language: m['language']?.toString() ?? '',
+        );
+      }).where((a) => a.id.isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<ArtistItem>> searchArtists(String query, {int limit = 20}) async {
+    if (query.trim().isEmpty) return [];
+    final r = await _get(_web('search.getArtistResults', {
+      'q': query.trim(),
+      'p': '1',
+      'n': '$limit',
+    }));
+    if (r == null) return _fallbackSumitArtists(query, limit);
+    try {
+      final body = json.decode(r.body);
+      final results = body is Map ? body['results'] : null;
+      if (results is! List) return [];
+      return results.whereType<Map>().map((e) {
+        final m = Map<String, dynamic>.from(e);
+        return ArtistItem(
+          id: m['artistid']?.toString() ?? m['id']?.toString() ?? '',
+          name: m['title']?.toString() ?? m['name']?.toString() ?? 'Artist',
+          image: SongModel.hiResImage(m['image']?.toString() ?? ''),
+        );
+      }).where((a) => a.id.isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<SongModel>> getAlbumSongs(String albumId) async {
+    if (albumId.isEmpty) return [];
+    final r = await _get(_web('content.getAlbumDetails', {'albumid': albumId}));
+    if (r != null) {
+      try {
+        final body = json.decode(r.body);
+        if (body is Map && body['songs'] is List) {
+          return _mapsToSongs(body['songs'] as List);
+        }
+      } catch (_) {}
+    }
+    return _fallbackSumitAlbum(albumId);
+  }
+
+  Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String artistId) async {
+    if (artistId.isEmpty) return (artist: null, songs: <SongModel>[], albums: <AlbumItem>[]);
+    final r = await _get(_web('artist.getArtistPageDetails', {
+      'artistId': artistId,
+      'page': '1',
+    }));
+    if (r != null) {
+      try {
+        final body = json.decode(r.body);
+        if (body is Map) {
+          final name = body['name']?.toString() ?? body['title']?.toString() ?? 'Artist';
+          final image = SongModel.hiResImage(body['image']?.toString() ?? '');
+          final artist = ArtistItem(id: artistId, name: name, image: image);
+          final songs = body['topSongs'] is List
+              ? _mapsToSongs(body['topSongs'] as List)
+              : body['songs'] is List
+                  ? _mapsToSongs(body['songs'] as List)
+                  : <SongModel>[];
+          final albums = body['topAlbums'] is List
+              ? (body['topAlbums'] as List).whereType<Map>().map((e) {
+                  final m = Map<String, dynamic>.from(e);
+                  return AlbumItem(
+                    id: m['albumid']?.toString() ?? m['id']?.toString() ?? '',
+                    name: m['title']?.toString() ?? m['name']?.toString() ?? '',
+                    image: SongModel.hiResImage(m['image']?.toString() ?? ''),
+                  );
+                }).toList()
+              : <AlbumItem>[];
+          if (songs.isNotEmpty || albums.isNotEmpty) return (artist: artist, songs: songs, albums: albums);
+        }
+      } catch (_) {}
+    }
+    return _fallbackSumitArtist(artistId);
+  }
+
+  Future<Map<String, List<SongModel>>> getHomeData() async {
+    final sections = <String, List<SongModel>>{};
+    final entries = ApiConstants.homeQueries.entries.take(4).toList();
+    for (final e in entries) {
+      final songs = await searchSongs(e.value, limit: 12);
+      if (songs.isNotEmpty) sections[e.key] = songs;
+    }
+    if (sections.isEmpty) {
+      final trending = await searchSongs('hindi trending', limit: 15);
+      if (trending.isNotEmpty) sections['Trending'] = trending;
+    }
+    return sections;
+  }
+
+  Future<SongModel?> getSongDetails(String id) async {
+    if (id.isEmpty) return null;
+    final r = await _get(_web('song.getDetails', {'pids': id}));
+    if (r != null) {
+      try {
+        final body = json.decode(r.body);
+        if (body is List && body.isNotEmpty) {
+          return SongModel.fromSaavnWeb(Map<String, dynamic>.from(body.first as Map), quality: _quality);
+        }
+        if (body is Map && body['songs'] is List && (body['songs'] as List).isNotEmpty) {
+          return SongModel.fromSaavnWeb(
+            Map<String, dynamic>.from((body['songs'] as List).first as Map),
+            quality: _quality,
+          );
+        }
+      } catch (_) {}
+    }
+    return _fallbackSumitSong(id);
+  }
+
+  /// Get lyrics — LRCLIB (synced) first, then JioSaavn fallback
+  Future<String?> getLyrics(String songId, {String? title, String? artist, int? durationSec}) async {
+    if (songId.isEmpty) return null;
+
+    // 1. Try LRCLIB (time-synced karaoke lyrics) — best quality
+    if (title != null && title.isNotEmpty) {
+      final lrclib = await _fetchLrclibLyrics(title, artist ?? '', durationSec ?? 0);
+      if (lrclib != null && lrclib.trim().isNotEmpty) return lrclib;
+    }
+
+    // 2. Fallback: JioSaavn direct
+    final direct = await _fetchSaavnLyrics(songId);
+    if (direct != null && direct.trim().isNotEmpty) return direct;
+
+    // 3. Fallback: Sumit mirror
+    return _fetchMirrorLyrics(songId);
+  }
+
+  /// LRCLIB — free, open-source synced lyrics database
+  Future<String?> _fetchLrclibLyrics(String title, String artist, int durationSec) async {
+    try {
+      // Search endpoint
+      final q = Uri.encodeComponent(title);
+      final a = Uri.encodeComponent(artist);
+      final url = 'https://lrclib.net/api/search?q=$q&artist_name=$a';
+
+      final r = await _client.get(
+        Uri.parse(url),
+        headers: {
+          'User-Agent': 'RottyMusic/1.0',
+          'Lrclib-Client': 'RottyMusic v1.0',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (r.statusCode != 200) return null;
+
+      final results = json.decode(r.body);
+      if (results is! List || results.isEmpty) return null;
+
+      // Pick best match — prefer synced, closest duration
+      Map? best;
+      int bestScore = 99999;
+
+      for (final item in results) {
+        if (item is! Map) continue;
+        final synced = item['syncedLyrics']?.toString();
+        final plain = item['plainLyrics']?.toString();
+        if ((synced == null || synced.isEmpty) && (plain == null || plain.isEmpty)) continue;
+
+        final itemDur = item['duration'] is num ? (item['duration'] as num).toInt() : 0;
+        final durDiff = durationSec > 0 ? (itemDur - durationSec).abs() : 0;
+        final score = durDiff + (synced != null && synced.isNotEmpty ? 0 : 200);
+
+        if (score < bestScore) {
+          bestScore = score;
+          best = item;
+        }
+      }
+
+      if (best == null) return null;
+
+      // Return synced (LRC format) if available, else plain
+      final synced = best['syncedLyrics']?.toString();
+      if (synced != null && synced.isNotEmpty) return synced;
+      return best['plainLyrics']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _fetchSaavnLyrics(String songId) async {
+    final r = await _get(_web('lyrics.getLyrics', {
+      'lyrics_id': songId,
+      'api_version': '4',
+    }));
+    if (r == null) return null;
+    try {
+      final body = json.decode(r.body);
+      if (body is Map && body['lyrics'] != null) {
+        return _cleanLyricsHtml(body['lyrics'].toString());
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String?> _fetchMirrorLyrics(String songId) async {
+    try {
+      final r = await _client
+          .get(Uri.parse('${ApiConstants.lyricsMirrorUrl}?id=$songId'), headers: _headers)
+          .timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) {
+        final body = json.decode(r.body);
+        if (body is Map && body['lyrics'] != null) {
+          return _cleanLyricsHtml(body['lyrics'].toString());
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _cleanLyricsHtml(String raw) {
+    return raw
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&#039;', "'")
+        .replaceAll('&quot;', '"')
+        .trim();
+  }
+
+  List<SongModel> _parseWebSongs(String body) {
+    try {
+      final decoded = json.decode(body);
+      final results = decoded is Map ? decoded['results'] : null;
+      if (results is! List) return [];
+      return _mapsToSongs(results);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  List<SongModel> _mapsToSongs(List list) => list
+      .whereType<Map>()
+      .map((s) => SongModel.fromSaavnWeb(Map<String, dynamic>.from(s), quality: _quality))
+      .where((s) => s.id.isNotEmpty)
+      .toList();
+
+  Future<List<SongModel>> _fallbackSumitSearch(String query, int limit) async {
+    try {
+      final url = '${ApiConstants.fallbackBaseUrl}/search/songs?query=${Uri.encodeComponent(query)}&page=1&limit=$limit';
+      final r = await _client.get(Uri.parse(url), headers: _headers).timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) return _parseSumitSongs(json.decode(r.body));
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<AlbumItem>> _fallbackSumitAlbums(String query, int limit) async {
+    try {
+      final url = '${ApiConstants.fallbackBaseUrl}/search/albums?query=${Uri.encodeComponent(query)}&page=1&limit=$limit';
+      final r = await _client.get(Uri.parse(url), headers: _headers).timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) {
+        return _parseList(json.decode(r.body), AlbumItem.fromJson);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<ArtistItem>> _fallbackSumitArtists(String query, int limit) async {
+    try {
+      final url = '${ApiConstants.fallbackBaseUrl}/search/artists?query=${Uri.encodeComponent(query)}&page=1&limit=$limit';
+      final r = await _client.get(Uri.parse(url), headers: _headers).timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) {
+        return _parseList(json.decode(r.body), ArtistItem.fromJson);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<SongModel>> _fallbackSumitAlbum(String albumId) async {
+    try {
+      final r = await _client
+          .get(Uri.parse('${ApiConstants.fallbackBaseUrl}/albums?id=$albumId'), headers: _headers)
+          .timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) {
+        final body = json.decode(r.body);
+        final data = body is Map ? body['data'] : null;
+        if (data is Map && data['songs'] is List) return _parseSumitSongs(data['songs']);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> _fallbackSumitArtist(String id) async {
+    try {
+      final r = await _client
+          .get(Uri.parse('${ApiConstants.fallbackBaseUrl}/artists?id=$id'), headers: _headers)
+          .timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) {
+        final body = json.decode(r.body);
+        final data = body is Map ? body['data'] : null;
+        if (data is Map) {
+          final artist = ArtistItem.fromJson(Map<String, dynamic>.from(data));
+          final songs = data['topSongs'] is List ? _parseSumitSongs(data['topSongs']) : <SongModel>[];
+          final albums = data['topAlbums'] is List
+              ? (data['topAlbums'] as List).whereType<Map>().map((e) => AlbumItem.fromJson(Map<String, dynamic>.from(e))).toList()
+              : <AlbumItem>[];
+          return (artist: artist, songs: songs, albums: albums);
+        }
+      }
+    } catch (_) {}
+    return (artist: null, songs: <SongModel>[], albums: <AlbumItem>[]);
+  }
+
+  Future<SongModel?> _fallbackSumitSong(String id) async {
+    try {
+      final r = await _client.get(Uri.parse('${ApiConstants.fallbackBaseUrl}/songs/$id'), headers: _headers).timeout(ApiConstants.timeout);
+      if (r.statusCode == 200) {
+        final data = json.decode(r.body);
+        final songJson = data is Map ? (data['data'] ?? data) : null;
+        if (songJson is Map<String, dynamic>) return SongModel.fromJson(songJson, preferredQuality: _quality);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  List<T> _parseList<T>(dynamic body, T Function(Map<String, dynamic>) fromJson) {
+    final data = body is Map ? body['data'] : null;
+    final results = data is Map ? data['results'] : null;
+    if (results is! List) return [];
+    return results.whereType<Map>().map((e) => fromJson(Map<String, dynamic>.from(e))).toList();
+  }
+
+  List<SongModel> _parseSumitSongs(dynamic body) {
+    try {
+      final data = body is Map ? body['data'] : null;
+      final results = data is Map ? data['results'] : (body is List ? body : null);
+      if (results is! List) return [];
+      return results
+          .whereType<Map>()
+          .map((s) => SongModel.fromJson(Map<String, dynamic>.from(s), preferredQuality: _quality))
+          .where((s) => s.id.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+}

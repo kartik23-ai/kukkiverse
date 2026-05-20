@@ -1,0 +1,89 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.FLASHLIGHT"/>
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
+    <application
+        android:label="ROTTY MUSIC"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name="com.ryanheise.audioservice.AudioServiceActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <service android:name="com.ryanheise.audioservice.AudioService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+                <action android:name="android.intent.action.MEDIA_SEARCH" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- UPI intent query — catches ALL UPI-capable apps -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="upi"/>
+        </intent>
+        <!-- Explicit popular UPI apps for Android 11+ package visibility -->
+        <package android:name="com.google.android.apps.nbu.paisa.user"/>
+        <package android:name="com.phonepe.app"/>
+        <package android:name="net.one97.paytm"/>
+        <package android:name="in.org.npci.upiapp"/>
+        <package android:name="com.whatsapp"/>
+        <package android:name="com.amazon.mShop.android.shopping"/>
+        <package android:name="in.amazon.mShop.android.shopping"/>
+        <package android:name="com.myairtel.selfcare"/>
+        <package android:name="com.freecharge.android"/>
+        <package android:name="com.mobikwik_new"/>
+        <package android:name="com.csam.icici.bank.imobile"/>
+        <package android:name="com.sbi.SBIFreedomPlus"/>
+        <package android:name="net.mypaytm.nativepay"/>
+        <package android:name="com.dream11.fantasy.cricket"/>
+        <package android:name="com.lendingkart.prakhar"/>
+        <package android:name="com.phonepe.app.prepaid"/>
+        <package android:name="in.co.slice.app"/>
+        <package android:name="com.cred.android"/>
+    </queries>
+</manifest>
