@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rotty Music | The Future of Sound</title>
+    <meta name="description" content="Rotty Music — Military-grade encrypted, AI-powered, GPU-accelerated music experience. Crystal UI, 3D Lyrics, Ghost Proxy Security. Download now.">
+    <meta name="theme-color" content="#030305">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;900&family=Syncopate:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 3D WebGL Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Film Grain -->
+    <div class="noise-overlay"></div>
+
+    <!-- Cursor Glow -->
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+        <div class="logo">ROTTY<span class="dot">.</span></div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#updates">What's New</a>
+            <a href="#security">Security</a>
+        </div>
+        <a href="app-release.apk" download class="btn-nav">
+            <span class="btn-nav-pulse"></span>
+            GET APK
+        </a>
+    </nav>
+
+    <!-- Scrollable Content -->
+    <main class="scroll-container">
+
+        <!-- ═══ HERO SECTION ═══ -->
+        <section class="section hero" id="home">
+            <div class="hero-content">
+                <div class="badge-container">
+                    <span class="badge glow-pulse">V3.0 GHOST PROXY</span>
+                </div>
+                <h1 class="title">
+                    THE<br>
+                    <span class="gradient-text">FUTURE</span><br>
+                    OF SOUND<span class="dot">.</span>
+                </h1>
+                <p class="subtitle">Military-grade encryption. AI-driven queues. GPU-accelerated visuals. Zero compromises.</p>
+
+                <div class="cta-wrapper">
+                    <a href="app-release.apk" download class="btn primary-btn magnetic" id="heroBtn">
+                        <span class="btn-text">DOWNLOAD APK</span>
+                        <div class="btn-bg"></div>
+                        <div class="btn-particles" id="btnParticles"></div>
+                    </a>
+                    <p class="version-tag">v3.0 • 54.8MB • Android 11+</p>
+                </div>
+
+                <!-- Stats Ticker -->
+                <div class="stats-row">
+                    <div class="stat">
+                        <span class="stat-num" data-target="120">0</span><span class="stat-suffix">FPS</span>
+                        <span class="stat-label">Smooth Sync</span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat">
+                        <span class="stat-num" data-target="256">0</span><span class="stat-suffix">-bit</span>
+                        <span class="stat-label">AES Encryption</span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat">
+                        <span class="stat-num" data-target="320">0</span><span class="stat-suffix">kbps</span>
+                        <span class="stat-label">Audio Quality</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="scroll-indicator">
+                <p>SCROLL TO EXPLORE</p>
+                <div class="line"></div>
+            </div>
+        </section>
+
+        <!-- ═══ FEATURES BENTO GRID ═══ -->
+        <section class="section" id="features">
+            <h2 class="section-header">ENGINEERED<br><span class="gradient-text">DIFFERENT.</span></h2>
+
+            <div class="bento-grid">
+                <div class="bento-card bento-large glass-card tilt-card">
+                    <div class="bento-icon">💎</div>
+                    <h3>Crystal Shatter UI</h3>
+                    <p>Loading screens are dead. Watch a 3D frosted crystal glow, crack, and shatter into your actual content. Physics-based particle explosion on every load.</p>
+                    <div class="bento-glow" style="--glow-color: #8B5CF6;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🩸</div>
+                    <h3>Fluid Audio Bleed</h3>
+                    <p>Album colors melt and drip down the screen like liquid paint. Bass hits cause real-time ripple explosions.</p>
+                    <div class="bento-glow" style="--glow-color: #FA2D48;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🧲</div>
+                    <h3>Magnetic Drag & Drop</h3>
+                    <p>Long-press any song → it becomes a glowing disk. Playlists appear as gravity wells. Drag and drop with heavy haptics.</p>
+                    <div class="bento-glow" style="--glow-color: #06B6D4;"></div>
+                </div>
+                <div class="bento-card bento-large glass-card tilt-card">
+                    <div class="bento-icon">🎤</div>
+                    <h3>3D Spatial Lyrics</h3>
+                    <p>Lyrics fly in from deep 3D space. Active line locks dead-center. Words fill left-to-right as the singer sings. Apple Music blur on inactive lines. Cinema mode with star field background.</p>
+                    <div class="bento-glow" style="--glow-color: #FFD700;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🎛️</div>
+                    <h3>3D EQ Mesh</h3>
+                    <p>Wireframe mesh in settings reacts to Bass, Treble, Vocal, 8D. Bottom spikes for bass, golden glow for vocals.</p>
+                    <div class="bento-glow" style="--glow-color: #7B61FF;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🤖</div>
+                    <h3>AI DJ Engine</h3>
+                    <p>Groq-powered mood detection. Never hear a repeat. Infinite queue that flows seamlessly with your vibe.</p>
+                    <div class="bento-glow" style="--glow-color: #00D4FF;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ WHAT'S NEW v3.0 ═══ -->
+        <section class="section" id="updates">
+            <h2 class="section-header">WHAT'S NEW<br><span class="gradient-text">IN V3.0</span></h2>
+
+            <div class="changelog">
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #8B5CF6;"></div>
+                    <div class="cl-content">
+                        <h4>Crystal Shatter Skeleton</h4>
+                        <p>Neon scanners are dead. New frosted glass crystal loading with diagonal refraction beams. Shatters into 24 angular shards on load complete.</p>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #FA2D48;"></div>
+                    <div class="cl-content">
+                        <h4>Fluid Audio-Bleed Background</h4>
+                        <p>Album art colors melt downward in organic blobs with liquid drip extensions. Bass intensity causes ripple rings and blob pulsation.</p>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #06B6D4;"></div>
+                    <div class="cl-content">
+                        <h4>120fps Lyrics Sync Engine</h4>
+                        <p>Ticker-based interpolation replaces StreamBuilder. Dead-center locked scrolling. Apple Music fluid blur. Word-by-word karaoke sweep gradient.</p>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #FFD700;"></div>
+                    <div class="cl-content">
+                        <h4>3D Cinematic Lyrics Mode</h4>
+                        <p>Matrix4 3D perspective. Lines fly in from depth, stop center, fly past overhead. Star field background. Native Hindi/Punjabi font rendering.</p>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #7B61FF;"></div>
+                    <div class="cl-content">
+                        <h4>Ghost Proxy v2.0</h4>
+                        <p>AES-256 encrypted relay. Firebase App Check. Rate limiting. All API sources completely hidden from the APK binary. Reverse engineering impossible.</p>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #00FF88;"></div>
+                    <div class="cl-content">
+                        <h4>Hardware EQ Engine</h4>
+                        <p>AndroidEqualizer wired into AudioPipeline. Bass Boost, 8D Audio, Vocal Forward — all physically change sound via hardware EQ bands.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ SECURITY SECTION ═══ -->
+        <section class="section" id="security">
+            <div class="glass-card massive-card tilt-card security-card">
+                <div class="lock-icon">🔒</div>
+                <h2 class="section-title text-center">GHOST<br>PROXY<span class="dot">.</span></h2>
+                <p class="desc text-center">Your music. Your data. Invisible to the world. Military-grade AES-256 encryption between app and server. No API keys in the APK. No URLs to reverse engineer. Zero attack surface.</p>
+
+                <div class="security-grid">
+                    <div class="sec-item">
+                        <span class="sec-icon">🛡️</span>
+                        <span>AES-256-CBC</span>
+                    </div>
+                    <div class="sec-item">
+                        <span class="sec-icon">🔑</span>
+                        <span>Zero Hardcoded Keys</span>
+                    </div>
+                    <div class="sec-item">
+                        <span class="sec-icon">⏱️</span>
+                        <span>Rate Limited</span>
+                    </div>
+                    <div class="sec-item">
+                        <span class="sec-icon">👻</span>
+                        <span>Untraceable Relay</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ FINAL CTA ═══ -->
+        <section class="section center-align" id="download">
+            <div class="final-block">
+                <h2 class="mega-title">DOWNLOAD<br><span class="gradient-text">NOW.</span></h2>
+                <a href="app-release.apk" download class="btn primary-btn massive-btn magnetic">
+                    <span class="btn-text">INSTALL ROTTY MUSIC</span>
+                    <div class="btn-bg"></div>
+                </a>
+                <p class="sub-text">Direct APK • Android 11+ • Ghost Proxy Secured</p>
+            </div>
+        </section>
+
+        <footer>
+            <div class="footer-content">
+                <div class="logo footer-logo">ROTTY<span class="dot">.</span></div>
+                <p>Engineered for the future. &copy; 2026</p>
+                <div class="footer-links">
+                    <a href="https://github.com/kartik23-ai/kukkiverse" target="_blank">GitHub</a>
+                </div>
+            </div>
+        </footer>
+
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
