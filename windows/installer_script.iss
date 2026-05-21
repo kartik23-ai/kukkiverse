@@ -20,8 +20,8 @@ WizardStyle=modern
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "x64\runner\Release\rotty_music.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\build\windows\x64\runner\Release\rotty_music.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Rotty Music"; Filename: "{app}\rotty_music.exe"
