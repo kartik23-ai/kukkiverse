@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import '../models/song_model.dart';
 import 'api_service.dart';
 import 'groq_ai_service.dart';
@@ -89,6 +90,47 @@ class AiDjService {
     );
   }
 
+  bool _isIndianVibe(SongModel song) {
+    final titleLower = song.title.toLowerCase();
+    final artistLower = song.artist.toLowerCase();
+    
+    // Check Indic scripts (Devanagari, Gurmukhi, etc.)
+    if (RegExp(r'[\u0900-\u097F\u0A00-\u0A7F]').hasMatch(song.title) || 
+        RegExp(r'[\u0900-\u097F\u0A00-\u0A7F]').hasMatch(song.artist)) {
+      return true;
+    }
+    
+    // Prominent Indian artists keywords
+    final indianArtists = [
+      'arijit', 'neha kakkar', 'jubin', 'pritam', 'badshah', 'shreya ghoshal', 
+      'diljit', 'dhillon', 'randhawa', 'praak', 'moose wala', 'aujla', 'honey singh', 
+      'divine', 'mc stan', 'king', 'raftaar', 'anuv jain', 'darshan raval', 'sonu nigam', 
+      'sunidhi', 'atif aslam', 'rahat fateh', 'lata mangeshkar', 'kishore kumar', 
+      'rafi', 'burman', 'asha bhosle', 'udit narayan', 'alka yagnik', 'kumar sanu',
+      'vishal-shekhar', 'sachin-jigar', 'shankar-ehsaan-loy', 'amit trivedi', 
+      'rahman', 'mithoon', 'tanishk', 'salim-sulaiman', 'sachet-parampara', 'jasleen royal'
+    ];
+    if (indianArtists.any((a) => artistLower.contains(a))) {
+      return true;
+    }
+    
+    // Common romanized Hindi/Punjabi keywords
+    final indianWords = [
+      'dil', 'pyar', 'ishq', 'mohabbat', 'jiya', 'jaan', 'rabba', 'yaara', 'heeriye', 'soniye',
+      'tera', 'tere', 'meri', 'mere', 'tum', 'tujhe', 'tumhe', 'apna', 'apne', 'hum', 'humein',
+      'kya', 'kyun', 'kabhi', 'kaise', 'sab', 'ek', 'do', 'teen', 'char', 'sath', 'saath',
+      'chal', 'chale', 'aaja', 'jaana', 'raat', 'din', 'subah', 'shyam', 'zindagi', 'duniya',
+      'munda', 'kudi', 'gabru', 'naal', 'billo', 'suit', 'patola', 'gaddi', 'pind', 'gallan',
+      'raaste', 'musafir', 'safar', 'khoya', 'naseeb', 'akh', 'ankhein', 'soche', 'dosti', 'haal'
+    ];
+    final words = titleLower.split(RegExp(r'[^a-z0-9]'));
+    if (words.any((w) => indianWords.contains(w))) {
+      return true;
+    }
+    
+    return false;
+  }
+
   Future<List<SongModel>> buildSmartQueue({
     required SongModel? nowPlaying,
     required List<SongModel> recent,
@@ -104,7 +146,6 @@ class AiDjService {
       hour: hour,
     );
 
-    // Build aggressive exclude set — IDs AND fingerprints
     final excludeIdSet = Set<String>.from(excludeIds);
     final excludeFingerprints = <String>{};
 
@@ -117,8 +158,11 @@ class AiDjService {
     }
 
     final queries = <String>[];
+    final result = <SongModel>[];
+    final isIndian = nowPlaying != null ? _isIndianVibe(nowPlaying) : true;
+    bool useLocalFallback = true;
 
-    // 1. Groq for smart contextual queries
+    // 1. Contextual recommendations from Groq
     if (nowPlaying != null) {
       try {
         final groqQ = await _groq.suggestSearchQueries(
@@ -127,26 +171,71 @@ class AiDjService {
           moodLabel: insight.mood.label,
           recentTitles: recent.map((s) => s.title).toList(),
         );
-        if (groqQ.isNotEmpty) queries.addAll(groqQ);
-      } catch (_) {}
-
-      // Artist and album seeds
-      queries.add('${nowPlaying.artist} best songs');
-      if (nowPlaying.album.isNotEmpty && nowPlaying.album != 'Single') {
-        queries.add(nowPlaying.album);
+        if (groqQ.isNotEmpty) {
+          queries.addAll(groqQ);
+          useLocalFallback = false;
+        }
+      } catch (e) {
+        debugPrint('ROTTY AI: Groq unavailable ($e). Falling back to local engine...');
       }
+
+      if (useLocalFallback) {
+        // Local rules-based recommendation engine
+        final primaryArtist = nowPlaying.artist.split(RegExp(r'[,&]')).first.trim();
+        queries.add('$primaryArtist popular');
+        queries.add('$primaryArtist hits');
+        queries.add('$primaryArtist songs');
+        
+        if (nowPlaying.album.isNotEmpty && nowPlaying.album != 'Single') {
+          queries.add(nowPlaying.album);
+          queries.add('$primaryArtist ${nowPlaying.album}');
+        }
+
+        // Fetch matching local items directly
+        final localCandidates = <SongModel>[];
+        for (final s in favorites) {
+          if (_isIndianVibe(s) == isIndian && !excludeIdSet.contains(s.id) && !excludeFingerprints.contains(_fingerprint(s))) {
+            localCandidates.add(s);
+          }
+        }
+        for (final s in recent) {
+          if (_isIndianVibe(s) == isIndian && !excludeIdSet.contains(s.id) && !excludeFingerprints.contains(_fingerprint(s))) {
+            localCandidates.add(s);
+          }
+        }
+        localCandidates.shuffle(_rng);
+        for (final s in localCandidates.take(5)) {
+          excludeIdSet.add(s.id);
+          excludeFingerprints.add(_fingerprint(s));
+          result.add(s);
+        }
+      } else {
+        final primaryArtist = nowPlaying.artist.split(RegExp(r'[,&]')).first.trim();
+        queries.add('$primaryArtist hits');
+        if (nowPlaying.album.isNotEmpty && nowPlaying.album != 'Single') {
+          queries.add(nowPlaying.album);
+        }
+      }
+
       excludeIdSet.add(nowPlaying.id);
       excludeFingerprints.add(_fingerprint(nowPlaying));
     }
 
-    // 2. Mood queries — pick DIFFERENT moods for variety
-    final moodPool = AiMood.values.where((m) => m != insight.mood).toList()..shuffle(_rng);
-    queries.add(insight.mood.searchQuery);
-    for (final m in moodPool.take(1)) {
-      queries.add(m.searchQuery);
+    // 2. Mood queries (Language Locked)
+    String moodQuery = insight.mood.searchQuery;
+    if (!isIndian) {
+      moodQuery = switch (insight.mood) {
+        AiMood.energetic => 'workout dance pop hits workout',
+        AiMood.chill => 'lofi study chill acoustic english',
+        AiMood.romantic => 'romantic pop love songs english',
+        AiMood.focus => 'ambient focus study post-rock lofi',
+        AiMood.party => 'edm party club dance hits billboard',
+        AiMood.night => 'mellow sad late night indie pop',
+      };
     }
+    queries.add(moodQuery);
 
-    // 3. Favorites-based artist queries (different from now playing)
+    // 3. Favorites-based artist queries
     if (favorites.isNotEmpty) {
       final favArtists = favorites
           .map((s) => s.artist)
@@ -155,18 +244,28 @@ class AiDjService {
           .toList()
         ..shuffle(_rng);
       for (final a in favArtists.take(2)) {
-        queries.add('$a popular songs');
+        final primary = a.split(RegExp(r'[,&]')).first.trim();
+        queries.add('$primary popular songs');
       }
     }
 
-    // 4. General variety fallbacks
-    queries.addAll([
-      'trending hindi songs ${DateTime.now().year}',
-      'latest bollywood hits',
-      'new indie hindi songs',
-    ]);
+    // 4. Language-locked variety fallbacks
+    if (isIndian) {
+      queries.addAll([
+        'trending hindi songs ${DateTime.now().year}',
+        'latest bollywood hits',
+        'new indie hindi songs',
+        'punjabi latest hits',
+      ]);
+    } else {
+      queries.addAll([
+        'billboard hot 100',
+        'trending pop songs ${DateTime.now().year}',
+        'viral hits english',
+        'indie pop rock hits',
+      ]);
+    }
 
-    final result = <SongModel>[];
     final usedQueries = <String>{};
     final addedFingerprints = <String>{};
 
@@ -186,10 +285,11 @@ class AiDjService {
           if (result.length >= limit) break;
           if (s.id.isEmpty) continue;
           
-          // Skip by ID
           if (excludeIdSet.contains(s.id)) continue;
           
-          // Skip by fingerprint (prevents duplicates/remixes)
+          // Strict language vibe filter
+          if (nowPlaying != null && _isIndianVibe(s) != isIndian) continue;
+
           final fp = _fingerprint(s);
           if (excludeFingerprints.contains(fp)) continue;
           if (addedFingerprints.contains(fp)) continue;
@@ -244,9 +344,25 @@ class AiDjService {
       excludeFp.add(_fingerprint(s));
     }
 
-    final songs = await _api.searchSongs(target.searchQuery, limit: limit + 10, page: 1);
+    final isIndian = nowPlaying != null ? _isIndianVibe(nowPlaying) : true;
+    String targetQuery = target.searchQuery;
+    if (!isIndian) {
+      targetQuery = switch (target) {
+        AiMood.energetic => 'workout dance pop hits workout',
+        AiMood.chill => 'lofi study chill acoustic english',
+        AiMood.romantic => 'romantic pop love songs english',
+        AiMood.focus => 'ambient focus study post-rock lofi',
+        AiMood.party => 'edm party club dance hits billboard',
+        AiMood.night => 'mellow sad late night indie pop',
+      };
+    }
+
+    final songs = await _api.searchSongs(targetQuery, limit: limit + 15, page: 1);
     return songs
-        .where((s) => !exclude.contains(s.id) && !excludeFp.contains(_fingerprint(s)))
+        .where((s) => 
+            !exclude.contains(s.id) && 
+            !excludeFp.contains(_fingerprint(s)) &&
+            (nowPlaying == null || _isIndianVibe(s) == isIndian))
         .take(limit)
         .toList();
   }

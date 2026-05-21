@@ -81,13 +81,14 @@ class LyricsScreen extends ConsumerWidget {
                     ),
                   );
                 }
+                final dur = handler.player.duration ?? song?.duration ?? const Duration(minutes: 3, seconds: 30);
+                final lines = parseLyricsToLines(text, dur);
+                final isSynced = text.contains(RegExp(r'\[\d+:\d{2}'));
+                
                 return StreamBuilder<Duration>(
                   stream: handler.player.positionStream,
                   builder: (context, snap) {
                     final pos = snap.data ?? Duration.zero;
-                    final dur = handler.player.duration ?? song?.duration ?? const Duration(minutes: 3, seconds: 30);
-                    final lines = parseLyricsToLines(text, dur);
-                    final isSynced = text.contains(RegExp(r'\[\d+:\d{2}'));
                     return Padding(
                       padding: const EdgeInsets.all(16),
                       child: LiveKaraokeLyrics(

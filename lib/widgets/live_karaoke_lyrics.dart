@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -308,6 +309,62 @@ class _LiveKaraokeLyricsState extends ConsumerState<LiveKaraokeLyrics>
     final fontSize = isNonLatin ? baseFontSize * 1.05 : baseFontSize;
     final lineHeight = isNonLatin ? 1.6 : 1.4;
 
+    final isMobile = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+
+    Widget lineContent = Column(
+      children: [
+        // ─── Karaoke Sweep Text ───
+        active
+            ? _KaraokeSweepText(
+                text: line.text,
+                progress: progress,
+                accent: widget.accent,
+                fontSize: fontSize,
+                lineHeight: lineHeight,
+                isNonLatin: isNonLatin,
+              )
+            : Text(
+                line.text,
+                textAlign: TextAlign.center,
+                style: _textStyle(
+                  active: false,
+                  fontSize: fontSize,
+                  lineHeight: lineHeight,
+                ),
+              ),
+        // ─── Translation ───
+        if (widget.dualLanguage && line.translation != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              line.translation!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: active ? 14 : 12,
+                color: active
+                    ? widget.accent.withValues(alpha: 0.9)
+                    : AppColors.textTertiary.withValues(alpha: 0.4),
+                height: isNonLatin ? 1.5 : 1.3,
+              ),
+            ),
+          ),
+        // ─── Progress bar ───
+        if (active) ...[
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 2.5,
+              backgroundColor: Colors.white10,
+              color: widget.accent,
+            ),
+          ),
+        ],
+      ],
+    );
+
     return AnimatedContainer(
       key: key,
       duration: const Duration(milliseconds: 350),
@@ -320,65 +377,16 @@ class _LiveKaraokeLyricsState extends ConsumerState<LiveKaraokeLyrics>
         child: AnimatedOpacity(
           opacity: opacity,
           duration: const Duration(milliseconds: 300),
-          child: ImageFiltered(
-            imageFilter: ui.ImageFilter.blur(
-              sigmaX: blurSigma,
-              sigmaY: blurSigma,
-              tileMode: TileMode.decal,
-            ),
-            child: Column(
-              children: [
-                // ─── Karaoke Sweep Text ───
-                active
-                    ? _KaraokeSweepText(
-                        text: line.text,
-                        progress: progress,
-                        accent: widget.accent,
-                        fontSize: fontSize,
-                        lineHeight: lineHeight,
-                        isNonLatin: isNonLatin,
-                      )
-                    : Text(
-                        line.text,
-                        textAlign: TextAlign.center,
-                        style: _textStyle(
-                          active: false,
-                          fontSize: fontSize,
-                          lineHeight: lineHeight,
-                        ),
-                      ),
-                // ─── Translation ───
-                if (widget.dualLanguage && line.translation != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      line.translation!,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: active ? 14 : 12,
-                        color: active
-                            ? widget.accent.withValues(alpha: 0.9)
-                            : AppColors.textTertiary.withValues(alpha: 0.4),
-                        height: isNonLatin ? 1.5 : 1.3,
-                      ),
-                    ),
+          child: isMobile
+              ? lineContent
+              : ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(
+                    sigmaX: blurSigma,
+                    sigmaY: blurSigma,
+                    tileMode: TileMode.decal,
                   ),
-                // ─── Progress bar ───
-                if (active) ...[
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 2.5,
-                      backgroundColor: Colors.white10,
-                      color: widget.accent,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+                  child: lineContent,
+                ),
         ),
       ),
     );

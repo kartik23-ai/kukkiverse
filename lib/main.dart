@@ -14,6 +14,7 @@ import 'providers/premium_providers.dart';
 import 'providers/feature_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/dynamic_palette.dart';
+import 'core/theme/time_theme.dart';
 import 'router/app_router.dart';
 
 late RottyAudioHandler _audioHandler;
@@ -89,6 +90,7 @@ class RottyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = ref.watch(dynamicPaletteProvider);
     final auraFull = ref.watch(auraFullAppProvider);
+    final timeTheme = ref.watch(timeThemeProvider);
 
     final accent = auraFull ? palette.primary : const Color(0xFFFA2D48);
 
@@ -96,10 +98,12 @@ class RottyApp extends ConsumerWidget {
       title: 'ROTTY MUSIC',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark.copyWith(
+        scaffoldBackgroundColor: timeTheme.bgDeep,
         colorScheme: ColorScheme.dark(
           primary: accent,
           secondary: palette.secondary,
-          surface: const Color(0xFF121212),
+          surface: timeTheme.bgSurface,
+          onSurface: timeTheme.textPrimary,
         ),
       ),
       routerConfig: appRouter,

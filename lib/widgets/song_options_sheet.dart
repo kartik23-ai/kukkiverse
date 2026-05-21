@@ -291,12 +291,10 @@ class _SongOptionsSheet extends ConsumerWidget {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
             onPressed: () async {
-              if (controller.text.trim().isNotEmpty) {
-                await ref.read(playlistsProvider.notifier).create(controller.text.trim());
-                final playlists = ref.read(playlistsProvider);
-                if (playlists.isNotEmpty) {
-                  await ref.read(playlistsProvider.notifier).addToPlaylist(playlists.last.id, song);
-                }
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                final newId = await ref.read(playlistsProvider.notifier).create(name);
+                await ref.read(playlistsProvider.notifier).addToPlaylist(newId, song);
                 if (ctx.mounted) Navigator.pop(ctx);
               }
             },
@@ -612,12 +610,10 @@ void _showDesktopCreatePlaylist(BuildContext context, WidgetRef ref, SongModel s
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
           onPressed: () async {
-            if (controller.text.trim().isNotEmpty) {
-              await ref.read(playlistsProvider.notifier).create(controller.text.trim());
-              final playlists = ref.read(playlistsProvider);
-              if (playlists.isNotEmpty) {
-                await ref.read(playlistsProvider.notifier).addToPlaylist(playlists.last.id, song);
-              }
+            final name = controller.text.trim();
+            if (name.isNotEmpty) {
+              final newId = await ref.read(playlistsProvider.notifier).create(name);
+              await ref.read(playlistsProvider.notifier).addToPlaylist(newId, song);
               if (ctx.mounted) Navigator.pop(ctx);
             }
           },

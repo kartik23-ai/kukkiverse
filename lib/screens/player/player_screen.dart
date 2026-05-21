@@ -32,9 +32,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget build(BuildContext context) {
     final song = ref.watch(nowPlayingProvider);
     if (song == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.bg,
-        body: Center(child: Text('Nothing playing', style: TextStyle(color: Colors.white54))),
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: const Center(child: Text('Nothing playing', style: TextStyle(color: Colors.white54))),
       );
     }
 
@@ -47,7 +47,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final palette = ref.watch(dynamicPaletteProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF050508),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: FluidBleedBackground(
         colors: [palette.primary, palette.secondary, palette.tertiary],
         bassIntensity: playing ? 0.5 : 0.0,

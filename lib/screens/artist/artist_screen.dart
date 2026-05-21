@@ -21,7 +21,7 @@ class ArtistScreen extends ConsumerWidget {
     final data = ref.watch(artistDetailProvider(artistId));
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: data.when(
         data: (d) {
           final artist = d.artist;
@@ -35,7 +35,7 @@ class ArtistScreen extends ConsumerWidget {
               SliverAppBar(
                 expandedHeight: 300,
                 pinned: true,
-                backgroundColor: AppColors.bg,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 flexibleSpace: FlexibleSpaceBar(
                   background: Stack(
                     fit: StackFit.expand,
@@ -46,7 +46,7 @@ class ArtistScreen extends ConsumerWidget {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, AppColors.bg],
+                            colors: [Colors.transparent, Theme.of(context).scaffoldBackgroundColor],
                           ),
                         ),
                       ),

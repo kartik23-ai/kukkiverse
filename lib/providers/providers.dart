@@ -209,12 +209,14 @@ class PlaylistNotifier extends StateNotifier<List<PlaylistModel>> {
   final StorageService _storage;
   PlaylistNotifier(this._storage) : super(_storage.getPlaylists());
 
-  Future<void> create(String name) async {
+  Future<String> create(String name) async {
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
     await _storage.savePlaylist(PlaylistModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: id,
       name: name,
     ));
     state = _storage.getPlaylists();
+    return id;
   }
 
   Future<void> addToPlaylist(String playlistId, SongModel song) async {
@@ -223,6 +225,11 @@ class PlaylistNotifier extends StateNotifier<List<PlaylistModel>> {
     if (index == -1) return;
     if (playlists[index].songs.any((s) => s.id == song.id)) return;
     await _storage.savePlaylist(playlists[index].copyWith(songs: [...playlists[index].songs, song]));
+    state = _storage.getPlaylists();
+  }
+
+  Future<void> saveSyncedPlaylist(PlaylistModel playlist) async {
+    await _storage.savePlaylist(playlist);
     state = _storage.getPlaylists();
   }
 

@@ -24,9 +24,9 @@ class QueueScreen extends ConsumerWidget {
         final currentIndex = handler.currentIndex;
 
         return Scaffold(
-          backgroundColor: AppColors.bg,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
-            backgroundColor: AppColors.bg,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             leading: IconButton(
               icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 30),
               onPressed: () => context.pop(),
@@ -49,22 +49,23 @@ class QueueScreen extends ConsumerWidget {
               ? Center(child: Text('Queue is empty', style: GoogleFonts.inter(color: AppColors.textTertiary)))
               : CustomScrollView(
                   slivers: [
-                    if (history.isNotEmpty)
+                    if (history.isNotEmpty) ...[
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                           child: Text('History', style: GoogleFonts.inter(color: AppColors.textTertiary, fontWeight: FontWeight.w600)),
                         ),
                       ),
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) {
-                          final song = history[i];
-                          return _HistoryRow(song: song);
-                        },
-                        childCount: history.take(5).length,
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) {
+                            final song = history[i];
+                            return _HistoryRow(song: song);
+                          },
+                          childCount: history.take(5).length,
+                        ),
                       ),
-                    ),
+                    ],
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -80,31 +81,94 @@ class QueueScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                    
+                    // Now Playing Section
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                        child: Text('Up next', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700)),
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                        child: Text('Now Playing', style: GoogleFonts.inter(color: AppColors.textTertiary, fontWeight: FontWeight.w600)),
                       ),
                     ),
-                    SliverReorderableList(
-                      itemCount: queue.length,
-                      onReorder: handler.reorderQueue,
-                      itemBuilder: (context, index) {
-                        final song = queue[index];
-                        return _QueueTimelineRow(
-                          key: ValueKey('${song.id}_$index'),
-                          song: song,
-                          index: index,
-                          isNow: index == currentIndex,
-                          onTap: () {
-                            // Tap to play from this position — like Spotify/Apple Music
-                            handler.playSong(song, index: index);
-                          },
-                          onPlayNext: () => handler.addToQueueNext(song),
-                          onRemove: () => handler.removeFromQueue(index),
-                        );
-                      },
+                    SliverToBoxAdapter(
+                      child: handler.currentSong == null
+                          ? const SizedBox.shrink()
+                          : _QueueTimelineRow(
+                              key: ValueKey('now_playing_${handler.currentSong!.id}'),
+                              song: handler.currentSong!,
+                              index: currentIndex,
+                              isNow: true,
+                              onTap: () {},
+                              onPlayNext: () {},
+                              onRemove: () {},
+                            ),
                     ),
+
+                    // Next In Queue (User-added)
+                    if (handler.userQueue.isNotEmpty) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 4),
+                          child: Text('Next In Queue', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                      SliverReorderableList(
+                        itemCount: handler.userQueue.length,
+                        onReorder: (oldIdx, newIdx) {
+                          final absOld = currentIndex + 1 + oldIdx;
+                          final absNew = currentIndex + 1 + newIdx;
+                          handler.reorderQueue(absOld, absNew);
+                        },
+                        itemBuilder: (context, index) {
+                          final song = handler.userQueue[index];
+                          final absoluteIndex = currentIndex + 1 + index;
+                          return _QueueTimelineRow(
+                            key: ValueKey('user_${song.id}_$index'),
+                            song: song,
+                            index: absoluteIndex,
+                            isNow: false,
+                            onTap: () {
+                              handler.playSong(song, index: absoluteIndex);
+                            },
+                            onPlayNext: () => handler.addToQueueNext(song),
+                            onRemove: () => handler.removeFromQueue(absoluteIndex),
+                          );
+                        },
+                      ),
+                    ],
+
+                    // Next From Context (Album/Playlist)
+                    if (currentIndex + 1 < handler.contextQueue.length) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 4),
+                          child: Text('Next From Context', style: GoogleFonts.inter(color: AppColors.textTertiary, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      SliverReorderableList(
+                        itemCount: handler.contextQueue.length - (handler.currentIndex + 1),
+                        onReorder: (oldIdx, newIdx) {
+                          final absOld = currentIndex + 1 + handler.userQueue.length + oldIdx;
+                          final absNew = currentIndex + 1 + handler.userQueue.length + newIdx;
+                          handler.reorderQueue(absOld, absNew);
+                        },
+                        itemBuilder: (context, index) {
+                          final upcomingIndex = handler.currentIndex + 1 + index;
+                          final song = handler.contextQueue[upcomingIndex];
+                          final absoluteIndex = currentIndex + 1 + handler.userQueue.length + index;
+                          return _QueueTimelineRow(
+                            key: ValueKey('context_${song.id}_$index'),
+                            song: song,
+                            index: absoluteIndex,
+                            isNow: false,
+                            onTap: () {
+                              handler.playSong(song, index: absoluteIndex);
+                            },
+                            onPlayNext: () => handler.addToQueueNext(song),
+                            onRemove: () => handler.removeFromQueue(absoluteIndex),
+                          );
+                        },
+                      ),
+                    ],
                     const SliverToBoxAdapter(child: SizedBox(height: 80)),
                   ],
                 ),

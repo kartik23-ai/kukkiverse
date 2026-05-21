@@ -19,6 +19,21 @@ class MusicRepository {
   Future<List<SongModel>> getAlbumSongs(String id) => _api.getAlbumSongs(id);
   Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String id) => _api.getArtist(id);
   Future<SongModel> resolveSong(SongModel song) async {
+    if (song.id.startsWith('spotify_track_') || song.url.isEmpty) {
+      final query = '${song.title} ${song.artist}';
+      try {
+        final results = await _api.searchSongs(query, limit: 1);
+        if (results.isNotEmpty) {
+          final saavnSong = results.first;
+          final details = await _api.getSongDetails(saavnSong.id);
+          if (details != null && details.hasPlayableUrl) {
+            return song.copyWith(url: details.url);
+          }
+        }
+      } catch (_) {}
+      return song;
+    }
+
     final details = await _api.getSongDetails(song.id);
     if (details != null && details.hasPlayableUrl) return details;
     if (song.hasPlayableUrl) return song;

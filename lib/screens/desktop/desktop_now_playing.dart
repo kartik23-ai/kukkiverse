@@ -241,6 +241,7 @@ class _DesktopNowPlayingState extends ConsumerState<DesktopNowPlaying> {
                       valueListenable: handler.queueVersion,
                       builder: (context, _, __) {
                         final queue = handler.songQueue;
+                        final currentIndex = handler.currentIndex;
                         if (queue.isEmpty) {
                           return Center(
                             child: Text(
@@ -249,26 +250,107 @@ class _DesktopNowPlayingState extends ConsumerState<DesktopNowPlaying> {
                             ),
                           );
                         }
-                        return ReorderableListView.builder(
+                        
+                        final userQueue = handler.userQueue;
+                        final upcomingContextCount = handler.contextQueue.length - (handler.currentIndex + 1);
+
+                        return CustomScrollView(
                           physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          itemCount: queue.length,
-                          onReorder: (oldIndex, newIndex) {
-                            if (newIndex > oldIndex) newIndex -= 1;
-                            handler.reorderQueue(oldIndex, newIndex);
-                          },
-                          itemBuilder: (context, idx) {
-                            final qSong = queue[idx];
-                            final isCurrent = idx == handler.currentIndex;
-                            return _QueueTile(
-                              key: ValueKey('queue_${qSong.id}_$idx'),
-                              song: qSong,
-                              isCurrent: isCurrent,
-                              index: idx,
-                              palette: palette,
-                              handler: handler,
-                            );
-                          },
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                                child: Text(
+                                  'Now Playing',
+                                  style: GoogleFonts.inter(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                                ),
+                              ),
+                            ),
+                            SliverToBoxAdapter(
+                              child: handler.currentSong == null
+                                  ? const SizedBox.shrink()
+                                  : _QueueTile(
+                                      key: ValueKey('now_playing_${handler.currentSong!.id}'),
+                                      song: handler.currentSong!,
+                                      isCurrent: true,
+                                      index: currentIndex,
+                                      palette: palette,
+                                      handler: handler,
+                                    ),
+                            ),
+
+                            if (userQueue.isNotEmpty) ...[
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                                  child: Text(
+                                    'Next In Queue',
+                                    style: GoogleFonts.inter(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                              SliverReorderableList(
+                                itemCount: userQueue.length,
+                                onReorder: (oldIdx, newIdx) {
+                                  final absOld = currentIndex + 1 + oldIdx;
+                                  final absNew = currentIndex + 1 + newIdx;
+                                  handler.reorderQueue(absOld, absNew);
+                                },
+                                itemBuilder: (context, index) {
+                                  final song = userQueue[index];
+                                  final absoluteIndex = currentIndex + 1 + index;
+                                  return ReorderableDelayedDragStartListener(
+                                    index: index,
+                                    key: ValueKey('user_${song.id}_$index'),
+                                    child: _QueueTile(
+                                      song: song,
+                                      isCurrent: false,
+                                      index: absoluteIndex,
+                                      palette: palette,
+                                      handler: handler,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+
+                            if (currentIndex + 1 < handler.contextQueue.length) ...[
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                                  child: Text(
+                                    'Next From Context',
+                                    style: GoogleFonts.inter(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                                  ),
+                                ),
+                              ),
+                              SliverReorderableList(
+                                itemCount: upcomingContextCount,
+                                onReorder: (oldIdx, newIdx) {
+                                  final absOld = currentIndex + 1 + userQueue.length + oldIdx;
+                                  final absNew = currentIndex + 1 + userQueue.length + newIdx;
+                                  handler.reorderQueue(absOld, absNew);
+                                },
+                                itemBuilder: (context, index) {
+                                  final upcomingIndex = handler.currentIndex + 1 + index;
+                                  final song = handler.contextQueue[upcomingIndex];
+                                  final absoluteIndex = currentIndex + 1 + userQueue.length + index;
+                                  return ReorderableDelayedDragStartListener(
+                                    index: index,
+                                    key: ValueKey('context_${song.id}_$index'),
+                                    child: _QueueTile(
+                                      song: song,
+                                      isCurrent: false,
+                                      index: absoluteIndex,
+                                      palette: palette,
+                                      handler: handler,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                          ],
                         );
                       },
                     )

@@ -311,6 +311,12 @@ class StorageService {
   String get groqApiKey => _prefs.getString('groq_api_key') ?? '';
   Future<void> setGroqApiKey(String key) => _prefs.setString('groq_api_key', key.trim());
 
+  String get spotifyClientId => _prefs.getString('spotify_client_id') ?? '';
+  Future<void> setSpotifyClientId(String val) => _prefs.setString('spotify_client_id', val.trim());
+
+  String get spotifyClientSecret => _prefs.getString('spotify_client_secret') ?? '';
+  Future<void> setSpotifyClientSecret(String val) => _prefs.setString('spotify_client_secret', val.trim());
+
   String get customSyncId => _prefs.getString('rotty_custom_sync_id') ?? '';
   Future<void> setCustomSyncId(String val) => _prefs.setString('rotty_custom_sync_id', val.trim());
 
