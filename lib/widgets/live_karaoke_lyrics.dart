@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -25,6 +27,7 @@ class LiveKaraokeLyrics extends ConsumerStatefulWidget {
     required this.accent,
     this.dualLanguage = false,
     this.maxHeight = 220,
+    this.isSynced = true,
   });
 
   final List<LyricsLine> lines;
@@ -32,6 +35,7 @@ class LiveKaraokeLyrics extends ConsumerStatefulWidget {
   final Color accent;
   final bool dualLanguage;
   final double maxHeight;
+  final bool isSynced;
 
   @override
   ConsumerState<LiveKaraokeLyrics> createState() => _LiveKaraokeLyricsState();
@@ -47,22 +51,43 @@ class _LiveKaraokeLyricsState extends ConsumerState<LiveKaraokeLyrics>
   Duration _smoothPos = Duration.zero;
   Duration _lastTargetPos = Duration.zero;
 
+  // Dynamic keys for dead-center locked scrolling
+  List<GlobalKey> _keys = [];
+  bool _userScrolling = false;
+  Timer? _userScrollTimer;
+
   @override
   void initState() {
     super.initState();
     _active = _indexForPosition(widget.position);
     _smoothPos = widget.position;
     _lastTargetPos = widget.position;
+    _updateKeys();
 
     // 120fps ticker for butter-smooth interpolation
-    _tickCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..repeat();
-    _tickCtrl.addListener(_onTick);
+    if (widget.isSynced) {
+      _tickCtrl = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 1),
+      )..repeat();
+      _tickCtrl.addListener(_onTick);
+    } else {
+      _tickCtrl = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 1),
+      );
+    }
+  }
+
+  void _updateKeys() {
+    if (_keys.length != widget.lines.length) {
+      _keys = List.generate(widget.lines.length, (index) => GlobalKey());
+    }
   }
 
   void _onTick() {
+    if (!widget.isSynced) return;
+
     // Interpolate smoothly toward the target position
     final targetMs = _lastTargetPos.inMilliseconds;
     final currentMs = _smoothPos.inMilliseconds;
@@ -77,15 +102,35 @@ class _LiveKaraokeLyricsState extends ConsumerState<LiveKaraokeLyrics>
         HapticFeedback.selectionClick();
       }
       setState(() => _active = newActive);
-      _scrollToCenter(newActive);
+      if (!_userScrolling) {
+        _scrollToCenter(newActive);
+      }
     }
   }
 
   @override
   void didUpdateWidget(covariant LiveKaraokeLyrics oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.lines != widget.lines) {
+      _keys = List.generate(widget.lines.length, (index) => GlobalKey());
+      _active = _indexForPosition(widget.position);
+    } else {
+      _updateKeys();
+    }
     if (oldWidget.position != widget.position) {
       _lastTargetPos = widget.position;
+
+      // Seek leap detection (user seeking > 3s)
+      final diff = (widget.position - oldWidget.position).abs();
+      if (diff > const Duration(seconds: 3)) {
+        _smoothPos = widget.position; // jump smooth position instantly
+        setState(() {
+          _userScrolling = false;
+          _active = _indexForPosition(widget.position);
+        });
+        _userScrollTimer?.cancel();
+        _scrollToCenter(_active);
+      }
     }
   }
 
@@ -102,25 +147,33 @@ class _LiveKaraokeLyricsState extends ConsumerState<LiveKaraokeLyrics>
   }
 
   void _scrollToCenter(int idx) {
+    if (!widget.isSynced) return;
+    if (idx < 0 || idx >= _keys.length) return;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
-      // Each item ~80px. Lock active line to center of viewport.
-      final viewportHeight = _scroll.position.viewportDimension;
-      final targetOffset = (idx * 80.0) - (viewportHeight / 2) + 40;
-      final clamped = targetOffset.clamp(0.0, _scroll.position.maxScrollExtent);
-      _scroll.animateTo(
-        clamped,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOutQuart,
-      );
+
+      final key = _keys[idx];
+      final context = key.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutQuart,
+        );
+      }
     });
   }
 
   @override
   void dispose() {
-    _tickCtrl.removeListener(_onTick);
+    if (widget.isSynced) {
+      _tickCtrl.removeListener(_onTick);
+    }
     _tickCtrl.dispose();
     _scroll.dispose();
+    _userScrollTimer?.cancel();
     super.dispose();
   }
 
@@ -173,21 +226,71 @@ class _LiveKaraokeLyricsState extends ConsumerState<LiveKaraokeLyrics>
     return RottyGlass(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       tint: widget.accent,
-      child: SizedBox(
-        height: widget.maxHeight,
-        child: ListView.builder(
-          controller: _scroll,
-          physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.symmetric(vertical: widget.maxHeight * 0.35),
-          itemCount: widget.lines.length,
-          itemBuilder: (context, i) => _buildLine(i),
-        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final viewportHeight = constraints.maxHeight > 0 ? constraints.maxHeight : widget.maxHeight;
+          return SizedBox(
+            height: viewportHeight,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (!widget.isSynced) return false;
+
+                if (notification is UserScrollNotification) {
+                  if (notification.direction != ScrollDirection.idle) {
+                    setState(() => _userScrolling = true);
+                    _userScrollTimer?.cancel();
+                  } else {
+                    _userScrollTimer?.cancel();
+                    _userScrollTimer = Timer(const Duration(seconds: 4), () {
+                      if (mounted) {
+                        setState(() => _userScrolling = false);
+                        _scrollToCenter(_active);
+                      }
+                    });
+                  }
+                }
+                return false;
+              },
+              child: SingleChildScrollView(
+                controller: _scroll,
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(
+                  vertical: widget.isSynced ? viewportHeight * 0.42 : 16.0,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(widget.lines.length, (i) => _buildLine(i)),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildLine(int i) {
     final line = widget.lines[i];
+    final key = _keys[i];
+
+    if (!widget.isSynced) {
+      final isNonLatin = _isNonLatin(line.text);
+      return Padding(
+        key: key,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Text(
+          line.text,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(
+            fontSize: isNonLatin ? 18.0 : 16.0,
+            fontWeight: FontWeight.w500,
+            color: Colors.white.withValues(alpha: 0.85),
+            height: isNonLatin ? 1.5 : 1.4,
+          ),
+        ),
+      );
+    }
+
     final active = i == _active;
     final dist = _distanceFromActive(i);
     final progress = _lineProgress(i);
@@ -206,6 +309,7 @@ class _LiveKaraokeLyricsState extends ConsumerState<LiveKaraokeLyrics>
     final lineHeight = isNonLatin ? 1.6 : 1.4;
 
     return AnimatedContainer(
+      key: key,
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeOutQuart,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

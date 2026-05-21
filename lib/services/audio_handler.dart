@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
@@ -6,13 +7,19 @@ import 'package:just_audio/just_audio.dart';
 import '../models/song_model.dart';
 import 'api_service.dart';
 import 'audio_effects.dart';
+import 'ai_dj_service.dart';
+import 'storage_service.dart';
 
 class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
-  final AndroidEqualizer _eq = RottyAudioEffects.createEqualizer();
-  late final AudioPlayer _player = AudioPlayer(
-    audioPipeline: AudioPipeline(androidAudioEffects: [_eq]),
-  );
+  // Android-only equalizer — skip on desktop to avoid MissingPluginException
+  static bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+  final AndroidEqualizer? _eq = _isMobile ? RottyAudioEffects.createEqualizer() : null;
+  late final AudioPlayer _player = _isMobile
+      ? AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [_eq!]))
+      : AudioPlayer();
   final ApiService _api = ApiService();
+  final StorageService _storage = StorageService();
+  late final AiDjService _aiDj = AiDjService(_api);
   final List<SongModel> _queue = [];
   final List<SongModel> _history = [];
 
@@ -41,8 +48,13 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   Future<void> _init() async {
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
+    // AudioSession may not be supported on desktop
+    if (_isMobile) {
+      try {
+        final session = await AudioSession.instance;
+        await session.configure(const AudioSessionConfiguration.music());
+      } catch (_) {}
+    }
 
     playbackState.add(PlaybackState(
       controls: [MediaControl.play],
@@ -56,8 +68,10 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       playing: false,
     ));
 
-    _player.playbackEventStream.listen(_broadcastState);
+    _player.playbackEventStream.listen((event) => _broadcastState());
+    _player.playingStream.listen((_) => _broadcastState());
     _player.processingStateStream.listen((state) {
+      _broadcastState();
       if (state == ProcessingState.completed) _handleCompletion();
     });
   }
@@ -103,17 +117,58 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       mediaItem.add(_songToMediaItem(activeSong));
       _bumpQueue();
 
+      final Map<String, String>? httpHeaders = Platform.isWindows ? null : const {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+        'Referer': 'https://www.jiosaavn.com/',
+      };
+
+      // Release any active stream resources on Windows before loading to avoid resource locks
+      try {
+        await _player.stop();
+        await Future.delayed(const Duration(milliseconds: 50));
+      } catch (_) {}
+
+      // Robust loading with timeout and re-resolve retry for Windows stability
+      try {
+        await _player.setAudioSource(
+          AudioSource.uri(
+            Uri.parse(activeSong.url),
+            headers: httpHeaders,
+            tag: _songToMediaItem(activeSong),
+          ),
+          preload: !Platform.isWindows, // Do not preload on Windows to prevent WinRT thread hang
+        ).timeout(const Duration(milliseconds: 1800));
+      } catch (e) {
+        debugPrint('ROTTY PLAYBACK: Initial load failed/timed out ($e). Fetching fresh URL and retrying...');
+        try {
+          await _player.stop();
+          await Future.delayed(const Duration(milliseconds: 150));
+          
+          // Re-resolve from API to handle expired links
+          final freshSong = await _api.getSongDetails(activeSong.id);
+          if (freshSong != null && freshSong.hasPlayableUrl) {
+            activeSong = freshSong;
+            _queue[_currentIndex] = activeSong;
+            mediaItem.add(_songToMediaItem(activeSong));
+            _bumpQueue();
+          }
+
+          // Retry setAudioSource
+          await _player.setAudioSource(
+            AudioSource.uri(
+              Uri.parse(activeSong.url),
+              headers: httpHeaders,
+              tag: _songToMediaItem(activeSong),
+            ),
+            preload: !Platform.isWindows, // Do not preload on Windows to prevent WinRT thread hang
+          ).timeout(const Duration(seconds: 3));
+        } catch (retryError) {
+          debugPrint('ROTTY PLAYBACK: Retry load failed: $retryError');
+          return;
+        }
+      }
+
       await _player.setSpeed(_speed);
-      await _player.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(activeSong.url),
-          headers: const {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
-            'Referer': 'https://www.jiosaavn.com/',
-          },
-          tag: _songToMediaItem(activeSong),
-        ),
-      );
       await _player.play();
       RottyAudioEffects.applyToPlayer(_player);
       RottyAudioEffects.stopOrbit();
@@ -205,23 +260,88 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    final song = currentSong;
+    if (_player.processingState == ProcessingState.idle && song != null) {
+      debugPrint('ROTTY PLAYBACK: Player idle on play. Reloading current song: ${song.title}');
+      await playSong(song, index: _currentIndex);
+    } else {
+      await _player.play();
+      RottyAudioEffects.applyToPlayer(_player);
+      RottyAudioEffects.stopOrbit();
+      if (RottyAudioEffects.orbit8d) {
+        RottyAudioEffects.startOrbit(_player);
+      }
+    }
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    RottyAudioEffects.stopOrbit();
+    await _player.pause();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
   Future<void> stop() async {
+    RottyAudioEffects.stopOrbit();
     await _player.stop();
     return super.stop();
+  }
+
+
+  Future<void> triggerAutoplayIfNeeded() async {
+    if (!_storage.aiDjEnabled) return;
+    if (_currentIndex < 0 || _queue.isEmpty) return;
+    
+    // Trigger autoplay when reaching the last song in repeat-off mode
+    if (_currentIndex == _queue.length - 1 && _repeatMode == AudioServiceRepeatMode.none) {
+      debugPrint('ROTTY SMART AUTOPLAY: Reached end of queue. Generating smart recommendations...');
+      try {
+        final current = currentSong;
+        final recent = _storage.getRecentSongs();
+        final favorites = _storage.getFavorites();
+        final excludeIds = _queue.map((s) => s.id).toSet();
+        
+        // Exclude disliked songs
+        excludeIds.addAll(_storage.dislikedSongIds);
+        
+        // Exclude history
+        for (final s in _history) {
+          excludeIds.add(s.id);
+        }
+        
+        final recommended = await _aiDj.buildSmartQueue(
+          nowPlaying: current,
+          recent: recent,
+          favorites: favorites,
+          excludeIds: excludeIds,
+          limit: 10,
+        );
+        
+        if (recommended.isNotEmpty) {
+          debugPrint('ROTTY SMART AUTOPLAY: Successfully recommended ${recommended.length} songs');
+          await appendUpcoming(recommended);
+        } else {
+          debugPrint('ROTTY SMART AUTOPLAY: No recommended songs returned.');
+        }
+      } catch (e) {
+        debugPrint('ROTTY SMART AUTOPLAY ERROR: $e');
+      }
+    }
   }
 
   @override
   Future<void> skipToNext() async {
     if (_queue.isEmpty) return;
+
+    if (_currentIndex == _queue.length - 1 && _repeatMode == AudioServiceRepeatMode.none) {
+      // Reached the end. Autoplay first so the queue expands, then go next
+      await triggerAutoplayIfNeeded();
+    }
+
     var next = _currentIndex + 1;
     if (next >= _queue.length) next = 0;
     if (RottyAudioEffects.infiniteBlend && _player.playing) {
@@ -274,7 +394,13 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       _player.seek(Duration.zero);
       _player.play();
     } else {
-      skipToNext();
+      if (_currentIndex == _queue.length - 1 && _repeatMode == AudioServiceRepeatMode.none) {
+        triggerAutoplayIfNeeded().then((_) {
+          skipToNext();
+        });
+      } else {
+        skipToNext();
+      }
     }
   }
 
@@ -289,7 +415,7 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     );
   }
 
-  void _broadcastState(PlaybackEvent event) {
+  void _broadcastState() {
     final playing = _player.playing;
     playbackState.add(playbackState.value.copyWith(
       controls: [
@@ -309,7 +435,7 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
         ProcessingState.buffering: AudioProcessingState.buffering,
         ProcessingState.ready: AudioProcessingState.ready,
         ProcessingState.completed: AudioProcessingState.completed,
-      }[_player.processingState]!,
+      }[_player.processingState] ?? AudioProcessingState.idle,
       playing: playing,
       updatePosition: _player.position,
       bufferedPosition: _player.bufferedPosition,

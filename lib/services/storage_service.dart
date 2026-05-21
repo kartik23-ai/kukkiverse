@@ -1,4 +1,5 @@
 
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
@@ -309,6 +310,22 @@ class StorageService {
 
   String get groqApiKey => _prefs.getString('groq_api_key') ?? '';
   Future<void> setGroqApiKey(String key) => _prefs.setString('groq_api_key', key.trim());
+
+  String get customSyncId => _prefs.getString('rotty_custom_sync_id') ?? '';
+  Future<void> setCustomSyncId(String val) => _prefs.setString('rotty_custom_sync_id', val.trim());
+
+  String get installationId {
+    var id = _prefs.getString('installation_id');
+    if (id == null || id.isEmpty) {
+      final rand = 100000 + (DateTime.now().millisecondsSinceEpoch % 900000);
+      id = 'user_${(!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) ? 'windows' : 'mobile'}_$rand';
+      _prefs.setString('installation_id', id);
+    }
+    return id;
+  }
+
+  bool get aiDjEnabled => _prefs.getBool('ai_dj_enabled') ?? false;
+  Future<void> setAiDjEnabled(bool value) => _prefs.setBool('ai_dj_enabled', value);
 
   String? get cloudSyncUrl {
     final v = _prefs.getString('cloud_sync_url');

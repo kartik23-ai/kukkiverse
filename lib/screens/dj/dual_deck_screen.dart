@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,7 +41,7 @@ class _DualDeckScreenState extends ConsumerState<DualDeckScreen> {
     await player.setAudioSource(
       AudioSource.uri(
         Uri.parse(resolved.url),
-        headers: const {
+        headers: Platform.isWindows ? null : const {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
           'Referer': 'https://www.jiosaavn.com/',
         },

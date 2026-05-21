@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,7 +81,8 @@ class _MiniBarState extends ConsumerState<_MiniBar> with SingleTickerProviderSta
   Widget build(BuildContext context) {
     final playing = ref.watch(isPlayingProvider);
     final handler = ref.read(audioHandlerProvider);
-    final accent = AppColors.accent;
+    final palette = ref.watch(dynamicPaletteProvider);
+    final accent = palette.primary;
     final screenWidth = MediaQuery.of(context).size.width;
 
     return RepaintBoundary(
@@ -99,7 +101,7 @@ class _MiniBarState extends ConsumerState<_MiniBar> with SingleTickerProviderSta
         },
         onVerticalDragEnd: (d) {
           final screenH = MediaQuery.of(context).size.height;
-          // Snap threshold: 40% of screen
+          // Snap threshold: 15% of screen
           if (_dragY > screenH * 0.15) {
             // Navigate to player with spring
             MusicHaptics.playPause();
@@ -128,136 +130,144 @@ class _MiniBarState extends ConsumerState<_MiniBar> with SingleTickerProviderSta
                   borderRadius: BorderRadius.circular(16),
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF1A1A2E),
-                      const Color(0xFF16213E),
-                      accent.withValues(alpha: 0.08),
+                      Colors.white.withValues(alpha: 0.10),
+                      accent.withValues(alpha: 0.20),
+                      Colors.white.withValues(alpha: 0.06),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   border: Border.all(
-                    // ✨ 1px inner glass edge-light
-                    color: Colors.white.withValues(alpha: 0.08),
-                    width: 1,
+                    color: Colors.white.withValues(alpha: 0.20),
+                    width: 1.2,
                   ),
                   boxShadow: [
-                    // Colored glow shadow from accent
                     BoxShadow(
-                      color: accent.withValues(alpha: 0.2),
-                      blurRadius: 24,
-                      spreadRadius: -4,
-                      offset: const Offset(0, 6),
+                      color: accent.withValues(alpha: 0.35),
+                      blurRadius: 20,
+                      spreadRadius: -2,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: InkWell(
-                  onTap: () => context.push('/player'),
-                  child: SizedBox(
-                    height: 64,
-                    width: screenWidth - 20, // Explicit width prevents overflow
-                    child: Row(
-                      children: [
-                        Hero(
-                          tag: 'album_art_${widget.song.id}',
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              bottomLeft: Radius.circular(16),
-                            ),
-                            child: CachedNetworkImage(
-                              imageUrl: widget.song.image,
-                              width: 64,
-                              height: 64,
-                              fit: BoxFit.cover,
-                              memCacheWidth: 128,
-                              fadeInDuration: Duration.zero,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.song.title,
-                                  style: GoogleFonts.inter(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: InkWell(
+                      onTap: () => context.push('/player'),
+                      child: SizedBox(
+                        height: 64,
+                        width: screenWidth - 20, // Explicit width prevents overflow
+                        child: Row(
+                          children: [
+                            Hero(
+                              tag: 'album_art_${widget.song.id}',
+                              child: ClipRRect(
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(16),
+                                  bottomLeft: Radius.circular(16),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  widget.song.artist,
-                                  style: GoogleFonts.inter(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                child: CachedNetworkImage(
+                                  imageUrl: widget.song.image,
+                                  width: 64,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                  memCacheWidth: 128,
+                                  fadeInDuration: Duration.zero,
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
-                        // Skip previous (small)
-                        SizedBox(
-                          width: 32,
-                          child: IconButton(
-                            icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 22),
-                            onPressed: () {
-                              MusicHaptics.skip();
-                              handler.skipToPrevious();
-                            },
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          ),
-                        ),
-                        // Play/Pause
-                        Container(
-                          width: 38,
-                          height: 38,
-                          margin: const EdgeInsets.only(right: 4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: AppColors.accentGradient,
-                            boxShadow: [
-                              BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 8),
-                            ],
-                          ),
-                          child: IconButton(
-                            icon: Icon(
-                              playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 22,
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      widget.song.title,
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      widget.song.artist,
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white.withValues(alpha: 0.6),
+                                        fontSize: 12,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                            onPressed: () {
-                              MusicHaptics.playPause();
-                              playing ? handler.pause() : handler.play();
-                            },
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-                          ),
+                            // Skip previous (small)
+                            SizedBox(
+                              width: 32,
+                              child: IconButton(
+                                icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 22),
+                                onPressed: () {
+                                  MusicHaptics.skip();
+                                  handler.skipToPrevious();
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              ),
+                            ),
+                            // Play/Pause
+                            Container(
+                              width: 38,
+                              height: 38,
+                              margin: const EdgeInsets.only(right: 4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [palette.primary, palette.secondary],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(color: accent.withValues(alpha: 0.4), blurRadius: 10),
+                                ],
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                                onPressed: () {
+                                  MusicHaptics.playPause();
+                                  playing ? handler.pause() : handler.play();
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+                              ),
+                            ),
+                            // Skip next (small)
+                            SizedBox(
+                              width: 36,
+                              child: IconButton(
+                                icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 22),
+                                onPressed: () {
+                                  MusicHaptics.skip();
+                                  handler.skipToNext();
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              ),
+                            ),
+                          ],
                         ),
-                        // Skip next (small)
-                        SizedBox(
-                          width: 36,
-                          child: IconButton(
-                            icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 22),
-                            onPressed: () {
-                              MusicHaptics.skip();
-                              handler.skipToNext();
-                            },
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../core/theme/app_colors.dart';
 import '../../providers/premium_providers.dart';
+import '../../providers/providers.dart';
+import '../../widgets/elite_background.dart';
+import '../../widgets/liquid_glass.dart';
 
 class InfiniteBlendScreen extends ConsumerWidget {
   const InfiniteBlendScreen({super.key});
@@ -10,28 +12,67 @@ class InfiniteBlendScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final on = ref.watch(infiniteBlendProvider);
+    final palette = ref.watch(dynamicPaletteProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: Text('Infinite Blend', style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
+    return RottyDynamicAuroraBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Long crossfade when skipping tracks — smoother DJ feel.', style: GoogleFonts.inter(color: AppColors.textSecondary)),
-            const SizedBox(height: 32),
-            SwitchListTile(
-              value: on,
-              activeColor: AppColors.accent,
-              title: Text('Infinite Blend', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: Text('Fade out ~2s before next song', style: GoogleFonts.inter(color: AppColors.textTertiary, fontSize: 11)),
-              onChanged: (v) => ref.read(infiniteBlendProvider.notifier).set(v),
+        appBar: AppBar(
+          title: Text('Infinite Blend', style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: Colors.white)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: LiquidGlass(
+              borderRadius: 24,
+              surfaceOpacity: 0.08,
+              borderOpacity: 0.15,
+              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'DJ-GRADE CROSSFADE CONTROLLER',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: palette.primary,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Smoothes transitions when skipping or ending tracks by active volume crossfading.',
+                    style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                  ),
+                  const SizedBox(height: 28),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.white.withValues(alpha: 0.04),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: SwitchListTile(
+                      value: on,
+                      activeColor: palette.primary,
+                      activeThumbColor: Colors.white,
+                      title: Text('Enable Infinite Blend', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: Text('Fades volume ~2s before skipping to next track', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                      onChanged: (v) => ref.read(infiniteBlendProvider.notifier).set(v),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );

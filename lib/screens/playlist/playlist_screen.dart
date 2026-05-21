@@ -9,7 +9,8 @@ import '../../widgets/app_scaffold.dart';
 import '../../utils/play_song.dart';
 
 class PlaylistScreen extends ConsumerStatefulWidget {
-  const PlaylistScreen({super.key});
+  const PlaylistScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   ConsumerState<PlaylistScreen> createState() => _PlaylistScreenState();
@@ -24,8 +25,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     final favorites = ref.watch(favoritesProvider);
     final recent = ref.watch(recentSongsProvider);
 
-    return AppScaffold(
-      body: CustomScrollView(
+    final body = CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
@@ -73,8 +73,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           if (_tab == 2) _songs(recent),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
-      ),
     );
+
+    if (widget.embedded) return body;
+    return AppScaffold(body: body);
   }
 
   Widget _chip(String label, int i) {

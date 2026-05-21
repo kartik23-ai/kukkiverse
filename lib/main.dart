@@ -8,6 +8,7 @@ import 'services/storage_service.dart';
 import 'services/audio_handler.dart';
 import 'services/audio_effects.dart';
 import 'services/firebase_service.dart';
+import 'services/rotty_connect_service.dart';
 import 'providers/providers.dart';
 import 'providers/premium_providers.dart';
 import 'providers/feature_providers.dart';
@@ -39,9 +40,12 @@ void main() async {
   }
 
   await FirebaseService.instance.init();
-  if (FirebaseService.instance.isReady && FirebaseService.instance.currentUser != null) {
-    await FirebaseService.instance.pullUserData();
-    await FirebaseService.instance.syncUserData();
+  if (FirebaseService.instance.isReady) {
+    await RottyConnectService.instance.init(FirebaseService.instance.userId);
+    if (FirebaseService.instance.currentUser != null) {
+      await FirebaseService.instance.pullUserData();
+      await FirebaseService.instance.syncUserData();
+    }
   }
   final eq = StorageService().loadStudioEq();
   RottyAudioEffects.bass = eq.bass;

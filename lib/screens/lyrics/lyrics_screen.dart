@@ -87,6 +87,7 @@ class LyricsScreen extends ConsumerWidget {
                     final pos = snap.data ?? Duration.zero;
                     final dur = handler.player.duration ?? song?.duration ?? const Duration(minutes: 3, seconds: 30);
                     final lines = parseLyricsToLines(text, dur);
+                    final isSynced = text.contains(RegExp(r'\[\d+:\d{2}'));
                     return Padding(
                       padding: const EdgeInsets.all(16),
                       child: LiveKaraokeLyrics(
@@ -95,6 +96,7 @@ class LyricsScreen extends ConsumerWidget {
                         accent: palette.primary,
                         dualLanguage: false,
                         maxHeight: MediaQuery.of(context).size.height - 120,
+                        isSynced: isSynced,
                       ),
                     );
                   },

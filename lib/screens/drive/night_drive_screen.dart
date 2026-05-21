@@ -91,8 +91,11 @@ class _NightDriveScreenState extends ConsumerState<NightDriveScreen>
     final playing = ref.watch(isPlayingProvider);
     final handler = ref.read(audioHandlerProvider);
     final size = MediaQuery.of(context).size;
-    // In landscape: width > height
-    final ringSize = size.height * 0.72;
+    // In landscape: width > height. Avoid exceeding safe width boundaries.
+    final maxWidth = size.width * 0.52 - 32;
+    final maxHeight = size.height * 0.55;
+    final ringSize = math.min(maxWidth, maxHeight).clamp(100.0, 260.0);
+    final hideDriveText = (size.width * 0.52) <= 200;
 
     return Theme(
       data: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF030205)),
@@ -139,99 +142,112 @@ class _NightDriveScreenState extends ConsumerState<NightDriveScreen>
                 SizedBox(
                   width: size.width * 0.52,
                   child: SafeArea(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Drive Mode badge + Back
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Center(
+                      child: SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                                  color: Color(0xFFFFAB91), size: 20),
-                              onPressed: () => context.pop(),
+                            // Drive Mode badge + Back
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                                      color: Color(0xFFFFAB91), size: 20),
+                                  onPressed: () => context.pop(),
+                                ),
+                                const Spacer(),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: hideDriveText ? 8 : 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF6B4A).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: const Color(0xFFFF6B4A).withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.speed_rounded, color: Color(0xFFFF6B4A), size: 14),
+                                      if (!hideDriveText) ...[
+                                        const SizedBox(width: 6),
+                                        Text('DRIVE', style: GoogleFonts.inter(
+                                            color: const Color(0xFFFFE0D6),
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 11,
+                                            letterSpacing: 2)),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const Spacer(),
+                                // Progress %
+                                StreamBuilder<Duration>(
+                                  stream: handler.player.positionStream,
+                                  builder: (_, snap) {
+                                    final pos = snap.data ?? Duration.zero;
+                                    final dur = handler.player.duration ?? song?.duration ?? const Duration(minutes: 3);
+                                    final pct = dur.inMilliseconds > 0
+                                        ? (pos.inMilliseconds / dur.inMilliseconds * 100).round()
+                                        : 0;
+                                    return Text('$pct%', style: GoogleFonts.inter(
+                                        color: const Color(0xFFFF8A65),
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14));
+                                  },
+                                ),
+                                const SizedBox(width: 12),
+                              ],
                             ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFF6B4A).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFFFF6B4A).withValues(alpha: 0.3)),
-                              ),
-                              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                const Icon(Icons.speed_rounded, color: Color(0xFFFF6B4A), size: 14),
-                                const SizedBox(width: 6),
-                                Text('DRIVE', style: GoogleFonts.inter(
-                                    color: const Color(0xFFFFE0D6),
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 11,
-                                    letterSpacing: 2)),
-                              ]),
-                            ),
-                            const Spacer(),
-                            // Progress %
+                            const SizedBox(height: 8),
+                            // ── Speedometer Ring ──
                             StreamBuilder<Duration>(
                               stream: handler.player.positionStream,
                               builder: (_, snap) {
                                 final pos = snap.data ?? Duration.zero;
                                 final dur = handler.player.duration ?? song?.duration ?? const Duration(minutes: 3);
-                                final pct = dur.inMilliseconds > 0
-                                    ? (pos.inMilliseconds / dur.inMilliseconds * 100).round()
-                                    : 0;
-                                return Text('$pct%', style: GoogleFonts.inter(
-                                    color: const Color(0xFFFF8A65),
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14));
+                                final progress = dur.inMilliseconds > 0
+                                    ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
+                                    : 0.0;
+                                return _SpeedometerRing(
+                                  progress: progress,
+                                  playing: playing,
+                                  size: ringSize,
+                                  pulseFactor: _pulse.value,
+                                );
                               },
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(height: 12),
+                            // Song title
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                song?.title ?? 'Nothing Playing',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                    color: const Color(0xFFFFE0D6),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.2),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              song?.artist ?? '',
+                              style: GoogleFonts.inter(
+                                  color: const Color(0xFFFF8A65), fontSize: 13, fontWeight: FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        // ── Speedometer Ring ──
-                        StreamBuilder<Duration>(
-                          stream: handler.player.positionStream,
-                          builder: (_, snap) {
-                            final pos = snap.data ?? Duration.zero;
-                            final dur = handler.player.duration ?? song?.duration ?? const Duration(minutes: 3);
-                            final progress = dur.inMilliseconds > 0
-                                ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
-                                : 0.0;
-                            return _SpeedometerRing(
-                              progress: progress,
-                              playing: playing,
-                              size: ringSize,
-                              pulseFactor: _pulse.value,
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        // Song title
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            song?.title ?? 'Nothing Playing',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
-                                color: const Color(0xFFFFE0D6),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                height: 1.2),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          song?.artist ?? '',
-                          style: GoogleFonts.inter(
-                              color: const Color(0xFFFF8A65), fontSize: 13, fontWeight: FontWeight.w500),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

@@ -105,23 +105,31 @@ class PlayHistoryNotifier extends StateNotifier<List<PlayHistoryEntry>> {
 final aiDjMoodOverrideProvider = StateProvider<AiMood?>((ref) => null);
 
 class PartyRoomState {
-  const PartyRoomState({this.code, this.queue = const []});
+  const PartyRoomState({
+    this.code,
+    this.queue = const [],
+    this.nowPlaying,
+    this.isPlaying = false,
+  });
   final String? code;
   final List<SongModel> queue;
+  final SongModel? nowPlaying;
+  final bool isPlaying;
 }
 
 final partyRoomProvider = StateNotifierProvider<PartyRoomNotifier, PartyRoomState>((ref) {
-  return PartyRoomNotifier(ref.read(storageServiceProvider));
+  return PartyRoomNotifier(ref.read(storageServiceProvider), ref);
 });
 
 class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
-  PartyRoomNotifier(this._storage) : super(PartyRoomState(code: _storage.activePartyRoom, queue: _queueFor(_storage.activePartyRoom))) {
+  PartyRoomNotifier(this._storage, this._ref) : super(PartyRoomState(code: _storage.activePartyRoom, queue: _queueFor(_storage.activePartyRoom))) {
     final code = _storage.activePartyRoom;
     if (code != null) _listenCloud(code);
   }
 
   final StorageService _storage;
-  StreamSubscription<List<SongModel>>? _partySub;
+  final Ref _ref;
+  StreamSubscription<FirebasePartyRoom>? _partySub;
 
   static List<SongModel> _queueFor(String? code) =>
       code == null ? const [] : StorageService().getPartyQueue(code);
@@ -135,10 +143,35 @@ class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
   void _listenCloud(String code) {
     _partySub?.cancel();
     if (!FirebaseService.instance.isReady) return;
-    _partySub = FirebaseService.instance.watchPartyQueue(code).listen((songs) {
-      _storage.savePartyQueue(code, songs);
-      state = PartyRoomState(code: code, queue: songs);
+    _partySub = FirebaseService.instance.watchPartyRoom(code).listen((room) {
+      _storage.savePartyQueue(code, room.queue);
+      state = PartyRoomState(
+        code: code,
+        queue: room.queue,
+        nowPlaying: room.nowPlaying,
+        isPlaying: room.isPlaying,
+      );
+      if (room.nowPlaying != null) {
+        _syncPlaybackLocally(room.nowPlaying!);
+      }
     });
+  }
+
+  void _syncPlaybackLocally(SongModel remoteSong) async {
+    try {
+      final handler = _ref.read(audioHandlerProvider);
+      final currentLocal = handler.currentSong;
+      if (currentLocal?.id == remoteSong.id) return;
+
+      final repo = _ref.read(musicRepositoryProvider);
+      final track = await repo.resolveSong(remoteSong);
+      if (track.hasPlayableUrl) {
+        await handler.playSong(track, playlist: state.queue);
+        _ref.read(dynamicPaletteProvider.notifier).updateFromSong(track);
+      }
+    } catch (e) {
+      debugPrint('Party Sync: local playback sync failed: $e');
+    }
   }
 
   Future<String> createRoom() async {
@@ -172,9 +205,17 @@ class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
     if (code == null) return;
     await _storage.addToPartyQueue(code, song);
     final q = _storage.getPartyQueue(code);
-    state = PartyRoomState(code: code, queue: q);
+    state = PartyRoomState(code: code, queue: q, nowPlaying: state.nowPlaying, isPlaying: state.isPlaying);
     if (FirebaseService.instance.isReady) {
       await FirebaseService.instance.pushPartyQueue(code, q);
+    }
+  }
+
+  Future<void> updatePlayback(SongModel song, bool isPlaying) async {
+    final code = state.code;
+    if (code == null) return;
+    if (FirebaseService.instance.isReady) {
+      await FirebaseService.instance.updatePartyPlayback(code, song, isPlaying);
     }
   }
 }

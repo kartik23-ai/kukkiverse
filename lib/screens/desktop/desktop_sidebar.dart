@@ -1,14 +1,15 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
-import '../../widgets/rotty_glass.dart';
+import '../../widgets/liquid_glass.dart';
 
 /// ═══════════════════════════════════════════════════════════════
-/// Desktop Sidebar — Glassmorphic left navigation panel
-/// Spotify-style: Logo, Nav items, Playlists
+/// Desktop Sidebar 3.0 — True Liquid Glass Navigation
+/// Translucent, light-catching, neon active pill, visible text
 /// ═══════════════════════════════════════════════════════════════
 class DesktopSidebar extends ConsumerWidget {
   const DesktopSidebar({super.key, required this.activeTab, required this.onTabChanged});
@@ -20,6 +21,7 @@ class DesktopSidebar extends ConsumerWidget {
     (Icons.home_rounded, 'Home'),
     (Icons.search_rounded, 'Search'),
     (Icons.library_music_rounded, 'Library'),
+    (Icons.science_rounded, 'Labs'),
     (Icons.tune_rounded, 'Settings'),
   ];
 
@@ -28,201 +30,291 @@ class DesktopSidebar extends ConsumerWidget {
     final playlists = ref.watch(playlistsProvider);
     final palette = ref.watch(dynamicPaletteProvider);
 
-    return Container(
-      width: 230,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0F).withValues(alpha: 0.95),
-        border: Border(
-          right: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-        ),
-      ),
+    return LiquidGlassSidebar(
+      width: 240,
+      accentColor: palette.primary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Logo
+          // ─── Logo ───
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
             child: Row(
               children: [
                 Container(
-                  width: 36, height: 36,
+                  width: 38, height: 38,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    gradient: AppColors.accentGradient,
+                    borderRadius: BorderRadius.circular(11),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFA2D48), Color(0xFF7B61FF), Color(0xFF00D4FF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                     boxShadow: [
-                      BoxShadow(color: AppColors.accent.withValues(alpha: 0.3), blurRadius: 12),
+                      BoxShadow(color: AppColors.accent.withValues(alpha: 0.5), blurRadius: 20),
                     ],
                   ),
                   child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  'ROTTY',
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 3,
-                    color: Colors.white,
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFFFA2D48), Color(0xFF7B61FF), Color(0xFF00D4FF)],
+                  ).createShader(bounds),
+                  child: Text(
+                    'ROTTY',
+                    style: GoogleFonts.inter(
+                      fontSize: 20, fontWeight: FontWeight.w900,
+                      letterSpacing: 3, color: Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
 
-          // Nav items
+          // ─── Nav items ───
           ...List.generate(_navItems.length, (i) {
             final selected = activeTab == i;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  onTap: () => onTabChanged(i),
-                  borderRadius: BorderRadius.circular(10),
-                  hoverColor: Colors.white.withValues(alpha: 0.05),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: selected
-                          ? palette.primary.withValues(alpha: 0.12)
-                          : Colors.transparent,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _navItems[i].$1,
-                          size: 20,
-                          color: selected ? palette.primary : Colors.white54,
-                        ),
-                        const SizedBox(width: 14),
-                        Text(
-                          _navItems[i].$2,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                            color: selected ? Colors.white : Colors.white60,
-                          ),
-                        ),
-                        if (selected) ...[
-                          const Spacer(),
-                          Container(
-                            width: 4, height: 4,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: palette.primary,
-                              boxShadow: [BoxShadow(color: palette.primary.withValues(alpha: 0.5), blurRadius: 6)],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+            return _NavItem(
+              icon: _navItems[i].$1,
+              label: _navItems[i].$2,
+              selected: selected,
+              accent: palette.primary,
+              onTap: () => onTabChanged(i),
             );
           }),
 
-          // Divider
+          // ─── Divider ───
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            child: Container(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.transparent, Colors.white.withValues(alpha: 0.15), Colors.transparent],
+                ),
+              ),
+            ),
           ),
 
-          // Playlists header
+          // ─── Playlists header ───
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
             child: Text(
               'YOUR PLAYLISTS',
               style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: Colors.white30,
-                letterSpacing: 2,
+                fontSize: 10, fontWeight: FontWeight.w700,
+                color: Colors.white.withValues(alpha: 0.4), letterSpacing: 2,
               ),
             ),
           ),
 
-          // Playlists list
+          // ─── Playlists list ───
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               itemCount: playlists.length,
-              itemBuilder: (context, i) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 1),
-                child: Material(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  child: InkWell(
-                    onTap: () {},
-                    borderRadius: BorderRadius.circular(8),
-                    hoverColor: Colors.white.withValues(alpha: 0.04),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Row(
-                        children: [
-                          Icon(Icons.queue_music_rounded, size: 16, color: Colors.white30),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              playlists[i].name,
-                              style: GoogleFonts.inter(fontSize: 13, color: Colors.white54),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            '${playlists[i].songs.length}',
-                            style: GoogleFonts.inter(fontSize: 11, color: Colors.white24),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              itemBuilder: (context, i) => _PlaylistTile(
+                name: playlists[i].name,
+                count: playlists[i].songs.length,
+                accent: palette.primary,
               ),
             ),
           ),
 
-          // Create playlist button
+          // ─── Create playlist button ───
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-              child: InkWell(
-                onTap: () => _showCreatePlaylist(context, ref),
-                borderRadius: BorderRadius.circular(10),
-                hoverColor: Colors.white.withValues(alpha: 0.05),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.add_rounded, size: 18, color: Colors.white38),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Create Playlist',
-                        style: GoogleFonts.inter(fontSize: 12, color: Colors.white.withValues(alpha: 0.5), fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            child: _CreatePlaylistButton(ref: ref, accent: palette.primary),
           ),
         ],
       ),
     );
   }
+}
 
-  void _showCreatePlaylist(BuildContext context, WidgetRef ref) {
+class _NavItem extends StatefulWidget {
+  const _NavItem({required this.icon, required this.label, required this.selected, required this.accent, required this.onTap});
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  State<_NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<_NavItem> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: widget.selected
+                  ? widget.accent.withValues(alpha: 0.15)
+                  : _hovered
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.transparent,
+              border: widget.selected
+                  ? Border.all(color: widget.accent.withValues(alpha: 0.25))
+                  : null,
+              boxShadow: widget.selected
+                  ? [BoxShadow(color: widget.accent.withValues(alpha: 0.15), blurRadius: 16)]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                // Neon active pill indicator
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 3, height: widget.selected ? 22 : 0,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    color: widget.accent,
+                    boxShadow: widget.selected
+                        ? [BoxShadow(color: widget.accent.withValues(alpha: 0.6), blurRadius: 8)]
+                        : null,
+                  ),
+                ),
+                Icon(
+                  widget.icon, size: 20,
+                  color: widget.selected
+                      ? widget.accent
+                      : _hovered ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.5),
+                ),
+                const SizedBox(width: 14),
+                Text(
+                  widget.label,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w500,
+                    color: widget.selected
+                        ? Colors.white
+                        : _hovered ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaylistTile extends StatefulWidget {
+  const _PlaylistTile({required this.name, required this.count, required this.accent});
+  final String name;
+  final int count;
+  final Color accent;
+
+  @override
+  State<_PlaylistTile> createState() => _PlaylistTileState();
+}
+
+class _PlaylistTileState extends State<_PlaylistTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.symmetric(vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: _hovered ? Colors.white.withValues(alpha: 0.06) : Colors.transparent,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.queue_music_rounded, size: 16,
+                color: _hovered ? widget.accent.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.3)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                widget.name,
+                style: GoogleFonts.inter(fontSize: 13,
+                    color: _hovered ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.5)),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text('${widget.count}', style: GoogleFonts.inter(fontSize: 11, color: Colors.white.withValues(alpha: 0.25))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CreatePlaylistButton extends StatefulWidget {
+  const _CreatePlaylistButton({required this.ref, required this.accent});
+  final WidgetRef ref;
+  final Color accent;
+
+  @override
+  State<_CreatePlaylistButton> createState() => _CreatePlaylistButtonState();
+}
+
+class _CreatePlaylistButtonState extends State<_CreatePlaylistButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => _showCreateDialog(context),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _hovered ? widget.accent.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.1),
+            ),
+            color: _hovered ? widget.accent.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.04),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_rounded, size: 18,
+                  color: _hovered ? widget.accent : Colors.white.withValues(alpha: 0.4)),
+              const SizedBox(width: 8),
+              Text(
+                'Create Playlist',
+                style: GoogleFonts.inter(fontSize: 12,
+                    color: _hovered ? widget.accent : Colors.white.withValues(alpha: 0.5),
+                    fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCreateDialog(BuildContext context) {
     final ctrl = TextEditingController();
     showDialog(
       context: context,
@@ -238,29 +330,26 @@ class DesktopSidebar extends ConsumerWidget {
             hintText: 'Playlist name',
             hintStyle: GoogleFonts.inter(color: Colors.white30),
             filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.05),
+            fillColor: Colors.white.withValues(alpha: 0.08),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
           ),
           onSubmitted: (v) {
             if (v.trim().isNotEmpty) {
-              ref.read(playlistsProvider.notifier).create(v.trim());
+              widget.ref.read(playlistsProvider.notifier).create(v.trim());
               Navigator.pop(context);
             }
           },
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white38)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white38))),
           TextButton(
             onPressed: () {
               if (ctrl.text.trim().isNotEmpty) {
-                ref.read(playlistsProvider.notifier).create(ctrl.text.trim());
+                widget.ref.read(playlistsProvider.notifier).create(ctrl.text.trim());
                 Navigator.pop(context);
               }
             },
-            child: Text('Create', style: GoogleFonts.inter(color: AppColors.accent, fontWeight: FontWeight.w700)),
+            child: Text('Create', style: GoogleFonts.inter(color: widget.accent, fontWeight: FontWeight.w700)),
           ),
         ],
       ),

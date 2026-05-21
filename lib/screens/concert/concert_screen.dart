@@ -237,6 +237,7 @@ class _ConcertScreenState extends ConsumerState<ConcertScreen>
                       }
                       final dur = handler.player.duration ?? song.duration;
                       final lines = parseLyricsToLines(text, dur);
+                      final isSynced = text.contains(RegExp(r'\[\d+:\d{2}'));
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: LiveKaraokeLyrics(
@@ -244,6 +245,7 @@ class _ConcertScreenState extends ConsumerState<ConcertScreen>
                           position: pos,
                           accent: palette.primary,
                           maxHeight: MediaQuery.of(context).size.height * 0.35,
+                          isSynced: isSynced,
                         ),
                       );
                     },

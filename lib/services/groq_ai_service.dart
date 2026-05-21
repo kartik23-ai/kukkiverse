@@ -24,12 +24,15 @@ class GroqAiService {
         {
           'role': 'system',
           'content':
-              'You help a Hindi/English music app. Reply ONLY with a JSON array of 5 unique music search strings (no song names already in recent list). Mix artists, albums, moods. Example: ["arijit singh sad 2024","punjabi workout","bollywood romantic"]',
+              'You are "Gok AI" — the ultimate premium Music DJ and recommendation engine. Your task is to analyze the currently playing song, its artist, and the user\'s current mood to generate 5 specific songs to transition beautifully, creating a curated Spotify-like experience.\n'
+              'For each recommendation, output the exact Song Title followed by a hyphen and the exact Artist Name (e.g., "Song Title - Artist Name"). These recommendations must transition seamlessly from the current song in sub-genre, emotional intensity, tempo, and style.\n'
+              'Return ONLY a valid JSON array containing exactly 5 recommendation strings in the format "Song Title - Artist Name". No explanations, no markdown codeblocks, no comments. Example format:\n'
+              '["Tum Hi Ho - Arijit Singh","Kesariya - Pritam","Kun Faya Kun - A.R. Rahman","Perfect - Ed Sheeran","Blinding Lights - The Weeknd"]',
         },
         {
           'role': 'user',
           'content':
-              'Now playing: "$nowPlayingTitle" by $nowPlayingArtist. Mood: $moodLabel. Recent: $recentLine. Give 5 NEW search queries as JSON array only.',
+              'Current track: "$nowPlayingTitle" by $nowPlayingArtist. Mood context: $moodLabel. Historically played songs to avoid repeats: $recentLine. Generate 5 unique search queries to transition beautifully from the current track.',
         },
       ],
     };

@@ -9,6 +9,8 @@ import '../models/song_model.dart';
 import '../models/playlist_model.dart';
 import '../models/media_item.dart';
 
+export 'feature_providers.dart';
+
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 final storageServiceProvider = Provider<StorageService>((ref) => StorageService());
 final aiDjServiceProvider = Provider<AiDjService>((ref) => AiDjService(ref.read(apiServiceProvider)));
@@ -22,7 +24,14 @@ final audioHandlerProvider = Provider<RottyAudioHandler>((ref) {
 });
 
 final mainTabIndexProvider = StateProvider<int>((ref) => 0);
-final aiDjEnabledProvider = StateProvider<bool>((ref) => true);
+final aiDjEnabledProvider = StateProvider<bool>((ref) {
+  final storage = ref.read(storageServiceProvider);
+  final isEnabled = storage.aiDjEnabled;
+  ref.listenSelf((previous, next) {
+    storage.setAiDjEnabled(next);
+  });
+  return isEnabled;
+});
 
 final homeDataProvider = FutureProvider<Map<String, List<SongModel>>>((ref) async {
   return ref.read(musicRepositoryProvider).getHomeSections();
@@ -85,8 +94,18 @@ final artistDetailProvider = FutureProvider.family<({ArtistItem? artist, List<So
 });
 
 final lyricsProvider = FutureProvider.family<String?, String>((ref, id) async {
-  // Get the current song to pass title+artist to LRCLIB
-  final song = ref.read(nowPlayingProvider);
+  // 1. Check if the now playing song matches this ID
+  var song = ref.read(nowPlayingProvider);
+  if (song?.id != id) {
+    // 2. Not the now playing song. Try to resolve correct details from API to search LRCLIB accurately.
+    try {
+      song = await ref.read(apiServiceProvider).getSongDetails(id);
+    } catch (_) {
+      song = null;
+    }
+  }
+
+  // 3. Query lyrics using the correct title, artist, and duration
   return ref.read(musicRepositoryProvider).getLyrics(
     id,
     title: song?.title,

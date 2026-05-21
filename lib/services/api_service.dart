@@ -206,12 +206,60 @@ class ApiService {
     return _fetchMirrorLyrics(songId);
   }
 
+  String _cleanSearchTerm(String term) {
+    return term
+        .toLowerCase()
+        .replaceAll(RegExp(r'\([^)]*\)'), '')
+        .replaceAll(RegExp(r'\[[^\]]*\]'), '')
+        .replaceAll(RegExp(r'\b(from|feat|featuring|remix|lofi|version|edit|cover|audio|video|lyrics|lyric|full video|original|soundtrack|ost|mp3|download|karaoke|with lyrics)\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String _cleanArtist(String artist) {
+    String mainArtist = artist.split(RegExp(r'[,&]')).first.trim();
+    mainArtist = mainArtist.split(RegExp(r'\b(feat|featuring|ft)\b', caseSensitive: false)).first.trim();
+    return mainArtist;
+  }
+
   /// LRCLIB — free, open-source synced lyrics database
   Future<String?> _fetchLrclibLyrics(String title, String artist, int durationSec) async {
+    if (title.isEmpty) return null;
+
+    // Clean soundtrack suffix (e.g. Hawayein - Jab Harry Met Sejal -> Hawayein)
+    final mainTitle = title.split(' - ').first.trim();
+    final cleanedTitle = _cleanSearchTerm(mainTitle);
+
+    // Detect and bypass "Various Artists" filters
+    final bool isVarious = artist.toLowerCase().contains('various artists') || artist.toLowerCase().contains('various');
+    final cleanedArtist = isVarious ? '' : _cleanArtist(artist);
+
+    // 1. Try LRCLIB's official high-precision /api/get endpoint first
     try {
-      // Search endpoint
-      final q = Uri.encodeComponent(title);
-      final a = Uri.encodeComponent(artist);
+      final getUrl = 'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(cleanedTitle)}&artist_name=${Uri.encodeComponent(cleanedArtist)}${durationSec > 0 ? '&duration=$durationSec' : ''}';
+      final response = await _client.get(
+        Uri.parse(getUrl),
+        headers: {
+          'User-Agent': 'RottyMusic/1.0',
+          'Lrclib-Client': 'RottyMusic v1.0',
+        },
+      ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map) {
+          final synced = data['syncedLyrics']?.toString();
+          if (synced != null && synced.trim().isNotEmpty) return synced;
+          final plain = data['plainLyrics']?.toString();
+          if (plain != null && plain.trim().isNotEmpty) return plain;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fallback to /api/search with strict multi-criteria scoring
+    try {
+      final q = Uri.encodeComponent(cleanedTitle);
+      final a = Uri.encodeComponent(cleanedArtist);
       final url = 'https://lrclib.net/api/search?q=$q&artist_name=$a';
 
       final r = await _client.get(
@@ -220,16 +268,18 @@ class ApiService {
           'User-Agent': 'RottyMusic/1.0',
           'Lrclib-Client': 'RottyMusic v1.0',
         },
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 5));
 
       if (r.statusCode != 200) return null;
 
       final results = json.decode(r.body);
       if (results is! List || results.isEmpty) return null;
 
-      // Pick best match — prefer synced, closest duration
       Map? best;
-      int bestScore = 99999;
+      int bestScore = 999999;
+
+      final lowerSearchTitle = cleanedTitle.toLowerCase();
+      final lowerSearchArtist = cleanedArtist.toLowerCase();
 
       for (final item in results) {
         if (item is! Map) continue;
@@ -237,9 +287,43 @@ class ApiService {
         final plain = item['plainLyrics']?.toString();
         if ((synced == null || synced.isEmpty) && (plain == null || plain.isEmpty)) continue;
 
+        final itemTitle = _cleanSearchTerm(item['trackName']?.toString() ?? '');
+        final itemArtist = _cleanArtist(item['artistName']?.toString() ?? '').toLowerCase();
+
+        if (itemTitle.isEmpty) continue;
+
+        // Strict title validation: check word overlap
+        bool isTitleMatch = false;
+        final titleWords = lowerSearchTitle.split(' ').where((w) => w.length > 2).toList();
+        if (titleWords.isEmpty) {
+          isTitleMatch = itemTitle.contains(lowerSearchTitle) || lowerSearchTitle.contains(itemTitle);
+        } else {
+          int matchCount = 0;
+          for (final word in titleWords) {
+            if (itemTitle.contains(word)) matchCount++;
+          }
+          isTitleMatch = matchCount >= (titleWords.length / 2).ceil();
+        }
+
+        if (!isTitleMatch) continue; // Discard completely different songs
+
+        final isArtistMatch = lowerSearchArtist.isEmpty || itemArtist.contains(lowerSearchArtist) || lowerSearchArtist.contains(itemArtist);
+
+        // Discard completely different artist unless looking for various/empty artist
+        if (lowerSearchArtist.isNotEmpty && !isArtistMatch) continue;
+
         final itemDur = item['duration'] is num ? (item['duration'] as num).toInt() : 0;
         final durDiff = durationSec > 0 ? (itemDur - durationSec).abs() : 0;
-        final score = durDiff + (synced != null && synced.isNotEmpty ? 0 : 200);
+
+        if (durationSec > 0 && durDiff > 35) continue; // Discard completely different lengths
+
+        int score = durDiff;
+        if (lowerSearchArtist.isNotEmpty && !itemArtist.contains(lowerSearchArtist) && !lowerSearchArtist.contains(itemArtist)) {
+          score += 100; // Small penalty for imperfect artist matching
+        }
+        if (synced == null || synced.isEmpty) {
+          score += 300; // Heavy penalty for unsynced lyrics
+        }
 
         if (score < bestScore) {
           bestScore = score;
@@ -249,7 +333,6 @@ class ApiService {
 
       if (best == null) return null;
 
-      // Return synced (LRC format) if available, else plain
       final synced = best['syncedLyrics']?.toString();
       if (synced != null && synced.isNotEmpty) return synced;
       return best['plainLyrics']?.toString();

@@ -174,15 +174,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Widget _Actions(BuildContext context, {required SongModel song, required dynamic insight}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _chip('Lyrics', Icons.lyrics_outlined, () => context.push('/lyrics/${song.id}')),
-        _chip('Concert', Icons.surround_sound_rounded, () => context.push('/concert')),
-        _chip('Focus', Icons.self_improvement_rounded, () => context.push('/focus')),
-        _chip('Drive', Icons.directions_car_rounded, () => context.push('/drive')),
-        _chip('Sleep', Icons.bedtime_rounded, () => context.push('/sleep')),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _chip('Lyrics', Icons.lyrics_outlined, () => context.push('/lyrics/${song.id}')),
+          const SizedBox(width: 8),
+          _chip('Concert', Icons.surround_sound_rounded, () => context.push('/concert')),
+          const SizedBox(width: 8),
+          _chip('Focus', Icons.self_improvement_rounded, () => context.push('/focus')),
+          const SizedBox(width: 8),
+          _chip('Drive', Icons.directions_car_rounded, () => context.push('/drive')),
+          const SizedBox(width: 8),
+          _chip('Sleep', Icons.bedtime_rounded, () => context.push('/sleep')),
+        ],
+      ),
     );
   }
 

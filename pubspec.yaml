@@ -1,7 +1,7 @@
 name: rotty_music
 description: "ROTTY MUSIC - Ultra Premium Music Streaming"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.11.1
@@ -37,6 +37,7 @@ dependencies:
   cloud_firestore: ^6.4.1
   firebase_auth: ^6.5.1
   qr_flutter: ^4.1.0
+  just_audio_windows: ^0.2.3
 
 dev_dependencies:
   flutter_test:

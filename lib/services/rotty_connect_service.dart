@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'firebase_service.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Rotty Connect — Cross-device playback sync engine
@@ -18,6 +19,13 @@ import 'package:uuid/uuid.dart';
 
 enum DeviceType { mobile, desktop }
 enum ConnectCommand { play, pause, next, prev, seekTo, volume }
+
+DateTime _parseDateTime(dynamic val) {
+  if (val == null) return DateTime.now();
+  if (val is Timestamp) return val.toDate();
+  if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+  return DateTime.now();
+}
 
 class ConnectedDevice {
   final String id;
@@ -40,7 +48,7 @@ class ConnectedDevice {
       name: map['name'] ?? 'Unknown',
       type: map['type'] == 'desktop' ? DeviceType.desktop : DeviceType.mobile,
       online: map['online'] ?? false,
-      lastSeen: (map['lastSeen'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      lastSeen: _parseDateTime(map['lastSeen']),
     );
   }
 
@@ -48,7 +56,7 @@ class ConnectedDevice {
     'name': name,
     'type': type == DeviceType.desktop ? 'desktop' : 'mobile',
     'online': online,
-    'lastSeen': FieldValue.serverTimestamp(),
+    'lastSeen': FirebaseService.instance.useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
   };
 }
 
@@ -82,7 +90,7 @@ class RemotePlaybackState {
       positionMs: map['positionMs'] ?? 0,
       durationMs: map['durationMs'] ?? 0,
       isPlaying: map['isPlaying'] ?? false,
-      updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: _parseDateTime(map['updatedAt']),
     );
   }
 
@@ -94,9 +102,10 @@ class RemotePlaybackState {
     'positionMs': positionMs,
     'durationMs': durationMs,
     'isPlaying': isPlaying,
-    'updatedAt': FieldValue.serverTimestamp(),
+    'updatedAt': FirebaseService.instance.useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
   };
 }
+
 
 class RottyConnectService {
   RottyConnectService._();
@@ -107,7 +116,12 @@ class RottyConnectService {
   late DeviceType _deviceType;
   late String _deviceName;
 
-  FirebaseFirestore get _db => FirebaseFirestore.instance;
+  FirebaseFirestore get _db {
+    if (FirebaseService.instance.useRestFallback) {
+      throw UnsupportedError('Firestore is not supported natively when REST fallback is enabled.');
+    }
+    return FirebaseFirestore.instance;
+  }
   DocumentReference get _userDoc => _db.collection('rotty_connect').doc(_userId);
   CollectionReference get _devicesCol => _userDoc.collection('devices');
   DocumentReference get _playbackDoc => _userDoc.collection('state').doc('playback');
@@ -138,21 +152,32 @@ class RottyConnectService {
       _deviceName = 'Phone';
     }
 
-    // Register this device
-    await _devicesCol.doc(_deviceId).set(ConnectedDevice(
+    final devData = ConnectedDevice(
       id: _deviceId,
       name: _deviceName,
       type: _deviceType,
       online: true,
       lastSeen: DateTime.now(),
-    ).toMap());
+    ).toMap();
+
+    // Register this device
+    if (FirebaseService.instance.useRestFallback) {
+      await FirestoreRestClient.setDoc('rotty_connect/$_userId/devices/$_deviceId', devData);
+    } else {
+      await _devicesCol.doc(_deviceId).set(devData);
+    }
 
     // Heartbeat every 30 seconds
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _devicesCol.doc(_deviceId).update({
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      final updateData = {
         'online': true,
-        'lastSeen': FieldValue.serverTimestamp(),
-      });
+        'lastSeen': FirebaseService.instance.useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
+      };
+      if (FirebaseService.instance.useRestFallback) {
+        await FirestoreRestClient.setDoc('rotty_connect/$_userId/devices/$_deviceId', updateData, merge: true);
+      } else {
+        await _devicesCol.doc(_deviceId).update(updateData);
+      }
     });
 
     _initialized = true;
@@ -161,12 +186,28 @@ class RottyConnectService {
 
   /// Get real-time stream of connected devices
   Stream<List<ConnectedDevice>> watchDevices() {
+    if (FirebaseService.instance.useRestFallback) {
+      return Stream.periodic(const Duration(seconds: 3)).asyncMap((_) async {
+        final docs = await FirestoreRestClient.listDocs('rotty_connect/$_userId/devices');
+        return docs.map((d) {
+          final id = d['id'] as String;
+          return ConnectedDevice.fromMap(id, d);
+        }).toList();
+      }).asBroadcastStream();
+    }
     return _devicesCol.snapshots().map((snap) =>
         snap.docs.map((d) => ConnectedDevice.fromMap(d.id, d.data() as Map<String, dynamic>)).toList());
   }
 
   /// Get real-time stream of remote playback state
   Stream<RemotePlaybackState?> watchPlayback() {
+    if (FirebaseService.instance.useRestFallback) {
+      return Stream.periodic(const Duration(seconds: 3)).asyncMap((_) async {
+        final doc = await FirestoreRestClient.getDoc('rotty_connect/$_userId/state/playback');
+        if (doc == null || doc.isEmpty) return null;
+        return RemotePlaybackState.fromMap(doc);
+      }).asBroadcastStream();
+    }
     return _playbackDoc.snapshots().map((snap) {
       if (!snap.exists) return null;
       return RemotePlaybackState.fromMap(snap.data() as Map<String, dynamic>);
@@ -183,7 +224,7 @@ class RottyConnectService {
     required int durationMs,
     required bool isPlaying,
   }) async {
-    await _playbackDoc.set({
+    final data = {
       'songId': songId,
       'title': title,
       'artist': artist,
@@ -192,23 +233,58 @@ class RottyConnectService {
       'durationMs': durationMs,
       'isPlaying': isPlaying,
       'activeDevice': _deviceId,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+      'updatedAt': FirebaseService.instance.useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
+    };
+    if (FirebaseService.instance.useRestFallback) {
+      await FirestoreRestClient.setDoc('rotty_connect/$_userId/state/playback', data);
+    } else {
+      await _playbackDoc.set(data);
+    }
   }
 
   /// Send a command to the remote device (e.g., phone → PC "next")
   Future<void> sendCommand(ConnectCommand cmd, {int? value}) async {
-    await _commandsCol.add({
+    final data = {
       'action': cmd.name,
       'from': _deviceId,
       'value': value,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+      'timestamp': FirebaseService.instance.useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
+    };
+    if (FirebaseService.instance.useRestFallback) {
+      await FirestoreRestClient.addDoc('rotty_connect/$_userId/commands', data);
+    } else {
+      await _commandsCol.add(data);
+    }
   }
 
   /// Listen for incoming commands (the active player calls this)
   void listenForCommands(void Function(ConnectCommand cmd, int? value) onCommand) {
     _commandSub?.cancel();
+    if (FirebaseService.instance.useRestFallback) {
+      _commandSub = Stream.periodic(const Duration(seconds: 2)).asyncMap((_) async {
+        return await FirestoreRestClient.listDocs('rotty_connect/$_userId/commands');
+      }).listen((docs) {
+        if (docs.isEmpty) return;
+        for (final doc in docs) {
+          final from = doc['from'] as String?;
+          if (from == _deviceId) continue;
+          
+          final action = doc['action'] as String?;
+          final value = doc['value'] as int?;
+          if (action != null) {
+            final cmd = ConnectCommand.values.firstWhere(
+              (c) => c.name == action,
+              orElse: () => ConnectCommand.play,
+            );
+            onCommand(cmd, value);
+          }
+          final id = doc['id'] as String;
+          FirestoreRestClient.deleteDoc('rotty_connect/$_userId/commands/$id');
+        }
+      });
+      return;
+    }
+
     _commandSub = _commandsCol
         .orderBy('timestamp', descending: true)
         .limit(1)
@@ -218,7 +294,6 @@ class RottyConnectService {
         if (doc.type == DocumentChangeType.added) {
           final data = doc.doc.data() as Map<String, dynamic>?;
           if (data == null) continue;
-          // Ignore own commands
           if (data['from'] == _deviceId) continue;
           final action = data['action'] as String?;
           final value = data['value'] as int?;
@@ -229,7 +304,6 @@ class RottyConnectService {
             );
             onCommand(cmd, value);
           }
-          // Delete processed command
           doc.doc.reference.delete();
         }
       }
@@ -238,11 +312,20 @@ class RottyConnectService {
 
   /// Set this device as the active playback device
   Future<void> setActiveDevice() async {
-    await _userDoc.set({'activeDevice': _deviceId}, SetOptions(merge: true));
+    final data = {'activeDevice': _deviceId};
+    if (FirebaseService.instance.useRestFallback) {
+      await FirestoreRestClient.setDoc('rotty_connect/$_userId', data, merge: true);
+    } else {
+      await _userDoc.set(data, SetOptions(merge: true));
+    }
   }
 
   /// Check if this device is the active player
   Future<bool> isActiveDevice() async {
+    if (FirebaseService.instance.useRestFallback) {
+      final doc = await FirestoreRestClient.getDoc('rotty_connect/$_userId');
+      return doc?['activeDevice'] == _deviceId;
+    }
     final snap = await _userDoc.get();
     final data = snap.data() as Map<String, dynamic>?;
     return data?['activeDevice'] == _deviceId;
@@ -253,6 +336,14 @@ class RottyConnectService {
     _commandSub?.cancel();
     _heartbeatTimer?.cancel();
     _playbackSyncTimer?.cancel();
-    await _devicesCol.doc(_deviceId).update({'online': false});
+    final updateData = {
+      'online': false,
+      'lastSeen': FirebaseService.instance.useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
+    };
+    if (FirebaseService.instance.useRestFallback) {
+      await FirestoreRestClient.setDoc('rotty_connect/$_userId/devices/$_deviceId', updateData, merge: true);
+    } else {
+      await _devicesCol.doc(_deviceId).update(updateData);
+    }
   }
 }

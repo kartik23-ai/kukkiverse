@@ -9,6 +9,8 @@ import '../../core/haptics/music_haptics.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/providers.dart';
 import '../../utils/play_song.dart';
+import '../../widgets/elite_background.dart';
+import '../../widgets/liquid_glass.dart';
 
 class MoodShakeScreen extends ConsumerStatefulWidget {
   const MoodShakeScreen({super.key});
@@ -17,17 +19,27 @@ class MoodShakeScreen extends ConsumerStatefulWidget {
   ConsumerState<MoodShakeScreen> createState() => _MoodShakeScreenState();
 }
 
-class _MoodShakeScreenState extends ConsumerState<MoodShakeScreen> {
+class _MoodShakeScreenState extends ConsumerState<MoodShakeScreen> with SingleTickerProviderStateMixin {
   StreamSubscription<UserAccelerometerEvent>? _sub;
   DateTime _lastShake = DateTime.fromMillisecondsSinceEpoch(0);
   bool _busy = false;
+  late AnimationController _pulseController;
 
   final _queries = ['party hindi', 'sad hindi', 'workout punjabi', 'chill lofi', 'romantic bollywood'];
 
   @override
   void initState() {
     super.initState();
-    _sub = userAccelerometerEventStream(samplingPeriod: SensorInterval.gameInterval).listen(_onAccel);
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    
+    try {
+      _sub = userAccelerometerEventStream(samplingPeriod: SensorInterval.gameInterval).listen(_onAccel);
+    } catch (_) {
+      // Accelerometers not supported on this platform/desktop — ignore gracefully
+    }
   }
 
   void _onAccel(UserAccelerometerEvent e) {
@@ -51,7 +63,12 @@ class _MoodShakeScreenState extends ConsumerState<MoodShakeScreen> {
       final pick = songs[Random().nextInt(songs.length)];
       await playSongWithContext(ref, pick, playlist: songs, runAiDj: false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('🎵 ${pick.title}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.bgElevated,
+            content: Text('⚡ Vibe Shuffled! Playing: ${pick.title}', style: const TextStyle(color: Colors.white)),
+          ),
+        );
       }
     } finally {
       _busy = false;
@@ -61,35 +78,113 @@ class _MoodShakeScreenState extends ConsumerState<MoodShakeScreen> {
   @override
   void dispose() {
     _sub?.cancel();
+    _pulseController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: Text('Mood Shake', style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
+    final palette = ref.watch(dynamicPaletteProvider);
+
+    return RottyDynamicAuroraBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.vibration_rounded, size: 80, color: AppColors.accent.withValues(alpha: 0.85)),
-              const SizedBox(height: 24),
-              Text('Shake your phone', style: GoogleFonts.inter(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Text('Random vibe song starts instantly', textAlign: TextAlign.center, style: GoogleFonts.inter(color: AppColors.textSecondary)),
-              const SizedBox(height: 32),
-              FilledButton(
-                onPressed: _surprise,
-                style: FilledButton.styleFrom(backgroundColor: AppColors.accent, minimumSize: const Size(200, 48)),
-                child: const Text('Surprise me'),
+        appBar: AppBar(
+          title: Text(
+            'Mood Shake',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 20),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: LiquidGlass(
+              borderRadius: 24,
+              surfaceOpacity: 0.08,
+              borderOpacity: 0.15,
+              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'SHAKE & SURPRISE',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: palette.primary,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Shake your physical phone or click the trigger below to instantly match a random energetic vibration!',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 13, height: 1.4),
+                  ),
+                  const SizedBox(height: 48),
+                  
+                  // Interactive breathing device accelerometer visualization card
+                  Center(
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.95, end: 1.03).animate(
+                        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+                      ),
+                      child: Container(
+                        width: 130,
+                        height: 130,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: palette.primary.withValues(alpha: 0.06),
+                          border: Border.all(color: palette.primary.withValues(alpha: 0.2), width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: palette.primary.withValues(alpha: 0.25),
+                              blurRadius: 30,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.vibration_rounded,
+                            size: 48,
+                            color: palette.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+                  
+                  // Trigger Button
+                  LiquidGlassButton(
+                    accentColor: palette.primary,
+                    isActive: true,
+                    onTap: _surprise,
+                    child: Center(
+                      child: Text(
+                        'TRIGGER VIBE SHUFFLE',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: Colors.white,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

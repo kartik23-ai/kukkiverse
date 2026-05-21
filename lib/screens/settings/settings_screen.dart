@@ -43,8 +43,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final premium = ref.watch(rottyPremiumProvider);
     final premiumInfo = ref.watch(premiumInfoProvider);
 
-    return AppScaffold(
-      body: ListView(
+    final content = ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
         children: [
           Text('Settings', style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)),
@@ -273,8 +272,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
         ],
-      ),
     );
+
+    if (widget.embedded) return content;
+    return AppScaffold(body: content);
   }
 
   Widget _premiumCard(BuildContext context, bool premium, PremiumInfo info) {

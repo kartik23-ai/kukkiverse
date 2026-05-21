@@ -39,38 +39,10 @@ Future<void> playSongWithContext(
   final room = ref.read(partyRoomProvider);
   if (room.code != null) {
     await ref.read(partyRoomProvider.notifier).addSong(track);
+    await ref.read(partyRoomProvider.notifier).updatePlayback(track, true);
   }
 
-  if (runAiDj || ref.read(aiDjEnabledProvider)) {
-    Future.microtask(() async {
-      try {
-        final exclude = buildAiExcludeSet(ref, handler);
-        exclude.add(track.id);
 
-        final smart = await ref.read(aiDjServiceProvider).buildSmartQueue(
-          nowPlaying: track,
-          recent: ref.read(recentSongsProvider),
-          favorites: ref.read(favoritesProvider),
-          excludeIds: exclude,
-          limit: 18,
-        );
-
-        final blocked = ref.read(dislikedIdsProvider);
-        final filtered = smart.where((s) => !blocked.contains(s.id)).toList();
-
-        if (filtered.isNotEmpty) {
-          final added = await handler.appendUpcoming(filtered);
-          if (added > 0) {
-            // ignore: avoid_print
-            debugPrint('ROTTY AI: added $added new tracks to queue');
-          }
-        }
-      } catch (e) {
-        // ignore: avoid_print
-        debugPrint('ROTTY AI queue error: $e');
-      }
-    });
-  }
 }
 
 Future<void> refreshAiQueue(WidgetRef ref) async {

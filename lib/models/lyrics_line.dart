@@ -25,7 +25,7 @@ List<LyricsLine> parseLyricsToLines(String? raw, Duration total, {String? transl
       final tags = _lrcTag.allMatches(line).toList();
       if (tags.isEmpty) continue;
       final text = line.replaceAll(_lrcTag, '').trim();
-      if (text.isEmpty) continue;
+      final activeText = text.isEmpty ? '♪' : text;
       for (final tag in tags) {
         final min = int.tryParse(tag.group(1) ?? '0') ?? 0;
         final sec = int.tryParse(tag.group(2) ?? '0') ?? 0;
@@ -37,7 +37,7 @@ List<LyricsLine> parseLyricsToLines(String? raw, Duration total, {String? transl
         }
         parsed.add(LyricsLine(
           start: Duration(minutes: min, seconds: sec, milliseconds: ms),
-          text: text,
+          text: activeText,
         ));
       }
     }

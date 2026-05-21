@@ -67,7 +67,7 @@ class RottyGlass extends StatelessWidget {
                 padding: padding,
                 decoration: BoxDecoration(
                   // Semi-transparent tinted surface
-                  color: (tint ?? AppColors.bgCard).withValues(alpha: 0.65),
+                  color: (tint ?? AppColors.bgCard).withValues(alpha: 0.40),
                   borderRadius: BorderRadius.circular(borderRadius),
                   // ✨ 1px inner glass edge-light
                   border: Border.all(

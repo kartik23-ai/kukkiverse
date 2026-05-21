@@ -1,19 +1,22 @@
+import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/mode_theme.dart';
+import '../../core/modes/app_mode.dart';
 import '../../models/song_model.dart';
 import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
-import '../../widgets/rotty_glass.dart';
 import '../../widgets/crystal_shatter_skeleton.dart';
+import '../../widgets/liquid_glass.dart';
+import '../../core/theme/dynamic_palette.dart';
 import '../../utils/play_song.dart';
-
+import '../../widgets/song_options_sheet.dart';
 
 /// ═══════════════════════════════════════════════════════════════
-/// Desktop Home — Multi-column masonry grid with hover effects
-/// Same data providers, adapted for widescreen
+/// Desktop Home 3.0 — Liquid Glass, visible cards, glow effects
+/// Quick Picks grid + Continue Listening + Section rows
 /// ═══════════════════════════════════════════════════════════════
 class DesktopHome extends ConsumerWidget {
   const DesktopHome({super.key});
@@ -21,58 +24,138 @@ class DesktopHome extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeData = ref.watch(homeDataProvider);
+    final recent = ref.watch(recentSongsProvider);
     final palette = ref.watch(dynamicPaletteProvider);
+    final mode = ref.watch(appModeProvider);
+    final mt = ModeTheme(mode);
+    final aiOn = ref.watch(aiDjEnabledProvider);
 
     return homeData.when(
       data: (sections) {
         if (sections.isEmpty) {
           return Center(
-            child: Text('No content yet', style: GoogleFonts.inter(color: Colors.white38)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.music_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.15)),
+                const SizedBox(height: 16),
+                Text('No songs found', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
+                const SizedBox(height: 20),
+                LiquidGlassButton(
+                  accentColor: mt.accent,
+                  onTap: () => ref.invalidate(homeDataProvider),
+                  child: Text('Retry', style: GoogleFonts.inter(color: mt.accent, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
           );
         }
         return ListView(
-          padding: const EdgeInsets.fromLTRB(32, 24, 32, 100),
+          padding: const EdgeInsets.fromLTRB(32, 20, 32, 100),
           children: [
-            // Greeting
-            Text(
-              _greeting(),
-              style: GoogleFonts.inter(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
+            // ─── Header with greeting + AI DJ ───
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ShaderMask(
+                        shaderCallback: (bounds) => LinearGradient(
+                          colors: [palette.primary, const Color(0xFF7B61FF), const Color(0xFF00D4FF)],
+                        ).createShader(bounds),
+                        child: Text(
+                          _greeting(),
+                          style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your personal music universe',
+                        style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withValues(alpha: 0.5), letterSpacing: 0.5),
+                      ),
+                    ],
+                  ),
+                ),
+                LiquidGlassButton(
+                  accentColor: palette.primary,
+                  isActive: aiOn,
+                  borderRadius: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  onTap: () => ref.read(aiDjEnabledProvider.notifier).state = !aiOn,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_awesome_rounded, size: 16,
+                          color: aiOn ? palette.primary : Colors.white.withValues(alpha: 0.4)),
+                      const SizedBox(width: 8),
+                      Text(
+                        'AI DJ ${aiOn ? 'ON' : 'OFF'}',
+                        style: GoogleFonts.inter(
+                          fontSize: 12, fontWeight: FontWeight.w700,
+                          color: aiOn ? palette.primary : Colors.white.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
 
-            // Quick picks (first 6 songs from first section)
+            // ─── Quick Picks (liquid glass compact cards) ───
             if (sections.values.first.isNotEmpty) ...[
-              _QuickPicksGrid(songs: sections.values.first.take(6).toList(), accent: palette.primary),
-              const SizedBox(height: 36),
+              _QuickPicksGrid(songs: sections.values.first.take(6).toList(), mt: mt, palette: palette),
+              const SizedBox(height: 32),
             ],
 
-            // Sections
-            for (final entry in sections.entries) ...[
-              Text(
-                entry.key,
-                style: GoogleFonts.inter(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+            // ─── Continue Listening ───
+            if (recent.isNotEmpty) ...[
+              _SectionHeader(title: 'Continue Listening'),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 220,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: recent.take(10).length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 16),
+                  itemBuilder: (_, i) => _DesktopSongCard(song: recent[i], playlist: recent, mt: mt),
                 ),
               ),
-              const SizedBox(height: 16),
-              _SongGrid(songs: entry.value),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
+            ],
+
+            // ─── All Sections ───
+            for (final entry in sections.entries) ...[
+              _SectionHeader(title: entry.key),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 220,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: entry.value.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 16),
+                  itemBuilder: (_, i) => _DesktopSongCard(song: entry.value[i], playlist: entry.value, mt: mt),
+                ),
+              ),
+              const SizedBox(height: 28),
             ],
           ],
         );
       },
       loading: () => const Padding(
         padding: EdgeInsets.all(32),
-        child: CrystalShatterSkeleton(),
+        child: Column(
+          children: [
+            CrystalShatterSkeleton(height: 180),
+            SizedBox(height: 16),
+            CrystalShatterSkeleton(height: 120),
+          ],
+        ),
       ),
       error: (_, __) => Center(
-        child: Text('Failed to load', style: GoogleFonts.inter(color: Colors.white38)),
+        child: Text('Failed to load', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5))),
       ),
     );
   }
@@ -85,11 +168,26 @@ class DesktopHome extends ConsumerWidget {
   }
 }
 
-/// Quick picks — 2x3 grid of compact cards (Spotify-style)
+/// Section header — bright, visible
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+    );
+  }
+}
+
+/// Quick picks — 2x3 liquid glass compact cards
 class _QuickPicksGrid extends ConsumerWidget {
-  const _QuickPicksGrid({required this.songs, required this.accent});
+  const _QuickPicksGrid({required this.songs, required this.mt, required this.palette});
   final List<SongModel> songs;
-  final Color accent;
+  final ModeTheme mt;
+  final DynamicPalette palette;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -103,17 +201,16 @@ class _QuickPicksGrid extends ConsumerWidget {
         mainAxisSpacing: 12,
       ),
       itemCount: songs.length,
-      itemBuilder: (context, i) {
-        final song = songs[i];
-        return _QuickPickCard(song: song);
-      },
+      itemBuilder: (context, i) => _QuickPickCard(song: songs[i], mt: mt, palette: palette),
     );
   }
 }
 
 class _QuickPickCard extends ConsumerStatefulWidget {
-  const _QuickPickCard({required this.song});
+  const _QuickPickCard({required this.song, required this.mt, required this.palette});
   final SongModel song;
+  final ModeTheme mt;
+  final DynamicPalette palette;
 
   @override
   ConsumerState<_QuickPickCard> createState() => _QuickPickCardState();
@@ -129,56 +226,73 @@ class _QuickPickCardState extends ConsumerState<_QuickPickCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => playSongWithContext(ref, widget.song),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: _hovered
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.white.withValues(alpha: 0.05),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  bottomLeft: Radius.circular(8),
+        onTap: () async {
+          try { await playSongWithContext(ref, widget.song); } catch (_) {}
+        },
+        onSecondaryTapDown: (_) => showSongOptionsSheet(context, ref, widget.song),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.white.withValues(alpha: _hovered ? 0.14 : 0.08),
+                    Colors.white.withValues(alpha: _hovered ? 0.08 : 0.04),
+                  ],
                 ),
-                child: CachedNetworkImage(
-                  imageUrl: widget.song.image,
-                  width: 56, height: 56,
-                  fit: BoxFit.cover,
-                  memCacheWidth: 112,
+                border: Border.all(
+                  color: _hovered
+                      ? widget.mt.accent.withValues(alpha: 0.3)
+                      : Colors.white.withValues(alpha: 0.1),
                 ),
+                boxShadow: _hovered
+                    ? [BoxShadow(color: widget.mt.accent.withValues(alpha: 0.15), blurRadius: 20)]
+                    : null,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  widget.song.title,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (_hovered)
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Container(
-                    width: 32, height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.accent,
-                      boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 8)],
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(9),
+                      bottomLeft: Radius.circular(9),
                     ),
-                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                    child: CachedNetworkImage(
+                      imageUrl: widget.song.image,
+                      width: 56, height: 56,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 112,
+                    ),
                   ),
-                ),
-            ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.song.title,
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_hovered)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: widget.mt.accent,
+                          boxShadow: [BoxShadow(color: widget.mt.accent.withValues(alpha: 0.5), blurRadius: 12)],
+                        ),
+                        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -186,31 +300,12 @@ class _QuickPickCardState extends ConsumerState<_QuickPickCard> {
   }
 }
 
-/// Main song grid — 4-5 columns
-class _SongGrid extends ConsumerWidget {
-  const _SongGrid({required this.songs});
-  final List<SongModel> songs;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
-        childAspectRatio: 0.78,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: songs.length,
-      itemBuilder: (context, i) => _DesktopSongCard(song: songs[i]),
-    );
-  }
-}
-
+/// Premium song card — liquid glass border, glow shadow, hover lift
 class _DesktopSongCard extends ConsumerStatefulWidget {
-  const _DesktopSongCard({required this.song});
+  const _DesktopSongCard({required this.song, required this.playlist, required this.mt});
   final SongModel song;
+  final List<SongModel> playlist;
+  final ModeTheme mt;
 
   @override
   ConsumerState<_DesktopSongCard> createState() => _DesktopSongCardState();
@@ -226,68 +321,99 @@ class _DesktopSongCardState extends ConsumerState<_DesktopSongCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => playSongWithContext(ref, widget.song),
+        onTap: () async {
+          try {
+            await playSongWithContext(ref, widget.song, playlist: widget.playlist);
+          } catch (_) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not play ${widget.song.title}')),
+              );
+            }
+          }
+        },
+        onSecondaryTapDown: (_) => showSongOptionsSheet(context, ref, widget.song),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform: _hovered
-              ? Matrix4.translationValues(0, -4, 0)
-              : Matrix4.identity(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Album art with hover play button
-              Expanded(
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: CachedNetworkImage(
-                        imageUrl: widget.song.image,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        memCacheWidth: 300,
-                      ),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          transform: _hovered ? Matrix4.translationValues(0, -6, 0) : Matrix4.identity(),
+          child: SizedBox(
+            width: 165,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Album art with glass border + glow
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _hovered
+                          ? widget.mt.accent.withValues(alpha: 0.35)
+                          : Colors.white.withValues(alpha: 0.12),
+                      width: 1,
                     ),
-                    // Hover shadow
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: _hovered
-                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8))]
-                            : [],
+                    boxShadow: [
+                      BoxShadow(
+                        color: _hovered
+                            ? widget.mt.accent.withValues(alpha: 0.3)
+                            : Colors.black.withValues(alpha: 0.3),
+                        blurRadius: _hovered ? 28 : 8,
+                        offset: const Offset(0, 6),
+                        spreadRadius: _hovered ? 2 : -2,
                       ),
-                    ),
-                    // Play button
-                    if (_hovered)
-                      Positioned(
-                        bottom: 8, right: 8,
-                        child: Container(
-                          width: 40, height: 40,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.accent,
-                            boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.5), blurRadius: 12)],
-                          ),
-                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(13),
+                        child: CachedNetworkImage(
+                          imageUrl: widget.song.image,
+                          width: 165, height: 155,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 330,
+                          fadeInDuration: Duration.zero,
                         ),
                       ),
-                  ],
+                      if (_hovered)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(13),
+                              color: Colors.black.withValues(alpha: 0.35),
+                            ),
+                            child: Center(
+                              child: Container(
+                                width: 46, height: 46,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: widget.mt.accent,
+                                  boxShadow: [BoxShadow(color: widget.mt.accent.withValues(alpha: 0.5), blurRadius: 16)],
+                                ),
+                                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                widget.song.title,
-                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                widget.song.artist,
-                style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                const SizedBox(height: 10),
+                // Title + artist
+                Text(
+                  widget.song.title,
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, height: 1.2),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  widget.song.artist,
+                  style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 11, height: 1.2),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import '../../models/song_model.dart';
 import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../utils/play_song.dart';
+import '../../widgets/song_options_sheet.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Desktop Search — Wide layout with multi-column results
@@ -25,23 +27,29 @@ class DesktopSearch extends ConsumerWidget {
         // Search bar
         Padding(
           padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
-          child: Container(
-            height: 48,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              color: Colors.white.withValues(alpha: 0.08),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-            ),
-            child: TextField(
-              onChanged: (v) => ref.read(searchInputProvider.notifier).update(v),
-              onSubmitted: (v) => ref.read(searchInputProvider.notifier).submit(v),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'What do you want to listen to?',
-                hintStyle: GoogleFonts.inter(color: Colors.white30, fontSize: 14),
-                prefixIcon: const Icon(Icons.search_rounded, color: Colors.white30, size: 20),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  color: Colors.white.withValues(alpha: 0.1),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                ),
+                child: TextField(
+                  onChanged: (v) => ref.read(searchInputProvider.notifier).update(v),
+                  onSubmitted: (v) => ref.read(searchInputProvider.notifier).submit(v),
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'What do you want to listen to?',
+                    hintStyle: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
+                    prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
               ),
             ),
           ),
@@ -101,7 +109,7 @@ class _SearchResults extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _sectionTitle('Songs'),
-                ...list.take(8).map((song) => _SongRow(song: song)),
+                ...list.take(8).map((song) => _SongRow(song: song, playlist: list)),
               ],
             );
           },
@@ -174,8 +182,9 @@ class _SearchResults extends ConsumerWidget {
 }
 
 class _SongRow extends ConsumerStatefulWidget {
-  const _SongRow({required this.song});
+  const _SongRow({required this.song, required this.playlist});
   final SongModel song;
+  final List<SongModel> playlist;
 
   @override
   ConsumerState<_SongRow> createState() => _SongRowState();
@@ -191,7 +200,8 @@ class _SongRowState extends ConsumerState<_SongRow> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => playSongWithContext(ref, widget.song),
+        onTap: () => playSongWithContext(ref, widget.song, playlist: widget.playlist),
+        onSecondaryTapDown: (_) => showSongOptionsSheet(context, ref, widget.song),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -229,6 +239,18 @@ class _SongRowState extends ConsumerState<_SongRow> {
                 style: GoogleFonts.inter(fontSize: 12, color: Colors.white24),
               ),
               if (_hovered) ...[
+                const SizedBox(width: 12),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => showSongOptionsSheet(context, ref, widget.song),
+                  child: const MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Icon(Icons.play_circle_filled_rounded, color: AppColors.accent, size: 22),
               ],
