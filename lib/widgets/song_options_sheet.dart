@@ -43,7 +43,7 @@ class _SongOptionsSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final handler = ref.read(audioHandlerProvider);
-    final playlists = ref.watch(playlistsProvider);
+    final playlists = ref.watch(playlistsProvider).where((p) => !p.isPrivate).toList();
 
     return Container(
       decoration: const BoxDecoration(
@@ -194,7 +194,7 @@ class _SongOptionsSheet extends ConsumerWidget {
       ),
       builder: (ctx) => Consumer(
         builder: (context, watchRef, _) {
-          final playlists = watchRef.watch(playlistsProvider);
+          final playlists = watchRef.watch(playlistsProvider).where((p) => !p.isPrivate).toList();
           return SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -229,32 +229,49 @@ class _SongOptionsSheet extends ConsumerWidget {
                     child: Text('No playlists yet', style: GoogleFonts.inter(color: AppColors.textTertiary)),
                   )
                 else
-                  ...playlists.map((p) => ListTile(
-                        leading: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            gradient: AppColors.accentGradient,
-                          ),
-                          child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 22),
+                  ...playlists.map((p) {
+                    final isPrivate = p.isPrivate;
+                    return ListTile(
+                      leading: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: isPrivate
+                              ? const LinearGradient(colors: [Colors.amber, Colors.orange])
+                              : AppColors.accentGradient,
                         ),
-                        title: Text(p.name, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-                        subtitle: Text('${p.songs.length} songs', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-                        onTap: () async {
-                          await watchRef.read(playlistsProvider.notifier).addToPlaylist(p.id, song);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Added to "${p.name}"'),
-                                backgroundColor: const Color(0xFF1A1A2E),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        },
-                      )),
+                        child: Icon(
+                          isPrivate ? Icons.lock_outline_rounded : Icons.music_note_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      title: Row(
+                        children: [
+                          Text(p.name, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+                          if (isPrivate) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Icons.lock_rounded, color: Colors.amber, size: 14),
+                          ],
+                        ],
+                      ),
+                      subtitle: Text('${p.songs.length} songs', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+                      onTap: () async {
+                        await watchRef.read(playlistsProvider.notifier).addToPlaylist(p.id, song);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Added to "${p.name}"'),
+                              backgroundColor: const Color(0xFF1A1A2E),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                    );
+                  }),
                 const SizedBox(height: 16),
               ],
             ),
@@ -363,7 +380,7 @@ class _SongOptionsDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final handler = ref.read(audioHandlerProvider);
-    final playlists = ref.watch(playlistsProvider);
+    final playlists = ref.watch(playlistsProvider).where((p) => !p.isPrivate).toList();
     final isFav = ref.watch(favoritesProvider.select((f) => f.any((s) => s.id == song.id)));
 
     return Container(
@@ -511,7 +528,7 @@ void _showDesktopPlaylistPicker(BuildContext context, WidgetRef ref, SongModel s
           ),
           child: Consumer(
             builder: (context, watchRef, _) {
-              final playlists = watchRef.watch(playlistsProvider);
+              final playlists = watchRef.watch(playlistsProvider).where((p) => !p.isPrivate).toList();
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -543,33 +560,50 @@ void _showDesktopPlaylistPicker(BuildContext context, WidgetRef ref, SongModel s
                     Flexible(
                       child: ListView(
                         shrinkWrap: true,
-                        children: playlists.map((p) => ListTile(
-                          leading: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              gradient: AppColors.accentGradient,
+                        children: playlists.map((p) {
+                          final isPrivate = p.isPrivate;
+                          return ListTile(
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                gradient: isPrivate
+                                    ? const LinearGradient(colors: [Colors.amber, Colors.orange])
+                                    : AppColors.accentGradient,
+                              ),
+                              child: Icon(
+                                isPrivate ? Icons.lock_outline_rounded : Icons.music_note_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
-                            child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 20),
-                          ),
-                          title: Text(p.name, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-                          subtitle: Text('${p.songs.length} songs', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-                          onTap: () async {
-                            await watchRef.read(playlistsProvider.notifier).addToPlaylist(p.id, song);
-                            if (ctx.mounted) Navigator.pop(ctx);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Added to "${p.name}"'),
-                                  backgroundColor: const Color(0xFF16162A),
-                                  behavior: SnackBarBehavior.floating,
-                                  width: 320,
-                                ),
-                              );
-                            }
-                          },
-                        )).toList(),
+                            title: Row(
+                              children: [
+                                Text(p.name, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+                                if (isPrivate) ...[
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.lock_rounded, color: Colors.amber, size: 14),
+                                ],
+                              ],
+                            ),
+                            subtitle: Text('${p.songs.length} songs', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+                            onTap: () async {
+                              await watchRef.read(playlistsProvider.notifier).addToPlaylist(p.id, song);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Added to "${p.name}"'),
+                                    backgroundColor: const Color(0xFF16162A),
+                                    behavior: SnackBarBehavior.floating,
+                                    width: 320,
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                        }).toList(),
                       ),
                     ),
                   const SizedBox(height: 16),

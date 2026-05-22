@@ -350,7 +350,7 @@ void showMagneticPlaylistDrop(
   WidgetRef ref,
   SongModel song,
 ) {
-  final playlists = ref.read(playlistsProvider);
+  final playlists = ref.read(playlistsProvider).where((p) => !p.isPrivate).toList();
   if (playlists.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

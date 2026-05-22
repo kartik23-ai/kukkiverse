@@ -3,7 +3,7 @@ class AppConstants {
 
   static const String appName = 'ROTTY MUSIC';
   static const String appTagline = 'Feel The Future Of Music';
-  static const String version = '1.0.1';
+  static const String version = '1.0.2';
 
   // Hive boxes
   static const String playlistBox = 'playlists';
@@ -11,6 +11,7 @@ class AppConstants {
   static const String favoritesBox = 'favorites';
   static const String searchHistoryBox = 'search_history';
   static const String settingsBox = 'settings';
+  static const String downloadedSongsBox = 'downloaded_songs';
 
   // SharedPrefs keys
   static const String onboardingDone = 'onboarding_done';

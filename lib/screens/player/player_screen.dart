@@ -119,6 +119,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                     ref.read(favoritesProvider.notifier).toggle(song);
                                   },
                                 ),
+                                _buildPlayerDownloadButton(context, ref, song),
                                 // Song options (queue management)
                                 IconButton(
                                   icon: const Icon(Icons.more_horiz_rounded, color: Colors.white60),
@@ -201,6 +202,67 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       icon: Icon(icon, color: Colors.white60, size: 20),
       label: Text(label, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
     );
+  }
+
+  Widget _buildPlayerDownloadButton(BuildContext context, WidgetRef ref, SongModel song) {
+    final downloadStates = ref.watch(downloadNotifierProvider);
+    final downloadState = downloadStates[song.id] ?? const DownloadState.none();
+
+    switch (downloadState.status) {
+      case DownloadStatus.downloading:
+        return SizedBox(
+          width: 48,
+          height: 48,
+          child: Padding(
+            padding: const EdgeInsets.all(14.0),
+            child: CircularProgressIndicator(
+              value: downloadState.progress,
+              strokeWidth: 2,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+              backgroundColor: Colors.white10,
+            ),
+          ),
+        );
+      case DownloadStatus.downloaded:
+        return IconButton(
+          icon: const Icon(Icons.download_done_rounded, color: Colors.green),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: AppColors.bgElevated,
+                title: const Text('Delete Download', style: TextStyle(color: Colors.white)),
+                content: Text('Do you want to delete "${song.title}" from offline storage?', style: const TextStyle(color: AppColors.textSecondary)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel', style: TextStyle(color: AppColors.textTertiary)),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      ref.read(downloadServiceProvider).deleteSong(song.id);
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      case DownloadStatus.failed:
+        return IconButton(
+          icon: const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
+          onPressed: () => ref.read(downloadServiceProvider).downloadSong(song),
+          tooltip: 'Download failed. Tap to retry.',
+        );
+      case DownloadStatus.none:
+      default:
+        return IconButton(
+          icon: Icon(Icons.download_for_offline_outlined, color: Colors.white.withValues(alpha: 0.75)),
+          onPressed: () => ref.read(downloadServiceProvider).downloadSong(song),
+        );
+    }
   }
 }
 

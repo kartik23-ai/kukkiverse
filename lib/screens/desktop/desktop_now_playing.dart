@@ -299,16 +299,14 @@ class _DesktopNowPlayingState extends ConsumerState<DesktopNowPlaying> {
                                 itemBuilder: (context, index) {
                                   final song = userQueue[index];
                                   final absoluteIndex = currentIndex + 1 + index;
-                                  return ReorderableDelayedDragStartListener(
-                                    index: index,
+                                  return _QueueTile(
                                     key: ValueKey('user_${song.id}_$index'),
-                                    child: _QueueTile(
-                                      song: song,
-                                      isCurrent: false,
-                                      index: absoluteIndex,
-                                      palette: palette,
-                                      handler: handler,
-                                    ),
+                                    song: song,
+                                    isCurrent: false,
+                                    index: absoluteIndex,
+                                    reorderIndex: index,
+                                    palette: palette,
+                                    handler: handler,
                                   );
                                 },
                               ),
@@ -335,16 +333,14 @@ class _DesktopNowPlayingState extends ConsumerState<DesktopNowPlaying> {
                                   final upcomingIndex = handler.currentIndex + 1 + index;
                                   final song = handler.contextQueue[upcomingIndex];
                                   final absoluteIndex = currentIndex + 1 + userQueue.length + index;
-                                  return ReorderableDelayedDragStartListener(
-                                    index: index,
+                                  return _QueueTile(
                                     key: ValueKey('context_${song.id}_$index'),
-                                    child: _QueueTile(
-                                      song: song,
-                                      isCurrent: false,
-                                      index: absoluteIndex,
-                                      palette: palette,
-                                      handler: handler,
-                                    ),
+                                    song: song,
+                                    isCurrent: false,
+                                    index: absoluteIndex,
+                                    reorderIndex: index,
+                                    palette: palette,
+                                    handler: handler,
                                   );
                                 },
                               ),
@@ -404,6 +400,7 @@ class _QueueTile extends StatefulWidget {
     required this.song,
     required this.isCurrent,
     required this.index,
+    this.reorderIndex,
     required this.palette,
     required this.handler,
   });
@@ -411,6 +408,7 @@ class _QueueTile extends StatefulWidget {
   final SongModel song;
   final bool isCurrent;
   final int index;
+  final int? reorderIndex;
   final dynamic palette;
   final RottyAudioHandler handler;
 
@@ -423,55 +421,100 @@ class _QueueTileState extends State<_QueueTile> {
 
   @override
   Widget build(BuildContext context) {
+    final activeColor = widget.palette.primary as Color;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(8),
+        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           color: widget.isCurrent
-              ? (widget.palette.primary as Color).withValues(alpha: 0.15)
+              ? activeColor.withValues(alpha: 0.12)
               : _hovered
                   ? Colors.white.withValues(alpha: 0.05)
                   : Colors.transparent,
           border: Border.all(
             color: widget.isCurrent
-                ? (widget.palette.primary as Color).withValues(alpha: 0.3)
-                : Colors.white.withValues(alpha: 0.05),
+                ? activeColor.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.02),
             width: widget.isCurrent ? 1.2 : 1.0,
           ),
         ),
         child: Row(
           children: [
-            // Drag handle / track number
-            ReorderableDragStartListener(
-              index: widget.index,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(
-                  Icons.drag_indicator_rounded,
-                  size: 16,
-                  color: Colors.white.withValues(alpha: 0.2),
+            // 1. Drag Handle (if reorderable)
+            if (!widget.isCurrent && widget.reorderIndex != null)
+              ReorderableDragStartListener(
+                index: widget.reorderIndex!,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Icon(
+                      Icons.drag_indicator_rounded,
+                      size: 16,
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                  ),
                 ),
-              ),
+              )
+            else
+              const SizedBox(width: 8), // Padding alignment
+
+            // 2. Timeline dots and connecting lines
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 1.5,
+                  height: 10,
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: widget.isCurrent ? activeColor : Colors.transparent,
+                    border: Border.all(
+                      color: widget.isCurrent ? activeColor : Colors.white.withValues(alpha: 0.2),
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 1.5,
+                  height: 10,
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            // Cover Art
+            const SizedBox(width: 10),
+
+            // 3. Album Art
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: CachedNetworkImage(
                 imageUrl: widget.song.image,
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 fit: BoxFit.cover,
-                memCacheWidth: 80,
+                memCacheWidth: 72,
+                errorWidget: (context, url, error) => Container(
+                  width: 36,
+                  height: 36,
+                  color: Colors.white10,
+                  child: const Icon(Icons.music_note_rounded, size: 16, color: Colors.white30),
+                ),
               ),
             ),
-            const SizedBox(width: 12),
-            // Title & Artist
+            const SizedBox(width: 10),
+
+            // 4. Track Details (Title / Artist)
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -481,17 +524,19 @@ class _QueueTileState extends State<_QueueTile> {
                     children: [
                       if (widget.isCurrent) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
                           decoration: BoxDecoration(
-                            color: Colors.green,
+                            color: activeColor.withValues(alpha: 0.2),
+                            border: Border.all(color: activeColor.withValues(alpha: 0.4), width: 1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'LIVE',
+                            'PLAYING',
                             style: GoogleFonts.inter(
-                              fontSize: 8,
+                              fontSize: 7.5,
                               fontWeight: FontWeight.w900,
-                              color: Colors.white,
+                              color: activeColor,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
@@ -501,8 +546,8 @@ class _QueueTileState extends State<_QueueTile> {
                         child: Text(
                           widget.song.title,
                           style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 13,
+                            color: widget.isCurrent ? activeColor : Colors.white,
+                            fontSize: 12.5,
                             fontWeight: widget.isCurrent ? FontWeight.w700 : FontWeight.w500,
                           ),
                           maxLines: 1,
@@ -515,8 +560,8 @@ class _QueueTileState extends State<_QueueTile> {
                   Text(
                     widget.song.artist,
                     style: GoogleFonts.inter(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 10.5,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -524,25 +569,28 @@ class _QueueTileState extends State<_QueueTile> {
                 ],
               ),
             ),
-            // Actions
+
+            // 5. Actions (Show on hover, or always show if current)
             if (_hovered || widget.isCurrent)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _QueueActionIcon(
-                    icon: Icons.play_arrow_rounded,
-                    tooltip: 'Play Now',
-                    onTap: () => widget.handler.playSong(widget.song, index: widget.index),
-                  ),
-                  _QueueActionIcon(
-                    icon: Icons.playlist_add_rounded,
-                    tooltip: 'Add Next',
-                    onTap: () => widget.handler.addToQueueNext(widget.song),
-                  ),
+                  if (!widget.isCurrent) ...[
+                    _QueueActionIcon(
+                      icon: Icons.play_arrow_rounded,
+                      tooltip: 'Play Now',
+                      onTap: () => widget.handler.playSong(widget.song, index: widget.index),
+                    ),
+                    _QueueActionIcon(
+                      icon: Icons.playlist_add_rounded,
+                      tooltip: 'Add Next',
+                      onTap: () => widget.handler.addToQueueNext(widget.song),
+                    ),
+                  ],
                   _QueueActionIcon(
                     icon: Icons.delete_outline_rounded,
                     tooltip: 'Remove',
-                    color: Colors.red.withValues(alpha: 0.7),
+                    color: Colors.redAccent.withValues(alpha: 0.8),
                     onTap: () => widget.handler.removeFromQueue(widget.index),
                   ),
                 ],

@@ -21,6 +21,9 @@ import 'desktop_home.dart';
 import 'desktop_search.dart';
 import 'desktop_now_playing.dart';
 import 'desktop_full_screen.dart';
+import '../../services/spotify_service.dart';
+import '../../models/song_model.dart';
+import '../../widgets/desktop_song_row.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Desktop Shell 4.0 — Liquid Glass Architecture
@@ -224,9 +227,10 @@ class _DesktopLibraryState extends ConsumerState<_DesktopLibrary> {
 
   @override
   Widget build(BuildContext context) {
-    final playlists = ref.watch(playlistsProvider);
+    final playlists = ref.watch(playlistsProvider).where((p) => !p.isPrivate).toList();
     final favorites = ref.watch(favoritesProvider);
     final recent = ref.watch(recentSongsProvider);
+    final downloaded = ref.watch(downloadedSongsProvider);
     final palette = ref.watch(dynamicPaletteProvider);
 
     return ListView(
@@ -247,13 +251,26 @@ class _DesktopLibraryState extends ConsumerState<_DesktopLibrary> {
                 ],
               ),
             ),
+            const SizedBox(width: 12),
+            LiquidGlassButton(
+              accentColor: const Color(0xFF1DB954),
+              onTap: () => _syncSpotifyPlaylist(context),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.sync_rounded, size: 16, color: Color(0xFF1DB954)),
+                  const SizedBox(width: 6),
+                  Text('Sync Spotify', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1DB954))),
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 20),
         // Chips
         Row(
           children: [
-            for (final (label, idx) in [('Playlists', 0), ('Liked', 1), ('Recent', 2)]) ...[
+            for (final (label, idx) in [('Playlists', 0), ('Liked', 1), ('Recent', 2), ('Downloaded', 3)]) ...[
               LiquidGlassButton(
                 accentColor: palette.primary,
                 isActive: _tab == idx,
@@ -270,17 +287,19 @@ class _DesktopLibraryState extends ConsumerState<_DesktopLibrary> {
         if (_tab == 0) ...[
           _LibTile(Icons.favorite_rounded, AppColors.accent, 'Liked Songs', '${favorites.length} songs', () => setState(() => _tab = 1)),
           _LibTile(Icons.history_rounded, const Color(0xFF7B61FF), 'Recently Played', '${recent.length} songs', () => setState(() => _tab = 2)),
-          ...playlists.map((p) => _LibTile(Icons.queue_music_rounded, palette.primary, p.name, '${p.songs.length} songs', () {})),
+          _LibTile(Icons.download_done_rounded, Colors.green, 'Downloaded Songs', '${downloaded.length} songs', () => setState(() => _tab = 3)),
+          ...playlists.map((p) => _LibTile(Icons.queue_music_rounded, palette.primary, p.name, '${p.songs.length} songs', () => context.push('/album/${p.id}', extra: {'title': p.name, 'songs': p.songs}))),
         ],
         if (_tab == 1) ..._songList(favorites),
         if (_tab == 2) ..._songList(recent),
+        if (_tab == 3) ..._songList(downloaded),
       ],
     );
   }
 
   List<Widget> _songList(List songs) {
     if (songs.isEmpty) return [Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('Empty', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.3)))))];
-    return songs.map<Widget>((s) => _LibTile(Icons.music_note_rounded, AppColors.accent, s.title, s.artist, () async { try { await playSongWithContext(ref, s, playlist: songs.cast()); } catch (_) {} }, imageUrl: s.image)).toList();
+    return songs.map<Widget>((s) => DesktopSongRow(song: s as SongModel, playlist: songs.cast<SongModel>())).toList();
   }
 
   void _createPlaylist(BuildContext context, Color accent) {
@@ -308,6 +327,118 @@ class _DesktopLibraryState extends ConsumerState<_DesktopLibrary> {
       ),
     );
   }
+
+  Future<void> _syncSpotifyPlaylist(BuildContext context) async {
+    final c = TextEditingController();
+    bool isLoading = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E1E30),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.sync_rounded, color: Color(0xFF1DB954)),
+                  const SizedBox(width: 10),
+                  Text('Spotify Sync', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Paste a public Spotify playlist URL below to import its tracks.',
+                    style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  if (isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: CircularProgressIndicator(color: Color(0xFF1DB954)),
+                      ),
+                    )
+                  else
+                    TextField(
+                      controller: c,
+                      autofocus: true,
+                      style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'https://open.spotify.com/playlist/...',
+                        hintStyle: GoogleFonts.inter(color: Colors.white30),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.03),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF1DB954), width: 1.5),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                if (!isLoading) ...[
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white38)),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final url = c.text.trim();
+                      if (url.isEmpty) return;
+                      setDialogState(() {
+                        isLoading = true;
+                      });
+                      try {
+                        final spotifyService = SpotifyService();
+                        final playlist = await spotifyService.syncPlaylist(url);
+                        
+                        await ref.read(playlistsProvider.notifier).saveSyncedPlaylist(playlist);
+                        
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Successfully synced "${playlist.name}" (${playlist.songs.length} tracks)'),
+                            ),
+                          );
+                        }
+                        Navigator.pop(ctx);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: Colors.redAccent,
+                              content: Text(e.toString().replaceAll('Exception: ', '')),
+                            ),
+                          );
+                        }
+                        setDialogState(() {
+                          isLoading = false;
+                        });
+                      }
+                    },
+                    child: Text('Sync', style: GoogleFonts.inter(color: const Color(0xFF1DB954), fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 }
 
 /// ═══════════════════════════════════════════════════════════════
@@ -321,12 +452,12 @@ class _DesktopLabs extends ConsumerWidget {
   // isPro=true → needs premium, isPro=false → free for all
   // SAME as Android labs_hub_screen.dart
   static const _items = [
-    ('Studio Lab', 'EQ • 8D orbit • presets', Icons.tune_rounded, '/labs/studio', true),
-    ('Time Machine', 'Year + mood stations', Icons.history_edu_rounded, '/labs/time-machine', true),
-    ('Sleep Oracle', 'Fade + ambient layers', Icons.bedtime_rounded, '/labs/sleep', true),
-    ('Infinite Blend', 'Long crossfade mix', Icons.blur_on_rounded, '/labs/blend', true),
+    ('Studio Lab', 'EQ • 8D orbit • presets', Icons.tune_rounded, '/labs/studio', false),
+    ('Time Machine', 'Year + mood stations', Icons.history_edu_rounded, '/labs/time-machine', false),
+    ('Sleep Oracle', 'Fade + ambient layers', Icons.bedtime_rounded, '/labs/sleep', false),
+    ('Infinite Blend', 'Long crossfade mix', Icons.blur_on_rounded, '/labs/blend', false),
     ('Party Sync', 'Connect phone & laptop', Icons.celebration_rounded, '/party', false),
-    ('Vault', 'PIN private playlists', Icons.lock_rounded, '/labs/vault', true),
+    ('Vault', 'PIN private playlists', Icons.lock_rounded, '/labs/vault', false),
     ('Vibe Match', 'Same energy queue', Icons.graphic_eq_rounded, '/labs/vibe', false),
     ('Reverse Discover', 'Teach from skips', Icons.thumb_down_off_alt_rounded, '/labs/reverse', false),
     ('Focus Lock', 'Pomodoro + music', Icons.timer_rounded, '/labs/focus', false),
@@ -348,12 +479,10 @@ class _DesktopLabs extends ConsumerWidget {
               ).createShader(bounds),
               child: Text('ROTTY Labs', style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
             ),
-            const SizedBox(width: 12),
-            PremiumBadge(unlocked: premium),
           ],
         ),
         const SizedBox(height: 4),
-        Text('Premium tools • clean & fast', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 13)),
+        Text('Experimental tools • clean & fast', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 13)),
         const SizedBox(height: 24),
 
         GridView.builder(
@@ -376,14 +505,10 @@ class _DesktopLabs extends ConsumerWidget {
               title: item.$1,
               sub: item.$2,
               icon: item.$3,
-              isPro: needsPremium,
-              locked: locked,
+              isPro: false,
+              locked: false,
               accent: palette.primary,
               onTap: () {
-                if (locked) {
-                  context.push('/premium');
-                  return;
-                }
                 context.push(item.$4);
               },
             );

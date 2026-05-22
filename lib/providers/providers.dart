@@ -9,11 +9,25 @@ import '../models/song_model.dart';
 import '../models/playlist_model.dart';
 import '../models/media_item.dart';
 
+import '../services/download_service.dart';
+
 export 'feature_providers.dart';
+export '../services/download_service.dart';
 
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 final storageServiceProvider = Provider<StorageService>((ref) => StorageService());
 final aiDjServiceProvider = Provider<AiDjService>((ref) => AiDjService(ref.read(apiServiceProvider)));
+
+final downloadNotifierProvider = StateNotifierProvider<DownloadNotifier, Map<String, DownloadState>>((ref) {
+  return DownloadNotifier(ref.read(storageServiceProvider));
+});
+
+final downloadServiceProvider = Provider<DownloadService>((ref) {
+  return DownloadService(
+    ref.read(storageServiceProvider),
+    ref.read(downloadNotifierProvider.notifier),
+  );
+});
 
 final musicRepositoryProvider = Provider<MusicRepository>((ref) {
   return MusicRepository(ref.read(apiServiceProvider), ref.read(storageServiceProvider));
@@ -201,6 +215,11 @@ class RecentSongsNotifier extends StateNotifier<List<SongModel>> {
   }
 }
 
+final downloadedSongsProvider = Provider<List<SongModel>>((ref) {
+  ref.watch(downloadNotifierProvider);
+  return ref.read(storageServiceProvider).getDownloadedSongs();
+});
+
 final playlistsProvider = StateNotifierProvider<PlaylistNotifier, List<PlaylistModel>>((ref) {
   return PlaylistNotifier(ref.read(storageServiceProvider));
 });
@@ -209,14 +228,23 @@ class PlaylistNotifier extends StateNotifier<List<PlaylistModel>> {
   final StorageService _storage;
   PlaylistNotifier(this._storage) : super(_storage.getPlaylists());
 
-  Future<String> create(String name) async {
+  Future<String> create(String name, {bool isPrivate = false}) async {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     await _storage.savePlaylist(PlaylistModel(
       id: id,
       name: name,
+      isPrivate: isPrivate,
     ));
     state = _storage.getPlaylists();
     return id;
+  }
+
+  Future<void> togglePrivacy(String id) async {
+    final playlists = _storage.getPlaylists();
+    final index = playlists.indexWhere((p) => p.id == id);
+    if (index == -1) return;
+    await _storage.savePlaylist(playlists[index].copyWith(isPrivate: !playlists[index].isPrivate));
+    state = _storage.getPlaylists();
   }
 
   Future<void> addToPlaylist(String playlistId, SongModel song) async {

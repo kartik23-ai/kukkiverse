@@ -22,7 +22,10 @@ class SongModel {
 
   bool get hasPlayableUrl =>
       url.isNotEmpty &&
-      (url.startsWith('http://') || url.startsWith('https://'));
+      (url.startsWith('http://') ||
+          url.startsWith('https://') ||
+          url.startsWith('file://') ||
+          url.startsWith('file:'));
 
   /// Web API song parser (`search.getResults`, album songs, etc.)
   factory SongModel.fromSaavnWeb(Map<String, dynamic> json, {String quality = '320kbps'}) {

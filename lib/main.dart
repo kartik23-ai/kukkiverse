@@ -58,8 +58,8 @@ void main() async {
   RottyAudioEffects.infiniteBlend = StorageService().getBoolFlag('infinite_blend');
   RottyAudioEffects.applySoundSpace(storage.soundSpace);
 
-  // AudioService.init with notification only on mobile
-  if (Platform.isAndroid || Platform.isIOS) {
+  // AudioService.init with notification on mobile and Windows
+  if (Platform.isAndroid || Platform.isIOS || Platform.isWindows) {
     _audioHandler = await AudioService.init(
       builder: () => RottyAudioHandler(),
       config: const AudioServiceConfig(
@@ -71,7 +71,7 @@ void main() async {
       ),
     );
   } else {
-    // Desktop: no AudioService wrapper, just raw handler
+    // Other Desktop: raw handler
     _audioHandler = RottyAudioHandler();
   }
 

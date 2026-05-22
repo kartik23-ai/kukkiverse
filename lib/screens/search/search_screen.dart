@@ -10,6 +10,7 @@ import '../../providers/providers.dart';
 import '../../models/song_model.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/song_options_sheet.dart';
+import '../../widgets/song_tile.dart';
 import '../../utils/play_song.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -262,36 +263,21 @@ Widget _songList(BuildContext context, WidgetRef ref, List<SongModel> songs) {
   if (songs.isEmpty) {
     return Center(child: Text('No songs', style: GoogleFonts.inter(color: AppColors.textTertiary)));
   }
+  final currentSong = ref.watch(nowPlayingProvider);
   return ListView.separated(
     padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
     itemCount: songs.length,
     separatorBuilder: (_, __) => const Divider(color: AppColors.glassBorder, height: 1),
     itemBuilder: (context, i) {
       final s = songs[i];
-      return ListTile(
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: CachedNetworkImage(imageUrl: s.image, width: 52, height: 52, fit: BoxFit.cover),
-        ),
-        title: Text(s.title, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-        subtitle: Text(s.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // More options - queue management
-            IconButton(
-              icon: const Icon(Icons.more_vert_rounded, color: Colors.white38, size: 20),
-              onPressed: () => showSongOptionsSheet(context, ref, s),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
-            const Icon(Icons.play_circle_fill_rounded, color: AppColors.accent, size: 36),
-          ],
-        ),
+      return SongTile(
+        song: s,
+        isPlaying: currentSong?.id == s.id,
         onTap: () async {
           await playSongWithContext(ref, s, playlist: songs);
           if (context.mounted) context.push('/player');
         },
+        onMore: () => showSongOptionsSheet(context, ref, s),
       );
     },
   );

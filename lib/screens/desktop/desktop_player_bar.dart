@@ -62,6 +62,73 @@ class DesktopPlayerBar extends ConsumerWidget {
                       );
                     },
                   ),
+                  // Download
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final downloadStates = ref.watch(downloadNotifierProvider);
+                      final downloadState = downloadStates[song.id] ?? const DownloadState.none();
+                      
+                      Color iconColor = Colors.white.withValues(alpha: 0.35);
+                      IconData iconData = Icons.download_for_offline_outlined;
+                      String tooltip = 'Download for offline';
+                      VoidCallback onTap = () => ref.read(downloadServiceProvider).downloadSong(song);
+
+                      if (downloadState.status == DownloadStatus.downloading) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              value: downloadState.progress,
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
+                              backgroundColor: Colors.white10,
+                            ),
+                          ),
+                        );
+                      } else if (downloadState.status == DownloadStatus.downloaded) {
+                        iconColor = Colors.green;
+                        iconData = Icons.download_done_rounded;
+                        tooltip = 'Downloaded. Click to delete.';
+                        onTap = () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor: Colors.black87,
+                              title: const Text('Delete Download', style: TextStyle(color: Colors.white)),
+                              content: Text('Do you want to delete "${song.title}" from offline storage?', style: const TextStyle(color: Colors.white70)),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel', style: TextStyle(color: Colors.white30)),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    ref.read(downloadServiceProvider).deleteSong(song.id);
+                                    Navigator.pop(context);
+                                  },
+                                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                ),
+                              ],
+                            ),
+                          );
+                        };
+                      } else if (downloadState.status == DownloadStatus.failed) {
+                        iconColor = Colors.redAccent;
+                        iconData = Icons.error_outline_rounded;
+                        tooltip = 'Download failed. Click to retry.';
+                      }
+
+                      return _HoverIcon(
+                        icon: iconData,
+                        color: iconColor,
+                        hoverColor: palette.primary,
+                        tooltip: tooltip,
+                        onTap: onTap,
+                      );
+                    },
+                  ),
 
                   const Spacer(),
 

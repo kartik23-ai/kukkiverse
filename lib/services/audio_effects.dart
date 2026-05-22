@@ -110,8 +110,7 @@ class RottyAudioEffects {
     }
   }
 
-  static void applyToPlayer(AudioPlayer player) {
-    // Volume shaping (always works)
+  static double getTargetVolume() {
     final bassBoost = switch (activeSpace) {
       SoundSpace.bass => 0.88 + bass * 0.42,
       SoundSpace.vocal => 0.72 + bass * 0.28,
@@ -121,7 +120,11 @@ class RottyAudioEffects {
     final trebleAdj = 0.72 + treble * 0.38;
     final vocalAdj = 0.88 + vocal * 0.22;
     final widthBoost = 1.0 + width * 0.08;
-    player.setVolume((bassBoost * trebleAdj * vocalAdj * widthBoost).clamp(0.42, 1.0));
+    return (bassBoost * trebleAdj * vocalAdj * widthBoost).clamp(0.42, 1.0);
+  }
+
+  static void applyToPlayer(AudioPlayer player) {
+    player.setVolume(getTargetVolume());
 
     // Apply hardware EQ (Android only)
     _applyEqualizer();
@@ -149,12 +152,25 @@ class RottyAudioEffects {
 
   static Future<void> fadeVolume(AudioPlayer player, {required double to, int ms = 1200}) async {
     final from = player.volume;
-    const steps = 12;
-    final stepMs = ms ~/ steps;
+    if ((from - to).abs() < 0.01) {
+      await player.setVolume(to);
+      return;
+    }
+    
+    // Extremely smooth 40ms updates (25 frames/second volume steps)
+    const stepMs = 40;
+    final steps = (ms / stepMs).round().clamp(5, 80);
+    final actualStepMs = ms ~/ steps;
+
     for (var i = 1; i <= steps; i++) {
       if (!player.playing && to < from) break;
-      await player.setVolume(from + (to - from) * (i / steps));
-      await Future<void>.delayed(Duration(milliseconds: stepMs));
+      final t = i / steps;
+      // Cosine S-Curve interpolation for premium, human-ear-tailored volume transitions
+      final curve = (1.0 - math.cos(t * math.pi)) / 2.0;
+      await player.setVolume(from + (to - from) * curve);
+      await Future<void>.delayed(Duration(milliseconds: actualStepMs));
     }
+    // Ensure final target volume is explicitly reached
+    await player.setVolume(to);
   }
 }

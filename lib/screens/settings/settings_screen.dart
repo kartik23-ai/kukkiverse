@@ -41,15 +41,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final mode = ref.watch(appModeProvider);
     final sound = ref.watch(soundSpaceProvider);
     final premium = ref.watch(rottyPremiumProvider);
-    final premiumInfo = ref.watch(premiumInfoProvider);
 
     final content = ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
         children: [
           Text('Settings', style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)),
           const SizedBox(height: 20),
-          _premiumCard(context, premium, premiumInfo),
-          const SizedBox(height: 24),
           _header('Ambient Mode'),
           Builder(builder: (context) {
             final tt = ref.watch(timeThemeProvider);
@@ -210,18 +207,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SwitchListTile(
             value: aiOn,
             activeThumbColor: AppColors.accent,
-            title: Row(
-              children: [
-                Text('ROTTY AI DJ', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                PremiumBadge(small: true, unlocked: premium),
-              ],
-            ),
+            title: Text('ROTTY AI DJ', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
             subtitle: Text(
-              premium ? 'Smart queue with mood-aware picks' : 'PRO required for AI DJ',
+              'Smart queue with mood-aware picks',
               style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12),
             ),
-            onChanged: premium ? (v) => ref.read(aiDjEnabledProvider.notifier).state = v : (_) => context.push('/premium'),
+            onChanged: (v) => ref.read(aiDjEnabledProvider.notifier).state = v,
           ),
           if (premium)
             ListTile(
@@ -241,7 +232,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.science_rounded, color: AppColors.accent),
             title: Text('ROTTY Labs', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text(premium ? 'All tools unlocked' : 'PRO tools locked', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+            subtitle: Text('Experimental playback tools & secret vault', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
             trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
             onTap: () => context.push('/labs'),
           ),
@@ -278,64 +269,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return AppScaffold(body: content);
   }
 
-  Widget _premiumCard(BuildContext context, bool premium, PremiumInfo info) {
-    return Material(
-      color: AppColors.bgCard,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.push('/premium'),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            border: Border.all(color: premium ? AppColors.accent.withValues(alpha: 0.5) : AppColors.glassBorder),
-            borderRadius: BorderRadius.circular(18),
-            gradient: premium
-                ? LinearGradient(colors: [AppColors.accent.withValues(alpha: 0.15), Colors.transparent])
-                : null,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  gradient: AppColors.accentGradient,
-                ),
-                child: Icon(premium ? Icons.verified_rounded : Icons.workspace_premium_rounded, color: Colors.white),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text('ROTTY PRO', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
-                        const SizedBox(width: 8),
-                        PremiumBadge(small: true, unlocked: premium),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      premium
-                          ? 'Active until ${info.expiresAt != null ? _fmt(info.expiresAt!) : '—'}'
-                          : '₹99/month • UPI • Labs + AI DJ',
-                      style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: premium ? AppColors.accent : AppColors.textTertiary),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  String _fmt(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
   Widget _header(String t) => Padding(
         padding: const EdgeInsets.only(top: 16, bottom: 8),

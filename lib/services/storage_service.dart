@@ -22,6 +22,7 @@ class StorageService {
   late Box _searchBox;
   late Box _historyBox;
   late Box _partyBox;
+  late Box _downloadedBox;
 
   Future<void> init() async {
     await Hive.initFlutter();
@@ -32,6 +33,7 @@ class StorageService {
     _searchBox = await Hive.openBox(AppConstants.searchHistoryBox);
     _historyBox = await Hive.openBox(AppConstants.playHistoryBox);
     _partyBox = await Hive.openBox(AppConstants.partyRoomBox);
+    _downloadedBox = await Hive.openBox(AppConstants.downloadedSongsBox);
   }
 
   // ─── Onboarding ───
@@ -282,6 +284,24 @@ class StorageService {
     }
   }
 
+  String? get vaultQuestion => _prefs.getString('vault_security_question');
+  Future<void> setVaultQuestion(String? q) async {
+    if (q == null || q.isEmpty) {
+      await _prefs.remove('vault_security_question');
+    } else {
+      await _prefs.setString('vault_security_question', q);
+    }
+  }
+
+  String? get vaultAnswer => _prefs.getString('vault_security_answer');
+  Future<void> setVaultAnswer(String? a) async {
+    if (a == null || a.isEmpty) {
+      await _prefs.remove('vault_security_answer');
+    } else {
+      await _prefs.setString('vault_security_answer', a.toLowerCase().trim());
+    }
+  }
+
   ListeningStreak get listeningStreak {
     final count = _prefs.getInt(AppConstants.streakCount) ?? 0;
     final last = _prefs.getString(AppConstants.streakLastDate);
@@ -344,6 +364,25 @@ class StorageService {
     } else {
       await _prefs.setString('cloud_sync_url', url.trim());
     }
+  }
+
+  // ─── Downloaded Songs ───
+  List<SongModel> getDownloadedSongs() {
+    return _downloadedBox.values
+        .map<SongModel>((e) => SongModel.fromHive(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  bool isSongDownloaded(String songId) {
+    return _downloadedBox.containsKey(songId);
+  }
+
+  Future<void> saveDownloadedSong(SongModel song) async {
+    await _downloadedBox.put(song.id, song.toJson());
+  }
+
+  Future<void> deleteDownloadedSong(String songId) async {
+    await _downloadedBox.delete(songId);
   }
 
   // ─── Cache ───

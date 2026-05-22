@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,10 +37,12 @@ class _MoodShakeScreenState extends ConsumerState<MoodShakeScreen> with SingleTi
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
     
-    try {
-      _sub = userAccelerometerEventStream(samplingPeriod: SensorInterval.gameInterval).listen(_onAccel);
-    } catch (_) {
-      // Accelerometers not supported on this platform/desktop — ignore gracefully
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      try {
+        _sub = userAccelerometerEventStream(samplingPeriod: SensorInterval.gameInterval).listen(_onAccel);
+      } catch (_) {
+        // Accelerometers not supported on this platform/desktop — ignore gracefully
+      }
     }
   }
 

@@ -104,10 +104,6 @@ class HomeScreen extends ConsumerWidget {
                 Row(
                   children: [
                     Text(getTimeGreeting(), style: GoogleFonts.inter(color: mt.textSecondary, fontSize: 13)),
-                    if (mt.showDecorations) ...[
-                      const SizedBox(width: 8),
-                      PremiumBadge(small: true, unlocked: premium),
-                    ],
                   ],
                 ),
                 Text(
@@ -274,15 +270,15 @@ class HomeScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('AI DJ', style: GoogleFonts.inter(color: mt.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-                  Text(premium ? 'Smart queue from your vibe' : 'Unlock PRO for AI DJ',
+                  Text('Smart queue from your vibe',
                       style: GoogleFonts.inter(color: mt.textSecondary, fontSize: 11)),
                 ],
               ),
             ),
             Switch.adaptive(
-              value: premium && aiOn,
+              value: aiOn,
               activeColor: mt.accent,
-              onChanged: premium ? (v) => ref.read(aiDjEnabledProvider.notifier).state = v : (_) => context.push('/premium'),
+              onChanged: (v) => ref.read(aiDjEnabledProvider.notifier).state = v,
             ),
           ],
         ),
@@ -400,6 +396,35 @@ class _SongCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currentSong = ref.watch(nowPlayingProvider);
+    final isCurrentlyPlaying = currentSong?.id == song.id;
+
+    final imageWidget = Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        // 1px inner glass edge-light
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+        // Colored glow shadow
+        boxShadow: mt.showDecorations
+            ? [
+                BoxShadow(color: mt.accent.withValues(alpha: 0.15), blurRadius: 16, offset: const Offset(0, 6), spreadRadius: -2),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4)),
+              ]
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: CachedNetworkImage(
+          imageUrl: song.image,
+          width: 148, height: 140,
+          fit: BoxFit.cover,
+          memCacheWidth: 296,
+          fadeInDuration: Duration.zero,
+          placeholder: (_, __) => Container(color: mt.surface, width: 148, height: 140),
+        ),
+      ),
+    );
+
     return RepaintBoundary(
       child: GestureDetector(
         onTap: () async {
@@ -421,34 +446,12 @@ class _SongCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Hero(
-                tag: 'album_art_${song.id}',
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    // 1px inner glass edge-light
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-                    // Colored glow shadow
-                    boxShadow: mt.showDecorations
-                        ? [
-                            BoxShadow(color: mt.accent.withValues(alpha: 0.15), blurRadius: 16, offset: const Offset(0, 6), spreadRadius: -2),
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4)),
-                          ]
-                        : null,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(13),
-                    child: CachedNetworkImage(
-                      imageUrl: song.image,
-                      width: 148, height: 140,
-                      fit: BoxFit.cover,
-                      memCacheWidth: 296,
-                      fadeInDuration: Duration.zero,
-                      placeholder: (_, __) => Container(color: mt.surface, width: 148, height: 140),
+              isCurrentlyPlaying
+                  ? imageWidget
+                  : Hero(
+                      tag: 'album_art_${song.id}',
+                      child: imageWidget,
                     ),
-                  ),
-                ),
-              ),
               const SizedBox(height: 8),
               // Glassmorphic title container
               Container(

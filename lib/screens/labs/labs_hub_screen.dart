@@ -13,14 +13,14 @@ class LabsHubScreen extends ConsumerWidget {
   const LabsHubScreen({super.key});
 
   static const _items = [
-    _LabItem('ROTTY Aura', 'Full-app live colors', Icons.palette_rounded, '/labs/aura', true),
-    _LabItem('Studio Lab', 'EQ • 8D orbit • presets', Icons.tune_rounded, '/labs/studio', true),
-    _LabItem('Lyrics Cinema', 'Cinematic lyrics + reel', Icons.movie_rounded, '/cinema', true),
-    _LabItem('Time Machine', 'Year + mood stations', Icons.history_edu_rounded, '/labs/time-machine', true),
-    _LabItem('Sleep Oracle', 'Fade + ambient layers', Icons.bedtime_rounded, '/labs/sleep', true),
-    _LabItem('Infinite Blend', 'Long crossfade mix', Icons.blur_on_rounded, '/labs/blend', true),
+    _LabItem('ROTTY Aura', 'Full-app live colors', Icons.palette_rounded, '/labs/aura', false),
+    _LabItem('Studio Lab', 'EQ • 8D orbit • presets', Icons.tune_rounded, '/labs/studio', false),
+    _LabItem('Lyrics Cinema', 'Cinematic lyrics + reel', Icons.movie_rounded, '/cinema', false),
+    _LabItem('Time Machine', 'Year + mood stations', Icons.history_edu_rounded, '/labs/time-machine', false),
+    _LabItem('Sleep Oracle', 'Fade + ambient layers', Icons.bedtime_rounded, '/labs/sleep', false),
+    _LabItem('Infinite Blend', 'Long crossfade mix', Icons.blur_on_rounded, '/labs/blend', false),
     _LabItem('Party Sync', 'Connect phone & laptop', Icons.celebration_rounded, '/party', false),
-    _LabItem('Vault', 'PIN private playlists', Icons.lock_rounded, '/labs/vault', true),
+    _LabItem('Vault', 'PIN private playlists', Icons.lock_rounded, '/labs/vault', false),
     _LabItem('Mood Shake', 'Shake → surprise song', Icons.vibration_rounded, '/labs/shake', false),
     _LabItem('Vibe Match', 'Same energy queue', Icons.graphic_eq_rounded, '/labs/vibe', false),
     _LabItem('Reverse Discover', 'Teach from skips', Icons.thumb_down_off_alt_rounded, '/labs/reverse', false),
@@ -67,11 +67,9 @@ class LabsHubScreen extends ConsumerWidget {
                                       ).createShader(bounds),
                                       child: Text('ROTTY Labs', style: GoogleFonts.inter(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white)),
                                     ),
-                                    const SizedBox(width: 8),
-                                    PremiumBadge(unlocked: premium),
                                   ],
                                 ),
-                                Text('Premium tools • clean & fast', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                                Text('Experimental tools • clean & fast', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
                               ],
                             ),
                           ),
@@ -95,9 +93,7 @@ class LabsHubScreen extends ConsumerWidget {
                           activeThumbColor: Colors.white,
                           title: Text('Aura full app', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
                           subtitle: Text('Theme follows album art everywhere', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
-                          onChanged: premium
-                              ? (v) => ref.read(auraFullAppProvider.notifier).set(v)
-                              : (_) => context.push('/premium'),
+                          onChanged: (v) => ref.read(auraFullAppProvider.notifier).set(v),
                         ),
                       ),
                     ),
@@ -118,10 +114,7 @@ class LabsHubScreen extends ConsumerWidget {
                             item: item,
                             premium: premium,
                             onTap: () {
-                              if (item.isPro && !premium) {
-                                context.push('/premium');
-                                return;
-                              }
+                              // isPro check bypassed
                               if (item.route == '/labs/aura') {
                                 final next = !ref.read(auraFullAppProvider);
                                 ref.read(auraFullAppProvider.notifier).set(next);
@@ -199,8 +192,6 @@ class _LabCard extends ConsumerWidget {
                 ),
                 child: Icon(item.icon, color: accent, size: 18),
               ),
-              const Spacer(),
-              if (item.isPro) PremiumBadge(small: true, unlocked: premium),
             ],
           ),
           Column(

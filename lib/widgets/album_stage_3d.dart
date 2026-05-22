@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -32,17 +35,28 @@ class AlbumStage3D extends StatefulWidget {
 class _AlbumStage3DState extends State<AlbumStage3D> {
   double _tiltX = 0;
   double _tiltY = 0;
+  StreamSubscription<AccelerometerEvent>? _subscription;
 
   @override
   void initState() {
     super.initState();
-    accelerometerEventStream().listen((e) {
-      if (!mounted) return;
-      setState(() {
-        _tiltX = (e.x.clamp(-8.0, 8.0) / 8) * 0.12;
-        _tiltY = (e.y.clamp(-8.0, 8.0) / 8) * 0.12;
-      });
-    });
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      try {
+        _subscription = accelerometerEventStream().listen((e) {
+          if (!mounted) return;
+          setState(() {
+            _tiltX = (e.x.clamp(-8.0, 8.0) / 8) * 0.12;
+            _tiltY = (e.y.clamp(-8.0, 8.0) / 8) * 0.12;
+          });
+        });
+      } catch (_) {}
+    }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   @override

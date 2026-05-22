@@ -27,7 +27,7 @@ class DesktopSidebar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final playlists = ref.watch(playlistsProvider);
+    final playlists = ref.watch(playlistsProvider).where((p) => !p.isPrivate).toList();
     final palette = ref.watch(dynamicPaletteProvider);
 
     return LiquidGlassSidebar(

@@ -20,4 +20,17 @@ void main() {
     expect(song.url.contains('saavn'), true);
     expect(song.url, isNot(contains('preview.saavncdn.com')));
   });
+
+  test('hasPlayableUrl returns true for file scheme URIs', () {
+    final song = SongModel(
+      id: 'local_song',
+      title: 'Local Song',
+      artist: 'Local Artist',
+      album: 'Local Album',
+      image: '',
+      duration: const Duration(seconds: 120),
+      url: 'file:///path/to/downloads/local_song.mp3',
+    );
+    expect(song.hasPlayableUrl, true);
+  });
 }

@@ -8,6 +8,7 @@ class PlaylistModel {
   final List<SongModel> songs;
   final DateTime createdAt;
   final bool isLocal;
+  final bool isPrivate;
 
   PlaylistModel({
     required this.id,
@@ -17,6 +18,7 @@ class PlaylistModel {
     this.songs = const [],
     DateTime? createdAt,
     this.isLocal = true,
+    this.isPrivate = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -27,6 +29,7 @@ class PlaylistModel {
     'songs': songs.map((s) => s.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
     'isLocal': isLocal,
+    'isPrivate': isPrivate,
   };
 
   factory PlaylistModel.fromJson(Map<dynamic, dynamic> json) {
@@ -38,6 +41,7 @@ class PlaylistModel {
       songs: (json['songs'] as List?)?.map<SongModel>((s) => SongModel.fromHive(Map<String, dynamic>.from(s))).toList() ?? [],
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
       isLocal: json['isLocal'] ?? true,
+      isPrivate: json['isPrivate'] ?? false,
     );
   }
 
@@ -46,6 +50,7 @@ class PlaylistModel {
     String? description,
     String? image,
     List<SongModel>? songs,
+    bool? isPrivate,
   }) {
     return PlaylistModel(
       id: id,
@@ -55,6 +60,7 @@ class PlaylistModel {
       songs: songs ?? this.songs,
       createdAt: createdAt,
       isLocal: isLocal,
+      isPrivate: isPrivate ?? this.isPrivate,
     );
   }
 }

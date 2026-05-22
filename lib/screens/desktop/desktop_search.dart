@@ -9,6 +9,7 @@ import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../utils/play_song.dart';
 import '../../widgets/song_options_sheet.dart';
+import '../../widgets/desktop_song_row.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Desktop Search — Wide layout with multi-column results
@@ -109,7 +110,7 @@ class _SearchResults extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _sectionTitle('Songs'),
-                ...list.take(8).map((song) => _SongRow(song: song, playlist: list)),
+                ...list.take(8).map((song) => DesktopSongRow(song: song, playlist: list)),
               ],
             );
           },
@@ -179,93 +180,6 @@ class _SearchResults extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: 12),
         child: Text(title, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
       );
-}
-
-class _SongRow extends ConsumerStatefulWidget {
-  const _SongRow({required this.song, required this.playlist});
-  final SongModel song;
-  final List<SongModel> playlist;
-
-  @override
-  ConsumerState<_SongRow> createState() => _SongRowState();
-}
-
-class _SongRowState extends ConsumerState<_SongRow> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () => playSongWithContext(ref, widget.song, playlist: widget.playlist),
-        onSecondaryTapDown: (_) => showSongOptionsSheet(context, ref, widget.song),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: _hovered ? Colors.white.withValues(alpha: 0.06) : Colors.transparent,
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: CachedNetworkImage(
-                  imageUrl: widget.song.image,
-                  width: 44, height: 44,
-                  fit: BoxFit.cover,
-                  memCacheWidth: 88,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.song.title,
-                        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(widget.song.artist,
-                        style: GoogleFonts.inter(fontSize: 12, color: Colors.white38),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-              Text(
-                _formatDuration(widget.song.duration),
-                style: GoogleFonts.inter(fontSize: 12, color: Colors.white24),
-              ),
-              if (_hovered) ...[
-                const SizedBox(width: 12),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => showSongOptionsSheet(context, ref, widget.song),
-                  child: const MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4),
-                      child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(Icons.play_circle_filled_rounded, color: AppColors.accent, size: 22),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatDuration(Duration d) {
-    final m = d.inMinutes;
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
 }
 
 class _AlbumCard extends StatefulWidget {

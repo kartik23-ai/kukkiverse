@@ -6,8 +6,11 @@ import '../../core/theme/app_colors.dart';
 import '../../providers/providers.dart';
 import '../../models/song_model.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/song_tile.dart';
+import '../../widgets/song_options_sheet.dart';
 import '../../utils/play_song.dart';
 import '../../services/spotify_service.dart';
+
 
 class PlaylistScreen extends ConsumerStatefulWidget {
   const PlaylistScreen({super.key, this.embedded = false});
@@ -22,9 +25,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final playlists = ref.watch(playlistsProvider);
+    final playlists = ref.watch(playlistsProvider).where((p) => !p.isPrivate).toList();
     final favorites = ref.watch(favoritesProvider);
     final recent = ref.watch(recentSongsProvider);
+    final downloaded = ref.watch(downloadedSongsProvider);
 
     final body = CustomScrollView(
         slivers: [
@@ -46,20 +50,26 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  _chip('Playlists', 0),
-                  const SizedBox(width: 8),
-                  _chip('Liked', 1),
-                  const SizedBox(width: 8),
-                  _chip('Recent', 2),
-                ],
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _chip('Playlists', 0),
+                    const SizedBox(width: 8),
+                    _chip('Liked', 1),
+                    const SizedBox(width: 8),
+                    _chip('Recent', 2),
+                    const SizedBox(width: 8),
+                    _chip('Downloaded', 3),
+                  ],
+                ),
               ),
             ),
           ),
           if (_tab == 0) ...[
             SliverToBoxAdapter(child: _row(Icons.favorite_rounded, AppColors.accent, 'Liked Songs', '${favorites.length} songs', () => setState(() => _tab = 1))),
             SliverToBoxAdapter(child: _row(Icons.history_rounded, AppColors.accentAlt, 'Recently Played', '${recent.length} songs', () => setState(() => _tab = 2))),
+            SliverToBoxAdapter(child: _row(Icons.download_done_rounded, Colors.green, 'Downloaded Songs', '${downloaded.length} songs', () => setState(() => _tab = 3))),
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
@@ -72,6 +82,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           ],
           if (_tab == 1) _songs(favorites),
           if (_tab == 2) _songs(recent),
+          if (_tab == 3) _songs(downloaded),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
     );
@@ -113,21 +124,19 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     if (songs.isEmpty) {
       return SliverFillRemaining(child: Center(child: Text('Empty', style: GoogleFonts.inter(color: AppColors.textTertiary))));
     }
+    final currentSong = ref.watch(nowPlayingProvider);
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, i) {
           final s = songs[i];
-          return ListTile(
+          return SongTile(
+            song: s,
+            isPlaying: currentSong?.id == s.id,
             onTap: () async {
               await playSongWithContext(ref, s, playlist: songs);
               if (context.mounted) context.push('/player');
             },
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.network(s.image, width: 48, height: 48, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 48, color: AppColors.bgCard)),
-            ),
-            title: Text(s.title, style: GoogleFonts.inter(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(s.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+            onMore: () => showSongOptionsSheet(context, ref, s),
           );
         },
         childCount: songs.length,
@@ -135,13 +144,13 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     );
   }
 
-  Future<void> _createPlaylist() async {
+  Future<void> _createPlaylist({bool isPrivate = false}) async {
     final c = TextEditingController();
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.bgElevated,
-        title: const Text('New Playlist', style: TextStyle(color: Colors.white)),
+        title: Text(isPrivate ? 'New Secure Vault Playlist' : 'New Playlist', style: const TextStyle(color: Colors.white)),
         content: TextField(controller: c, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'Name', hintStyle: TextStyle(color: Colors.white38))),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -149,7 +158,17 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         ],
       ),
     );
-    if (name != null && name.isNotEmpty) await ref.read(playlistsProvider.notifier).create(name);
+    if (name != null && name.isNotEmpty) {
+      await ref.read(playlistsProvider.notifier).create(name, isPrivate: isPrivate);
+      if (mounted && isPrivate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.amber,
+            content: Text('Secure playlist created and hidden in Vault', style: TextStyle(color: Colors.white)),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _showAddOptions() async {
@@ -193,6 +212,15 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     _createPlaylist();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.lock_rounded, color: Colors.amber),
+                  title: Text('Create Private Vault Playlist', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: Text('Hidden and protected behind your PIN', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _createPlaylist(isPrivate: true);
                   },
                 ),
                 ListTile(

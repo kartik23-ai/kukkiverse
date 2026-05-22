@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_colors.dart';
 import '../models/song_model.dart';
+import '../providers/providers.dart';
 
-class SongTile extends StatelessWidget {
+class SongTile extends ConsumerWidget {
   final SongModel song;
   final VoidCallback onTap;
   final VoidCallback? onMore;
@@ -22,7 +24,9 @@ class SongTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadStates = ref.watch(downloadNotifierProvider);
+    final downloadState = downloadStates[song.id] ?? const DownloadState.none();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -123,6 +127,9 @@ class SongTile extends StatelessWidget {
                     style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                   ),
                 ),
+              const SizedBox(width: 4),
+              // Download status / button
+              _buildDownloadButton(context, ref, downloadState),
               // More options - always show for queue management
               IconButton(
                 onPressed: onMore,
@@ -136,5 +143,69 @@ class SongTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildDownloadButton(BuildContext context, WidgetRef ref, DownloadState state) {
+    switch (state.status) {
+      case DownloadStatus.downloading:
+        return SizedBox(
+          width: 36,
+          height: 36,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: CircularProgressIndicator(
+              value: state.progress,
+              strokeWidth: 2,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+              backgroundColor: Colors.white10,
+            ),
+          ),
+        );
+      case DownloadStatus.downloaded:
+        return IconButton(
+          icon: const Icon(Icons.download_done_rounded, color: Colors.green, size: 20),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: AppColors.bgElevated,
+                title: const Text('Delete Download', style: TextStyle(color: Colors.white)),
+                content: Text('Do you want to delete "${song.title}" from offline storage?', style: const TextStyle(color: AppColors.textSecondary)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel', style: TextStyle(color: AppColors.textTertiary)),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      ref.read(downloadServiceProvider).deleteSong(song.id);
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+              ),
+            );
+          },
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          padding: EdgeInsets.zero,
+        );
+      case DownloadStatus.failed:
+        return IconButton(
+          icon: const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 20),
+          onPressed: () => ref.read(downloadServiceProvider).downloadSong(song),
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          padding: EdgeInsets.zero,
+          tooltip: 'Failed. Tap to retry.',
+        );
+      case DownloadStatus.none:
+      default:
+        return IconButton(
+          icon: const Icon(Icons.download_for_offline_outlined, color: AppColors.textTertiary, size: 20),
+          onPressed: () => ref.read(downloadServiceProvider).downloadSong(song),
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          padding: EdgeInsets.zero,
+        );
+    }
   }
 }
