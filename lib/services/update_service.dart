@@ -28,7 +28,7 @@ class UpdateService extends ChangeNotifier {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
 
-  static const String currentVersion = '1.1.0';
+  static const String currentVersion = '1.0.2';
   static const String versionJsonUrl = 'https://kartik23-ai.github.io/kukkiverse/version_info.json';
 
   bool _isLockActive = false;
@@ -60,19 +60,32 @@ class UpdateService extends ChangeNotifier {
       try {
         // 2. Firebase Firestore dynamic fail-safe check
         String? minVersionStr;
+        String? downloadUrlStr;
+        String? latestVersionStr;
         if (FirebaseService.instance.useRestFallback) {
           final doc = await FirestoreRestClient.getDoc('meta/app_config');
           if (doc != null) {
             minVersionStr = doc['min_version']?.toString();
+            downloadUrlStr = doc['download_url']?.toString();
+            latestVersionStr = doc['version']?.toString();
           }
         } else {
           final doc = await FirebaseFirestore.instance.collection('meta').doc('app_config').get();
           if (doc.exists) {
-            minVersionStr = doc.data()?['min_version']?.toString();
+            final data = doc.data();
+            minVersionStr = data?['min_version']?.toString();
+            downloadUrlStr = data?['download_url']?.toString();
+            latestVersionStr = data?['version']?.toString();
           }
         }
 
         if (minVersionStr != null) {
+          _latestUpdate ??= UpdateInfo(
+            latestVersion: latestVersionStr ?? '1.1.0',
+            minVersion: minVersionStr,
+            downloadUrl: downloadUrlStr ?? 'https://kartik23-ai.github.io/kukkiverse/',
+          );
+          
           final isBlocked = _shouldBlock(currentVersion, minVersionStr);
           if (isBlocked) {
             _isLockActive = true;

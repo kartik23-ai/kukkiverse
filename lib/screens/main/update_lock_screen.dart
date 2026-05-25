@@ -24,7 +24,7 @@ class _UpdateLockScreenState extends ConsumerState<UpdateLockScreen> {
 
   Future<void> _launchWebsite() async {
     final updateInfo = UpdateService.instance.latestUpdate;
-    final urlString = updateInfo?.downloadUrl ?? 'https://kukkiverse.github.io/website/';
+    final urlString = updateInfo?.downloadUrl ?? 'https://kartik23-ai.github.io/kukkiverse/';
     final url = Uri.parse(urlString);
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -136,8 +136,15 @@ class _UpdateLockScreenState extends ConsumerState<UpdateLockScreen> {
   @override
   Widget build(BuildContext context) {
     final updateInfo = UpdateService.instance.latestUpdate;
-    final downloadUrl = updateInfo?.downloadUrl ?? 'https://kukkiverse.github.io/website/';
+    var downloadUrl = updateInfo?.downloadUrl ?? 'https://kartik23-ai.github.io/kukkiverse/';
     
+    // Dynamically adjust download URL for Windows if it points to Android APK
+    if (Platform.isWindows && downloadUrl.toLowerCase().endsWith('.apk')) {
+      downloadUrl = downloadUrl.replaceAll('rotty-music-android.apk', 'rotty-music-windows-setup.exe');
+      downloadUrl = downloadUrl.replaceAll('app-release.apk', 'rotty-music-windows-setup.exe');
+      downloadUrl = downloadUrl.replaceAll('rotty-music.apk', 'rotty-music-windows-setup.exe');
+    }
+
     // Automatically determine if direct binary link is available for automatic installation
     final isDirectLink = downloadUrl.toLowerCase().endsWith('.exe') || 
                          downloadUrl.toLowerCase().endsWith('.msi') ||
