@@ -211,6 +211,42 @@ class SongModel {
     return '';
   }
 
+  factory SongModel.fromSaavnReco(Map<String, dynamic> json, {String quality = '320kbps'}) {
+    final moreInfo = json['more_info'] is Map ? json['more_info'] as Map<String, dynamic> : const <String, dynamic>{};
+    final is320 = moreInfo['320kbps']?.toString() == 'true';
+    final encUrl = moreInfo['encrypted_media_url']?.toString() ?? '';
+    var downloadUrl = '';
+    if (encUrl.isNotEmpty) {
+      downloadUrl = _decrypt(encUrl, prefer320: quality == '320kbps');
+    }
+    
+    final img = hiResImage(json['image']?.toString() ?? '');
+    
+    String artistsStr = 'Unknown Artist';
+    final artistMap = moreInfo['artistMap'] is Map ? moreInfo['artistMap'] as Map<String, dynamic> : null;
+    if (artistMap != null && artistMap['primary_artists'] is List) {
+      final list = artistMap['primary_artists'] as List;
+      final names = list
+          .whereType<Map>()
+          .map((a) => a['name']?.toString())
+          .whereType<String>()
+          .toList();
+      if (names.isNotEmpty) {
+        artistsStr = names.join(', ');
+      }
+    }
+
+    return SongModel(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Unknown',
+      artist: artistsStr,
+      album: moreInfo['album']?.toString() ?? 'Single',
+      image: img,
+      duration: Duration(seconds: int.tryParse(moreInfo['duration']?.toString() ?? '0') ?? 0),
+      url: downloadUrl,
+    );
+  }
+
   SongModel copyWith({
     String? id,
     String? title,

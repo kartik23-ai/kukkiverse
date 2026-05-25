@@ -5,14 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:just_audio/just_audio.dart';
 import '../../core/haptics/music_haptics.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/time_theme.dart';
 import '../../models/song_model.dart';
 import '../../providers/providers.dart';
-import '../../providers/premium_providers.dart';
-import '../../providers/feature_providers.dart';
 import '../../widgets/player_story_sheet.dart';
 import '../../widgets/song_options_sheet.dart';
 import '../../widgets/elite_background.dart';
@@ -26,7 +22,6 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
-  double _speed = 1.0;
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +36,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final playing = ref.watch(isPlayingProvider);
     final handler = ref.read(audioHandlerProvider);
     final insight = ref.watch(aiInsightProvider);
-
-    final timeTheme = ref.watch(timeThemeProvider);
 
     final palette = ref.watch(dynamicPaletteProvider);
 
@@ -92,7 +85,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                 }
                               },
                               onTap: () => showPlayerStorySheet(context, ref, song),
-                              child: _AlbumArt(song: song, maxSide: artSide),
+                              child: AlbumArtRippleWrapper(
+                                isPlaying: playing,
+                                color: palette.primary,
+                                child: _AlbumArt(song: song, maxSide: artSide),
+                              ),
                             ),
                             const SizedBox(height: 20),
                           Padding(
@@ -144,7 +141,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           const SizedBox(height: 8),
                           _Controls(playing: playing, handler: handler),
                           const SizedBox(height: 8),
-                            _Actions(context, song: song, insight: insight),
+                            _actions(context, song: song, insight: insight),
                             const SizedBox(height: 12),
                           ],
                         ),
@@ -174,7 +171,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  Widget _Actions(BuildContext context, {required SongModel song, required dynamic insight}) {
+  Widget _actions(BuildContext context, {required SongModel song, required dynamic insight}) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -257,7 +254,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           tooltip: 'Download failed. Tap to retry.',
         );
       case DownloadStatus.none:
-      default:
         return IconButton(
           icon: Icon(Icons.download_for_offline_outlined, color: Colors.white.withValues(alpha: 0.75)),
           onPressed: () => ref.read(downloadServiceProvider).downloadSong(song),
@@ -320,6 +316,14 @@ class _ProgressSection extends StatefulWidget {
 
 class _ProgressSectionState extends State<_ProgressSection> {
   bool _dragging = false;
+  double? _dragRatio;
+
+  void _updateDrag(double localX) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final clampedX = localX.clamp(0.0, box.size.width);
+    setState(() => _dragRatio = clampedX / box.size.width);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -329,9 +333,9 @@ class _ProgressSectionState extends State<_ProgressSection> {
         final position = snap.data ?? Duration.zero;
         final duration = widget.handler.player.duration ?? widget.song.duration;
         final total = duration.inSeconds > 0 ? duration : const Duration(minutes: 3);
-        final progress = total.inMilliseconds > 0
+        final progress = _dragRatio ?? (total.inMilliseconds > 0
             ? position.inMilliseconds / total.inMilliseconds
-            : 0.0;
+            : 0.0);
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -339,23 +343,32 @@ class _ProgressSectionState extends State<_ProgressSection> {
             children: [
               // ── Glowing Tactile Progress Bar ──
               GestureDetector(
-                onHorizontalDragStart: (_) {
+                onHorizontalDragStart: (d) {
                   setState(() => _dragging = true);
                   HapticFeedback.selectionClick();
+                  _updateDrag(d.localPosition.dx);
                 },
                 onHorizontalDragEnd: (_) {
-                  setState(() => _dragging = false);
+                  if (_dragRatio != null) {
+                    final seekTo = Duration(
+                        milliseconds: (_dragRatio! * total.inMilliseconds).round());
+                    MusicHaptics.seek();
+                    widget.handler.seek(seekTo);
+                  }
+                  setState(() {
+                    _dragging = false;
+                    _dragRatio = null;
+                  });
+                },
+                onHorizontalDragCancel: () {
+                  setState(() {
+                    _dragging = false;
+                    _dragRatio = null;
+                  });
                 },
                 onHorizontalDragUpdate: (d) {
                   HapticFeedback.selectionClick();
-                  final box = context.findRenderObject() as RenderBox?;
-                  if (box == null) return;
-                  final localX = (d.localPosition.dx).clamp(0.0, box.size.width);
-                  final ratio = localX / box.size.width;
-                  final seekTo = Duration(
-                      milliseconds: (ratio * total.inMilliseconds).round());
-                  MusicHaptics.seek();
-                  widget.handler.seek(seekTo);
+                  _updateDrag(d.localPosition.dx);
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
@@ -427,56 +440,70 @@ class _Controls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        IconButton(
-          icon: Icon(Icons.shuffle_rounded, color: handler.player.shuffleModeEnabled ? AppColors.accent : Colors.white54),
-          onPressed: () => handler.setShuffleMode(handler.player.shuffleModeEnabled ? AudioServiceShuffleMode.none : AudioServiceShuffleMode.all),
-        ),
-        _SpringBtn(
-          child: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 36),
-          onTap: () {
-            MusicHaptics.skip();
-            handler.skipToPrevious();
-          },
-        ),
-        _SpringBtn(
-          onTap: () {
-            MusicHaptics.playPause();
-            playing ? handler.pause() : handler.play();
-          },
-          child: Container(
-            width: 68,
-            height: 68,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: AppColors.accentGradient,
-              boxShadow: [
-                BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 20, spreadRadius: -2),
-              ],
+    return StreamBuilder<PlaybackState>(
+      stream: handler.playbackState,
+      builder: (context, snapshot) {
+        final state = snapshot.data;
+        final shuffleOn = state?.shuffleMode == AudioServiceShuffleMode.all;
+        final repeatMode = state?.repeatMode ?? AudioServiceRepeatMode.none;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              icon: Icon(Icons.shuffle_rounded, color: shuffleOn ? AppColors.accent : Colors.white54),
+              onPressed: () => handler.setShuffleMode(shuffleOn ? AudioServiceShuffleMode.none : AudioServiceShuffleMode.all),
             ),
-            child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 38),
-          ),
-        ),
-        _SpringBtn(
-          child: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 36),
-          onTap: () {
-            MusicHaptics.skip();
-            handler.skipToNext();
-          },
-        ),
-        IconButton(
-          icon: Icon(
-            handler.player.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-            color: handler.player.loopMode != LoopMode.off ? AppColors.accent : Colors.white54,
-          ),
-          onPressed: () async {
-            final m = handler.player.loopMode;
-            await handler.setRepeatMode(m == LoopMode.off ? AudioServiceRepeatMode.all : (m == LoopMode.all ? AudioServiceRepeatMode.one : AudioServiceRepeatMode.none));
-          },
-        ),
-      ],
+            _SpringBtn(
+              child: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 36),
+              onTap: () {
+                MusicHaptics.skip();
+                handler.skipToPrevious();
+              },
+            ),
+            _SpringBtn(
+              onTap: () {
+                MusicHaptics.playPause();
+                playing ? handler.pause() : handler.play();
+              },
+              child: Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: AppColors.accentGradient,
+                  boxShadow: [
+                    BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 20, spreadRadius: -2),
+                  ],
+                ),
+                child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 38),
+              ),
+            ),
+            _SpringBtn(
+              child: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 36),
+              onTap: () {
+                MusicHaptics.skip();
+                handler.skipToNext();
+              },
+            ),
+            IconButton(
+              icon: Icon(
+                repeatMode == AudioServiceRepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                color: repeatMode != AudioServiceRepeatMode.none ? AppColors.accent : Colors.white54,
+              ),
+              onPressed: () async {
+                await handler.setRepeatMode(
+                  repeatMode == AudioServiceRepeatMode.none
+                      ? AudioServiceRepeatMode.all
+                      : (repeatMode == AudioServiceRepeatMode.all
+                          ? AudioServiceRepeatMode.one
+                          : AudioServiceRepeatMode.none),
+                );
+              },
+            ),
+          ],
+        );
+      }
     );
   }
 }
@@ -529,5 +556,117 @@ class _SpringBtnState extends State<_SpringBtn> with SingleTickerProviderStateMi
         child: widget.child,
       ),
     );
+  }
+}
+
+class AlbumArtRippleWrapper extends StatefulWidget {
+  const AlbumArtRippleWrapper({
+    super.key,
+    required this.child,
+    required this.isPlaying,
+    required this.color,
+  });
+
+  final Widget child;
+  final bool isPlaying;
+  final Color color;
+
+  @override
+  State<AlbumArtRippleWrapper> createState() => _AlbumArtRippleWrapperState();
+}
+
+class _AlbumArtRippleWrapperState extends State<AlbumArtRippleWrapper> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    );
+    if (widget.isPlaying) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AlbumArtRippleWrapper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isPlaying != oldWidget.isPlaying) {
+      if (widget.isPlaying) {
+        _controller.repeat();
+      } else {
+        _controller.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final enabled = ref.watch(albumArtRipplesProvider);
+        if (!enabled) return widget.child;
+
+        return AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return CustomPaint(
+              painter: _RipplePainter(
+                progress: _controller.value,
+                color: widget.color,
+              ),
+              child: child,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: widget.child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RipplePainter extends CustomPainter {
+  _RipplePainter({
+    required this.progress,
+    required this.color,
+  });
+
+  final double progress;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxRadius = size.width / 2;
+    final baseRadius = maxRadius - 24;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    for (int i = 0; i < 4; i++) {
+      final waveProgress = (progress - (i * 0.25)) % 1.0;
+      final radius = baseRadius + (waveProgress * 32);
+      final opacity = (1.0 - waveProgress).clamp(0.0, 1.0) * 0.45;
+
+      paint.color = color.withValues(alpha: opacity);
+      canvas.drawCircle(center, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RipplePainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }

@@ -10,6 +10,7 @@ import '../models/play_history_entry.dart';
 import '../repositories/music_repository.dart';
 import '../services/storage_service.dart';
 import '../services/firebase_service.dart';
+import '../services/supabase_service.dart';
 import '../services/audio_effects.dart';
 import '../services/ai_dj_service.dart';
 import 'providers.dart';
@@ -110,16 +111,34 @@ class PartyRoomState {
     this.queue = const [],
     this.nowPlaying,
     this.isPlaying = false,
+    this.hostId,
+    this.kicked = false,
   });
   final String? code;
   final List<SongModel> queue;
   final SongModel? nowPlaying;
   final bool isPlaying;
+  final String? hostId;
+  final bool kicked;
+
+  bool get isHost => hostId != null && hostId == FirebaseService.instance.userId;
 }
 
 final partyRoomProvider = StateNotifierProvider<PartyRoomNotifier, PartyRoomState>((ref) {
-  return PartyRoomNotifier(ref.read(storageServiceProvider), ref);
+  final notifier = PartyRoomNotifier(ref.read(storageServiceProvider), ref);
+  
+  ref.listen<SongModel?>(nowPlayingProvider, (previous, next) {
+    notifier.onLocalSongChange(next);
+  });
+  
+  ref.listen<bool>(isPlayingProvider, (previous, next) {
+    notifier.onLocalPlayingChange(next);
+  });
+  
+  return notifier;
 });
+
+final partySearchActiveProvider = StateProvider.autoDispose<bool>((ref) => false);
 
 class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
   PartyRoomNotifier(this._storage, this._ref) : super(PartyRoomState(code: _storage.activePartyRoom, queue: _queueFor(_storage.activePartyRoom))) {
@@ -130,6 +149,11 @@ class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
   final StorageService _storage;
   final Ref _ref;
   StreamSubscription<FirebasePartyRoom>? _partySub;
+  StreamSubscription<bool>? _selfStatusSub;
+  DateTime? _lastLocalActionTime;
+  bool _hasVerifiedMembership = false;
+  DateTime? _subStartTime;
+  Future<void>? _syncChain; // Sequential sync event execution chain to prevent parallel just_audio overlap issues
 
   static List<SongModel> _queueFor(String? code) =>
       code == null ? const [] : StorageService().getPartyQueue(code);
@@ -137,65 +161,150 @@ class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
   @override
   void dispose() {
     _partySub?.cancel();
+    _selfStatusSub?.cancel();
     super.dispose();
+  }
+
+  void clearKicked() {
+    state = const PartyRoomState();
   }
 
   void _listenCloud(String code) {
     _partySub?.cancel();
-    if (!FirebaseService.instance.isReady) return;
-    _partySub = FirebaseService.instance.watchPartyRoom(code).listen((room) {
-      _storage.savePartyQueue(code, room.queue);
-      state = PartyRoomState(
-        code: code,
-        queue: room.queue,
-        nowPlaying: room.nowPlaying,
-        isPlaying: room.isPlaying,
-      );
-      if (room.nowPlaying != null) {
-        _syncPlaybackLocally(room.nowPlaying!);
-      }
-    });
+    _selfStatusSub?.cancel();
+    _hasVerifiedMembership = false;
+    _subStartTime = DateTime.now();
+    
+    _partySub = SupabaseService.instance.watchPartyRoom(code).listen(
+      (room) {
+        _storage.savePartyQueue(code, room.queue);
+        state = PartyRoomState(
+          code: code,
+          queue: room.queue,
+          nowPlaying: room.nowPlaying,
+          isPlaying: room.isPlaying,
+          hostId: room.hostId,
+          kicked: false,
+        );
+        if (!state.isHost && room.nowPlaying != null) {
+          _syncPlaybackLocally(room.nowPlaying!, room.isPlaying);
+        }
+      },
+      onError: (err) {
+        debugPrint('PartyRoomNotifier watchPartyRoom error: $err');
+      },
+    );
+
+    // Listen to self member status. If deleted by host, auto-kick.
+    _selfStatusSub = SupabaseService.instance.watchSelfMemberStatus(code).listen(
+      (exists) {
+        if (exists) {
+          _hasVerifiedMembership = true;
+        }
+        if (state.code != null && !state.isHost && !exists) {
+          final elapsed = _subStartTime != null ? DateTime.now().difference(_subStartTime!) : Duration.zero;
+          if (_hasVerifiedMembership || elapsed > const Duration(seconds: 4)) {
+            _partySub?.cancel();
+            _selfStatusSub?.cancel();
+            _storage.setActivePartyRoom(null);
+            state = const PartyRoomState(kicked: true);
+          }
+        }
+      },
+      onError: (err) {
+        debugPrint('PartyRoomNotifier watchSelfMemberStatus error: $err');
+      },
+    );
   }
 
-  void _syncPlaybackLocally(SongModel remoteSong) async {
-    try {
-      final handler = _ref.read(audioHandlerProvider);
-      final currentLocal = handler.currentSong;
-      if (currentLocal?.id == remoteSong.id) return;
-
-      final repo = _ref.read(musicRepositoryProvider);
-      final track = await repo.resolveSong(remoteSong);
-      if (track.hasPlayableUrl) {
-        await handler.playSong(track, playlist: state.queue);
-        _ref.read(dynamicPaletteProvider.notifier).updateFromSong(track);
+  void _syncPlaybackLocally(SongModel remoteSong, bool remotePlaying) {
+    final nextSync = () async {
+      if (_lastLocalActionTime != null &&
+          DateTime.now().difference(_lastLocalActionTime!) < const Duration(seconds: 5)) {
+        debugPrint('Party Sync: Ignoring remote sync event within 5s of local action to prevent race condition');
+        return;
       }
-    } catch (e) {
-      debugPrint('Party Sync: local playback sync failed: $e');
+      try {
+        final handler = _ref.read(audioHandlerProvider);
+        final currentLocal = handler.currentSong;
+        
+        if (currentLocal?.id != remoteSong.id) {
+          final repo = _ref.read(musicRepositoryProvider);
+          final track = await repo.resolveSong(remoteSong);
+          if (track.hasPlayableUrl) {
+            await handler.playSong(track, playlist: state.queue);
+            _ref.read(dynamicPaletteProvider.notifier).updateFromSong(track);
+          }
+        }
+
+        final localPlaying = handler.playbackState.value.playing;
+        if (localPlaying != remotePlaying) {
+          if (remotePlaying) {
+            await handler.play();
+          } else {
+            await handler.pause();
+          }
+        }
+      } catch (e) {
+        debugPrint('Party Sync: local playback sync failed: $e');
+      }
+    };
+
+    _syncChain = (_syncChain ?? Future.value()).then((_) => nextSync());
+  }
+
+  void onLocalSongChange(SongModel? next) {
+    final code = state.code;
+    if (code == null || next == null) return;
+    if (!state.isHost) return; // Only host updates playback state in Firestore
+    if (next.id == state.nowPlaying?.id) return;
+    
+    _lastLocalActionTime = DateTime.now();
+    final isPlaying = _ref.read(isPlayingProvider);
+    updatePlayback(next, isPlaying);
+  }
+
+  void onLocalPlayingChange(bool next) {
+    final code = state.code;
+    if (code == null) return;
+    if (!state.isHost) return; // Only host updates playback state in Firestore
+    if (next == state.isPlaying) return;
+    
+    _lastLocalActionTime = DateTime.now();
+    final currentSong = _ref.read(audioHandlerProvider).currentSong;
+    if (currentSong != null) {
+      updatePlayback(currentSong, next);
     }
   }
 
   Future<String> createRoom() async {
-    final code = FirebaseService.instance.isReady
-        ? await FirebaseService.instance.createPartyRoom()
-        : 'ROTTY-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    _lastLocalActionTime = DateTime.now();
+    final code = await SupabaseService.instance.createPartyRoom();
     await _storage.setActivePartyRoom(code);
     await _storage.savePartyQueue(code, []);
-    state = PartyRoomState(code: code, queue: []);
+    state = PartyRoomState(code: code, queue: [], hostId: FirebaseService.instance.userId);
     _listenCloud(code);
     return code;
   }
 
   Future<void> joinRoom(String code) async {
-    if (FirebaseService.instance.isReady) {
-      await FirebaseService.instance.joinPartyRoom(code);
-      _listenCloud(code);
-    }
+    _lastLocalActionTime = DateTime.now();
+    await SupabaseService.instance.joinPartyRoom(code);
+    _listenCloud(code);
     await _storage.setActivePartyRoom(code);
     state = PartyRoomState(code: code, queue: _queueFor(code));
   }
 
   Future<void> leaveRoom() async {
+    _lastLocalActionTime = DateTime.now();
+    final code = state.code;
+    if (code != null) {
+      try {
+        await SupabaseService.instance.removeMemberFromPartyRoom(code);
+      } catch (_) {}
+    }
     _partySub?.cancel();
+    _selfStatusSub?.cancel();
     await _storage.setActivePartyRoom(null);
     state = const PartyRoomState();
   }
@@ -203,20 +312,94 @@ class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
   Future<void> addSong(SongModel song) async {
     final code = state.code;
     if (code == null) return;
+    _lastLocalActionTime = DateTime.now();
     await _storage.addToPartyQueue(code, song);
     final q = _storage.getPartyQueue(code);
-    state = PartyRoomState(code: code, queue: q, nowPlaying: state.nowPlaying, isPlaying: state.isPlaying);
-    if (FirebaseService.instance.isReady) {
-      await FirebaseService.instance.pushPartyQueue(code, q);
+    state = PartyRoomState(code: code, queue: q, nowPlaying: state.nowPlaying, isPlaying: state.isPlaying, hostId: state.hostId);
+    await SupabaseService.instance.pushPartyQueue(code, q);
+  }
+
+  Future<void> setQueue(List<SongModel> songs) async {
+    final code = state.code;
+    if (code == null) return;
+    _lastLocalActionTime = DateTime.now();
+    await _storage.savePartyQueue(code, songs);
+    state = PartyRoomState(
+      code: code,
+      queue: songs,
+      nowPlaying: state.nowPlaying,
+      isPlaying: state.isPlaying,
+      hostId: state.hostId,
+    );
+    await SupabaseService.instance.pushPartyQueue(code, songs);
+  }
+
+  Future<void> addSongs(List<SongModel> songs) async {
+    final code = state.code;
+    if (code == null) return;
+    _lastLocalActionTime = DateTime.now();
+    final q = List<SongModel>.from(state.queue);
+    for (final song in songs) {
+      if (!q.any((s) => s.id == song.id)) {
+        q.add(song);
+      }
+    }
+    await _storage.savePartyQueue(code, q);
+    state = PartyRoomState(
+      code: code,
+      queue: q,
+      nowPlaying: state.nowPlaying,
+      isPlaying: state.isPlaying,
+      hostId: state.hostId,
+    );
+    await SupabaseService.instance.pushPartyQueue(code, q);
+  }
+
+  Future<void> removeSong(SongModel song) async {
+    final code = state.code;
+    if (code == null || !state.isHost) return;
+    _lastLocalActionTime = DateTime.now();
+    final q = List<SongModel>.from(state.queue)..removeWhere((s) => s.id == song.id);
+    _storage.savePartyQueue(code, q);
+    state = PartyRoomState(code: code, queue: q, nowPlaying: state.nowPlaying, isPlaying: state.isPlaying, hostId: state.hostId);
+    await SupabaseService.instance.pushPartyQueue(code, q);
+  }
+
+  Future<void> reorderQueue(int oldIndex, int newIndex) async {
+    final code = state.code;
+    if (code == null || !state.isHost) return;
+    _lastLocalActionTime = DateTime.now();
+    
+    final q = List<SongModel>.from(state.queue);
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = q.removeAt(oldIndex);
+    q.insert(newIndex, item);
+    
+    _storage.savePartyQueue(code, q);
+    state = PartyRoomState(code: code, queue: q, nowPlaying: state.nowPlaying, isPlaying: state.isPlaying, hostId: state.hostId);
+    await SupabaseService.instance.pushPartyQueue(code, q);
+  }
+
+  Future<void> kickMember(String targetUid) async {
+    final code = state.code;
+    if (code == null || !state.isHost) return;
+    try {
+      debugPrint('ROTTY PARTY: Attempting to kick member $targetUid from room $code');
+      await SupabaseService.instance.kickMemberFromPartyRoom(code, targetUid);
+      debugPrint('ROTTY PARTY: Kicked member $targetUid successfully');
+    } catch (e) {
+      debugPrint('ROTTY PARTY ERROR: Failed to kick member: $e');
+      rethrow;
     }
   }
 
   Future<void> updatePlayback(SongModel song, bool isPlaying) async {
     final code = state.code;
-    if (code == null) return;
-    if (FirebaseService.instance.isReady) {
-      await FirebaseService.instance.updatePartyPlayback(code, song, isPlaying);
-    }
+    if (code == null || !state.isHost) return;
+    _lastLocalActionTime = DateTime.now();
+    await SupabaseService.instance.updatePartyPlayback(code, song, isPlaying);
   }
 }
 
@@ -280,5 +463,54 @@ class OfflinePackNotifier extends StateNotifier<List<String>> {
     final ids = songs.take(pack.targetCount).map((s) => s.id).toList();
     await _storage.setOfflinePackIds(packId, ids);
     state = ids;
+  }
+}
+
+final supportOverlayVisibilityProvider = StateNotifierProvider<SupportOverlayVisibilityNotifier, bool>((ref) {
+  return SupportOverlayVisibilityNotifier();
+});
+
+class SupportOverlayVisibilityNotifier extends StateNotifier<bool> {
+  SupportOverlayVisibilityNotifier() : super(false) {
+    _init();
+  }
+
+  void _init() {
+    final storage = StorageService();
+    // 1. Absolute Suppressing for Verified Supporters
+    if (storage.isSupporter) {
+      storage.setHasSeenSupportOverlay(true);
+      storage.setLastSeenVersion('1.1.0');
+      state = false;
+      return;
+    }
+
+    // 2. Fresh Install / Version Update reset
+    if (storage.lastSeenVersion != '1.1.0') {
+      storage.setHasSeenSupportOverlay(false);
+      state = true;
+      return;
+    }
+
+    // 3. Normal launch seen check
+    state = !storage.hasSeenSupportOverlay;
+  }
+
+  void dismiss() {
+    state = false;
+  }
+}
+
+final albumArtRipplesProvider = StateNotifierProvider<AlbumArtRipplesNotifier, bool>((ref) {
+  return AlbumArtRipplesNotifier(ref.read(storageServiceProvider));
+});
+
+class AlbumArtRipplesNotifier extends StateNotifier<bool> {
+  AlbumArtRipplesNotifier(this._storage) : super(_storage.albumArtRipples);
+  final StorageService _storage;
+
+  Future<void> toggle(bool val) async {
+    state = val;
+    await _storage.setAlbumArtRipples(val);
   }
 }

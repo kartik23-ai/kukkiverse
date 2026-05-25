@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme/mode_theme.dart';
 import '../../core/modes/app_mode.dart';
 import '../../models/song_model.dart';
@@ -102,6 +103,10 @@ class DesktopHome extends ConsumerWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 24),
+
+            // ─── Explore Genres & Moods Row (Visual Excellence) ───
+            _DesktopGenresRow(accentColor: palette.primary),
             const SizedBox(height: 24),
 
             // ─── Quick Picks (liquid glass compact cards) ───
@@ -407,16 +412,98 @@ class _DesktopSongCardState extends ConsumerState<_DesktopSongCard> {
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  widget.song.artist,
-                  style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 11, height: 1.2),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    navigateToArtist(context, ref, widget.song.artist);
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Text(
+                      widget.song.artist,
+                      style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 11, height: 1.2),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DesktopGenresRow extends StatelessWidget {
+  const _DesktopGenresRow({required this.accentColor});
+  final Color accentColor;
+
+  static const _genres = [
+    ('Love', LinearGradient(colors: [Color(0xFFFF416C), Color(0xFFFF4B2B)])),
+    ('Devotional', LinearGradient(colors: [Color(0xFFF12711), Color(0xFFF5AF19)])),
+    ('Party', LinearGradient(colors: [Color(0xFF11998E), Color(0xFF38EF7D)])),
+    ('Workout', LinearGradient(colors: [Color(0xFFFC4A1A), Color(0xFFF7B733)])),
+    ('Chill', LinearGradient(colors: [Color(0xFF00B4DB), Color(0xFF0083B0)])),
+    ('Sad', LinearGradient(colors: [Color(0xFF3A6073), Color(0xFF3A6073)])),
+    ('Punjabi', LinearGradient(colors: [Color(0xFF7F00FF), Color(0xFFE100FF)])),
+    ('English', LinearGradient(colors: [Color(0xFFED213A), Color(0xFF93291E)])),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Explore Genres & Moods',
+          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 48,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _genres.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, i) {
+              final item = _genres[i];
+              return LiquidGlassButton(
+                accentColor: accentColor,
+                onTap: () {
+                  context.push('/album/genre_${item.$1}', extra: {
+                    'title': '${item.$1} Station',
+                  });
+                },
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                borderRadius: 14,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: item.$2,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      item.$1,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

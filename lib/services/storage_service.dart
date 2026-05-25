@@ -9,6 +9,7 @@ import '../models/song_model.dart';
 import '../models/playlist_model.dart';
 import '../models/play_history_entry.dart';
 import '../core/premium/premium_models.dart';
+import 'firebase_service.dart';
 
 class StorageService {
   static final StorageService _instance = StorageService._internal();
@@ -35,6 +36,8 @@ class StorageService {
     _partyBox = await Hive.openBox(AppConstants.partyRoomBox);
     _downloadedBox = await Hive.openBox(AppConstants.downloadedSongsBox);
   }
+
+  Box get recentBox => _recentBox;
 
   // ─── Onboarding ───
   bool get isOnboardingDone => _prefs.getBool(AppConstants.onboardingDone) ?? false;
@@ -91,6 +94,13 @@ class StorageService {
     }
   }
 
+  Future<void> removeRecentSong(String songId) async {
+    final targetKeys = _recentBox.keys.where((k) => _recentBox.get(k)?['id'] == songId).toList();
+    for (final k in targetKeys) {
+      await _recentBox.delete(k);
+    }
+  }
+
   // ─── Favorites ───
   List<SongModel> getFavorites() {
     return _favoritesBox.values
@@ -123,12 +133,24 @@ class StorageService {
         .toList();
   }
 
-  Future<void> savePlaylist(PlaylistModel playlist) async {
+  Future<void> savePlaylist(PlaylistModel playlist, {bool syncToCloud = true}) async {
     await _playlistBox.put(playlist.id, playlist.toJson());
+    if (syncToCloud) {
+      try {
+        if (FirebaseService.instance.isReady) {
+          FirebaseService.instance.syncPlaylist(playlist.toJson(), playlist.id);
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> deletePlaylist(String id) async {
     await _playlistBox.delete(id);
+    try {
+      if (FirebaseService.instance.isReady) {
+        FirebaseService.instance.deleteCloudPlaylist(id);
+      }
+    } catch (_) {}
   }
 
   // ─── Search History ───
@@ -148,6 +170,14 @@ class StorageService {
 
   Future<void> clearSearchHistory() async {
     await _searchBox.clear();
+  }
+
+  Future<void> deleteSearchHistory(String query) async {
+    final existing = _searchBox.values.cast<String>().toList();
+    if (existing.contains(query)) {
+      final idx = existing.indexOf(query);
+      await _searchBox.deleteAt(idx);
+    }
   }
 
   // ─── App mode & sound ───
@@ -390,4 +420,23 @@ class StorageService {
     await _recentBox.clear();
     await _searchBox.clear();
   }
+
+  // ─── Supporter & Version Tracking ───
+  bool get hasSeenSupportOverlay => _prefs.getBool('has_seen_support_overlay') ?? false;
+  Future<void> setHasSeenSupportOverlay(bool v) => _prefs.setBool('has_seen_support_overlay', v);
+
+  String get lastSeenVersion => _prefs.getString('last_seen_version') ?? '';
+  Future<void> setLastSeenVersion(String version) => _prefs.setString('last_seen_version', version);
+
+  bool get isSupporter => _prefs.getBool('is_supporter_local') ?? false;
+  Future<void> setIsSupporter(bool v) => _prefs.setBool('is_supporter_local', v);
+
+  String get profileName => _prefs.getString('profile_name') ?? '';
+  Future<void> setProfileName(String name) => _prefs.setString('profile_name', name.trim());
+
+  String get profileEmail => _prefs.getString('profile_email') ?? '';
+  Future<void> setProfileEmail(String email) => _prefs.setString('profile_email', email.trim());
+
+  bool get albumArtRipples => _prefs.getBool('album_art_ripples') ?? true;
+  Future<void> setAlbumArtRipples(bool v) => _prefs.setBool('album_art_ripples', v);
 }

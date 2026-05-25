@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:audio_service/audio_service.dart';
 import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../widgets/liquid_glass.dart';
@@ -23,6 +24,7 @@ class DesktopPlayerBar extends ConsumerWidget {
     final playing = ref.watch(isPlayingProvider);
     final handler = ref.read(audioHandlerProvider);
     final palette = ref.watch(dynamicPaletteProvider);
+    final party = ref.watch(partyRoomProvider);
 
     if (song == null) {
       return LiquidGlassBottomBar(
@@ -40,7 +42,7 @@ class DesktopPlayerBar extends ConsumerWidget {
       child: Column(
         children: [
           // ─── Draggable seek bar ───
-          _SeekBar(handler: handler, song: song, palette: palette),
+          _SeekBar(handler: handler, song: song, palette: palette, enabled: party.code == null || party.isHost),
           // ─── Main controls ───
           Expanded(
             child: Padding(
@@ -133,15 +135,79 @@ class DesktopPlayerBar extends ConsumerWidget {
                   const Spacer(),
 
                   // CENTER: Transport controls
-                  _HoverIcon(icon: Icons.shuffle_rounded, color: Colors.white.withValues(alpha: 0.35), hoverColor: palette.primary, tooltip: 'Shuffle', onTap: () {}),
-                  const SizedBox(width: 14),
-                  _HoverIcon(icon: Icons.skip_previous_rounded, color: Colors.white.withValues(alpha: 0.7), hoverColor: Colors.white, tooltip: 'Previous', size: 28, onTap: () => handler.skipToPrevious()),
-                  const SizedBox(width: 10),
-                  _PlayButton(playing: playing, palette: palette, onTap: () => playing ? handler.pause() : handler.play()),
-                  const SizedBox(width: 10),
-                  _HoverIcon(icon: Icons.skip_next_rounded, color: Colors.white.withValues(alpha: 0.7), hoverColor: Colors.white, tooltip: 'Next', size: 28, onTap: () => handler.skipToNext()),
-                  const SizedBox(width: 14),
-                  _HoverIcon(icon: Icons.repeat_rounded, color: Colors.white.withValues(alpha: 0.35), hoverColor: palette.primary, tooltip: 'Repeat', onTap: () {}),
+                  if (party.code != null && !party.isHost) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.greenAccent.withValues(alpha: 0.35),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.wifi_tethering_rounded, color: Colors.greenAccent, size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            'PARTY SYNCED WITH HOST 👑',
+                            style: GoogleFonts.inter(
+                              color: Colors.greenAccent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    StreamBuilder<PlaybackState>(
+                      stream: handler.playbackState,
+                      builder: (context, snapshot) {
+                        final state = snapshot.data;
+                        final shuffleOn = state?.shuffleMode == AudioServiceShuffleMode.all;
+                        final repeatMode = state?.repeatMode ?? AudioServiceRepeatMode.none;
+
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _HoverIcon(
+                              icon: Icons.shuffle_rounded,
+                              color: shuffleOn ? palette.primary : Colors.white.withValues(alpha: 0.35),
+                              hoverColor: palette.primary,
+                              tooltip: 'Shuffle',
+                              onTap: () => handler.setShuffleMode(shuffleOn ? AudioServiceShuffleMode.none : AudioServiceShuffleMode.all),
+                            ),
+                            const SizedBox(width: 14),
+                            _HoverIcon(icon: Icons.skip_previous_rounded, color: Colors.white.withValues(alpha: 0.7), hoverColor: Colors.white, tooltip: 'Previous', size: 28, onTap: () => handler.skipToPrevious()),
+                            const SizedBox(width: 10),
+                            _PlayButton(playing: playing, palette: palette, onTap: () => playing ? handler.pause() : handler.play()),
+                            const SizedBox(width: 10),
+                            _HoverIcon(icon: Icons.skip_next_rounded, color: Colors.white.withValues(alpha: 0.7), hoverColor: Colors.white, tooltip: 'Next', size: 28, onTap: () => handler.skipToNext()),
+                            const SizedBox(width: 14),
+                            _HoverIcon(
+                              icon: repeatMode == AudioServiceRepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                              color: repeatMode != AudioServiceRepeatMode.none ? palette.primary : Colors.white.withValues(alpha: 0.35),
+                              hoverColor: palette.primary,
+                              tooltip: 'Repeat',
+                              onTap: () async {
+                                await handler.setRepeatMode(
+                                  repeatMode == AudioServiceRepeatMode.none
+                                      ? AudioServiceRepeatMode.all
+                                      : (repeatMode == AudioServiceRepeatMode.all
+                                          ? AudioServiceRepeatMode.one
+                                          : AudioServiceRepeatMode.none),
+                                );
+                              },
+                            ),
+                          ],
+                        );
+                      }
+                    ),
+                  ],
 
                   const Spacer(),
 
@@ -183,8 +249,9 @@ class DesktopPlayerBar extends ConsumerWidget {
 
 /// ─── Seek Bar ───
 class _SeekBar extends StatefulWidget {
-  const _SeekBar({required this.handler, required this.song, required this.palette});
+  const _SeekBar({required this.handler, required this.song, required this.palette, this.enabled = true});
   final dynamic handler, song, palette;
+  final bool enabled;
   @override
   State<_SeekBar> createState() => _SeekBarState();
 }
@@ -197,19 +264,19 @@ class _SeekBarState extends State<_SeekBar> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
+      onEnter: (_) => setState(() => _hovered = widget.enabled),
       onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
+      cursor: widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final barWidth = constraints.maxWidth;
           return GestureDetector(
-            onHorizontalDragStart: (d) {
+            onHorizontalDragStart: widget.enabled ? (d) {
               setState(() => _dragging = true);
               _doSeek(d.localPosition.dx, barWidth);
-            },
-            onHorizontalDragUpdate: (d) => _doSeek(d.localPosition.dx, barWidth),
-            onHorizontalDragEnd: (_) {
+            } : null,
+            onHorizontalDragUpdate: widget.enabled ? (d) => _doSeek(d.localPosition.dx, barWidth) : null,
+            onHorizontalDragEnd: widget.enabled ? (_) {
               if (_dragRatio != null) {
                 final dur = widget.handler.player.duration ?? widget.song.duration;
                 widget.handler.player.seek(Duration(milliseconds: (dur.inMilliseconds * _dragRatio!).round()));
@@ -218,12 +285,12 @@ class _SeekBarState extends State<_SeekBar> {
                 _dragging = false;
                 _dragRatio = null;
               });
-            },
-            onTapDown: (d) {
+            } : null,
+            onTapDown: widget.enabled ? (d) {
               final r = (d.localPosition.dx / barWidth).clamp(0.0, 1.0);
               final dur = widget.handler.player.duration ?? widget.song.duration;
               widget.handler.player.seek(Duration(milliseconds: (dur.inMilliseconds * r).round()));
-            },
+            } : null,
             child: StreamBuilder<Duration>(
               stream: widget.handler.player.positionStream,
               builder: (context, snap) {

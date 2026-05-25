@@ -20,6 +20,7 @@ import '../../providers/feature_providers.dart';
 import '../../widgets/neon_skeleton.dart';
 import '../../widgets/crystal_shatter_skeleton.dart';
 import '../../widgets/magnetic_playlist_drop.dart';
+import '../../services/storage_service.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -49,6 +50,11 @@ class HomeScreen extends ConsumerWidget {
                 SliverToBoxAdapter(child: _searchBar(context, ref, mt)),
               if (mt.showQuickActions)
                 SliverToBoxAdapter(child: _quickActions(context, ref, mt)),
+              
+              // ─── Explore Genres & Moods dynamic row (Visual Excellence) ───
+              if (mt.showQuickActions)
+                SliverToBoxAdapter(child: _genresRow(context, ref, mt)),
+
               if (mt.showExtras)
                 SliverToBoxAdapter(child: _aiRow(context, ref, aiOn, premium, mt)),
               if (mt.showDecorations) const SliverToBoxAdapter(child: StreakChip()),
@@ -74,6 +80,9 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _header(BuildContext context, WidgetRef ref, bool premium, ModeTheme mt, RottyAppMode mode) {
+    final isSupporter = StorageService().isSupporter;
+    final displayName = StorageService().profileName.isEmpty ? '' : ', ${StorageService().profileName}';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
@@ -84,9 +93,14 @@ class HomeScreen extends ConsumerWidget {
             height: 44,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              gradient: mt.accentGradient,
+              gradient: isSupporter
+                  ? const LinearGradient(colors: [Colors.pinkAccent, Colors.purpleAccent])
+                  : mt.accentGradient,
               boxShadow: [
-                BoxShadow(color: mt.accent.withValues(alpha: 0.3), blurRadius: 12),
+                BoxShadow(
+                  color: (isSupporter ? Colors.pinkAccent : mt.accent).withValues(alpha: 0.3),
+                  blurRadius: 12,
+                ),
               ],
             ),
             child: Icon(
@@ -103,7 +117,39 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    Text(getTimeGreeting(), style: GoogleFonts.inter(color: mt.textSecondary, fontSize: 13)),
+                    Flexible(
+                      child: Text(
+                        '${getTimeGreeting()}$displayName',
+                        style: GoogleFonts.inter(color: mt.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isSupporter) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.pink.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.3)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.pinkAccent.withValues(alpha: 0.15),
+                              blurRadius: 6,
+                            )
+                          ],
+                        ),
+                        child: Text(
+                          'SUPPORTER 💖',
+                          style: GoogleFonts.inter(
+                            color: Colors.pinkAccent,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 Text(
@@ -439,7 +485,7 @@ class _SongCard extends ConsumerWidget {
             }
           }
         },
-        onLongPress: () => showMagneticPlaylistDrop(context, ref, song),
+        onLongPress: () => showSongOptionsSheet(context, ref, song),
         child: SizedBox(
           width: 148,
           child: Column(
@@ -476,4 +522,90 @@ class _SongCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+Widget _genresRow(BuildContext context, WidgetRef ref, ModeTheme mt) {
+  const genres = [
+    ('Love', LinearGradient(colors: [Color(0xFFFF416C), Color(0xFFFF4B2B)])),
+    ('Devotional', LinearGradient(colors: [Color(0xFFF12711), Color(0xFFF5AF19)])),
+    ('Party', LinearGradient(colors: [Color(0xFF11998E), Color(0xFF38EF7D)])),
+    ('Workout', LinearGradient(colors: [Color(0xFFFC4A1A), Color(0xFFF7B733)])),
+    ('Chill', LinearGradient(colors: [Color(0xFF00B4DB), Color(0xFF0083B0)])),
+    ('Sad', LinearGradient(colors: [Color(0xFF3A6073), Color(0xFF3A6073)])),
+    ('Punjabi', LinearGradient(colors: [Color(0xFF7F00FF), Color(0xFFE100FF)])),
+    ('English', LinearGradient(colors: [Color(0xFFED213A), Color(0xFF93291E)])),
+  ];
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Text(
+          'Explore Genres & Moods',
+          style: GoogleFonts.inter(
+            fontSize: 18 * mt.fontScale,
+            fontWeight: FontWeight.w800,
+            color: mt.textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      SizedBox(
+        height: 48,
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          scrollDirection: Axis.horizontal,
+          itemCount: genres.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, i) {
+            final item = genres[i];
+            return GestureDetector(
+              onTap: () {
+                context.push('/album/genre_${item.$1}', extra: {
+                  'title': '${item.$1} Station',
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: mt.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: item.$2,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      item.$1,
+                      style: GoogleFonts.inter(
+                        color: mt.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      const SizedBox(height: 14),
+    ],
+  );
 }

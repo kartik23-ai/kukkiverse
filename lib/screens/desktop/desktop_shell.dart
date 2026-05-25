@@ -14,6 +14,7 @@ import '../../providers/feature_providers.dart';
 import '../../widgets/elite_background.dart';
 import '../../widgets/premium_badge.dart';
 import '../../widgets/liquid_glass.dart';
+import '../../widgets/first_launch_support_overlay.dart';
 import '../../utils/play_song.dart';
 import 'desktop_sidebar.dart';
 import 'desktop_player_bar.dart';
@@ -22,8 +23,14 @@ import 'desktop_search.dart';
 import 'desktop_now_playing.dart';
 import 'desktop_full_screen.dart';
 import '../../services/spotify_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/storage_service.dart';
+import '../../services/firebase_service.dart';
 import '../../models/song_model.dart';
 import '../../widgets/desktop_song_row.dart';
+import '../../widgets/desktop_titlebar.dart';
+import '../../widgets/party_lock_overlay.dart';
+
 
 /// ═══════════════════════════════════════════════════════════════
 /// Desktop Shell 4.0 — Liquid Glass Architecture
@@ -48,6 +55,9 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService.instance.initialize(context, ref);
+    });
   }
 
   @override
@@ -99,6 +109,8 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     final mode = ref.watch(appModeProvider);
     final mt = ModeTheme(mode);
     final palette = ref.watch(dynamicPaletteProvider);
+    final showOverlay = ref.watch(supportOverlayVisibilityProvider);
+    final party = ref.watch(partyRoomProvider);
 
     final shell = Scaffold(
       backgroundColor: const Color(0xFF050508),
@@ -106,6 +118,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
         intensity: 0.7,
         child: Column(
           children: [
+            const DesktopTitlebar(),
             // Mode indicator
             if (mode != RottyAppMode.normal)
               _ModeIndicator(mode: mode, mt: mt),
@@ -125,7 +138,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
                       switchOutCurve: Curves.easeInCubic,
                       transitionBuilder: (child, animation) =>
                           FadeTransition(opacity: animation, child: child),
-                      child: _buildTab(),
+                      child: _buildTab(party),
                     ),
                   ),
                   // Right panel
@@ -151,18 +164,36 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
       ),
     );
 
+    Widget display = shell;
+
     if (_fullScreen) {
-      return Stack(
+      display = Stack(
         children: [
           shell,
           DesktopFullScreen(onClose: () => setState(() => _fullScreen = false)),
         ],
       );
     }
-    return shell;
+
+    return Stack(
+      children: [
+        display,
+        if (showOverlay)
+          FirstLaunchSupportOverlay(
+            onDismissed: () => ref.read(supportOverlayVisibilityProvider.notifier).dismiss(),
+          ),
+      ],
+    );
   }
 
-  Widget _buildTab() {
+  Widget _buildTab(PartyRoomState party) {
+    if (party.code != null && (_tab == 0 || _tab == 1 || _tab == 2)) {
+      return PartyLockOverlay(
+        key: const ValueKey('d_party_lock'),
+        roomCode: party.code!,
+        isHost: party.isHost,
+      );
+    }
     return switch (_tab) {
       0 => const DesktopHome(key: ValueKey('d_home')),
       1 => const DesktopSearch(key: ValueKey('d_search')),
@@ -606,6 +637,70 @@ class _DesktopSettingsState extends ConsumerState<_DesktopSettings> {
         Text('Settings', style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
         const SizedBox(height: 28),
 
+        _sectionHeader('Account & Support'),
+        const SizedBox(height: 14),
+        // Support Kartik Card
+        LiquidGlassCard(
+          accentColor: palette.primary,
+          padding: const EdgeInsets.all(16),
+          onTap: () => context.push('/support'), // Open direct to Support/Gift Developer screen
+          child: Row(
+            children: [
+              const Icon(Icons.volunteer_activism_rounded, color: Colors.pinkAccent, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Support Kartik & Gift ₹99', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    Text('Keep Rotty alive, fast & 100% ad-free forever', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                  ],
+                ),
+              ),
+              if (StorageService().isSupporter) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.pink.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Text('SUPPORTER 💖', style: GoogleFonts.inter(color: Colors.pinkAccent, fontSize: 9, fontWeight: FontWeight.w800)),
+                ),
+                const SizedBox(width: 12),
+              ],
+              const Icon(Icons.chevron_right_rounded, color: Colors.white30),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Edit Profile Card
+        LiquidGlassCard(
+          accentColor: palette.primary,
+          padding: const EdgeInsets.all(16),
+          onTap: _showEditProfileDialog,
+          child: Row(
+            children: [
+              const Icon(Icons.person_outline_rounded, color: Colors.cyanAccent, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Edit Profile Name', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    Text(
+                      StorageService().profileName.isEmpty ? 'Set your display name' : StorageService().profileName,
+                      style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.45), fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white30),
+            ],
+          ),
+        ),
+        const SizedBox(height: 28),
+
         _sectionHeader('Experience Modes'),
         const SizedBox(height: 14),
         Row(
@@ -638,10 +733,37 @@ class _DesktopSettingsState extends ConsumerState<_DesktopSettings> {
 
         _sectionHeader('Playback'),
         const SizedBox(height: 14),
-        _settingToggle('AI DJ', 'Smart queue with mood-aware picks', Icons.auto_awesome_rounded, aiOn, palette.primary, (v) => ref.read(aiDjEnabledProvider.notifier).state = v),
+        _settingToggle('Smart Queue Autoplay', 'Automatically refill queue with similar songs matching active taste & session vibe', Icons.auto_awesome_rounded, aiOn, palette.primary, (v) => ref.read(aiDjEnabledProvider.notifier).state = v),
+        const SizedBox(height: 10),
+        _settingToggle('Album Art Ripples', 'Hardware-accelerated fluid canvas waves', Icons.waves_rounded, ref.watch(albumArtRipplesProvider), palette.primary, (v) => ref.read(albumArtRipplesProvider.notifier).toggle(v)),
         const SizedBox(height: 28),
 
         _sectionHeader('About'),
+        const SizedBox(height: 14),
+        LiquidGlassCard(
+          accentColor: palette.primary,
+          padding: const EdgeInsets.all(16),
+          onTap: () => context.push('/about'), // Open direct to About Rotty screen
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: Colors.white, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('About Rotty', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text('Our story, legal safe-harbor disclaimer & open licenses', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white30),
+            ],
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        _sectionHeader('System'),
         const SizedBox(height: 14),
         Text('Rotty Music Desktop v2.0', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
         const SizedBox(height: 4),
@@ -696,6 +818,77 @@ class _DesktopSettingsState extends ConsumerState<_DesktopSettings> {
             ),
           ),
           Switch(value: val, onChanged: onChanged, activeColor: accent, activeTrackColor: accent.withValues(alpha: 0.3)),
+        ],
+      ),
+    );
+  }
+
+  void _showEditProfileDialog() {
+    final TextEditingController nameCtrl = TextEditingController(text: StorageService().profileName);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF16162A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Edit Profile Name',
+          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Aapka display name jo party sync aur profile badges me visible hoga.',
+              style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameCtrl,
+              autofocus: true,
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                hintText: 'Display Name',
+                hintStyle: GoogleFonts.inter(color: Colors.white30, fontSize: 13),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.04),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54, fontWeight: FontWeight.w600)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              final newName = nameCtrl.text.trim();
+              if (newName.isEmpty) return;
+              await StorageService().setProfileName(newName);
+              try {
+                if (FirebaseService.instance.isReady) {
+                  await FirebaseService.instance.updateUserDisplayName(newName);
+                }
+              } catch (_) {}
+              if (ctx.mounted) Navigator.pop(ctx);
+              setState(() {});
+            },
+            child: Text('Save', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );

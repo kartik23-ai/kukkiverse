@@ -29,145 +29,150 @@ class ArtistScreen extends ConsumerWidget {
           final img = artist?.image ?? image ?? '';
           final similar = d.songs.length > 3 ? d.songs.sublist(1, d.songs.length > 6 ? 6 : d.songs.length) : d.songs;
 
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverAppBar(
-                expandedHeight: 300,
-                pinned: true,
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                flexibleSpace: FlexibleSpaceBar(
-                  background: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (img.isNotEmpty) CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, memCacheWidth: 800),
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Theme.of(context).scaffoldBackgroundColor],
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverAppBar(
+                    expandedHeight: 300,
+                    pinned: true,
+                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    flexibleSpace: FlexibleSpaceBar(
+                      background: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (img.isNotEmpty) CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, memCacheWidth: 800),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Colors.transparent, Theme.of(context).scaffoldBackgroundColor],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(height: 48),
-                            if (img.isNotEmpty)
-                              AlbumStage3D(imageUrl: img, heroTag: 'artist_$artistId', size: 140)
-                            else
-                              const CircleAvatar(radius: 56, child: Icon(Icons.person, size: 48)),
-                            const SizedBox(height: 12),
-                            Text(title, style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
-                            Text('Artist Universe', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 12, letterSpacing: 1)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(backgroundColor: AppColors.accent, minimumSize: const Size.fromHeight(52)),
-                        onPressed: () async {
-                          if (d.songs.isEmpty) return;
-                          await playSongWithContext(ref, d.songs.first, playlist: d.songs);
-                          if (context.mounted) context.push('/player');
-                        },
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Play like this artist'),
-                      ),
-                      const SizedBox(height: 12),
-                      if (similar.isNotEmpty)
-                        RottyGlass(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Similar vibe', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 8),
-                              Text(similar.map((s) => s.title).take(3).join(' • '), style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12), maxLines: 2),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                  child: Text('Top Tracks', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
-                ),
-              ),
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final s = d.songs[i];
-                    return ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: CachedNetworkImage(imageUrl: s.image, width: 48, height: 48, fit: BoxFit.cover),
-                      ),
-                      title: Text(s.title, style: GoogleFonts.inter(color: Colors.white)),
-                      subtitle: Text(s.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-                      onTap: () async {
-                        await playSongWithContext(ref, s, playlist: d.songs);
-                        if (context.mounted) context.push('/player');
-                      },
-                    );
-                  },
-                  childCount: d.songs.length,
-                ),
-              ),
-              if (d.albums.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-                    child: Text('Albums', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 196,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: d.albums.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 14),
-                      itemBuilder: (context, i) {
-                        final a = d.albums[i];
-                        return GestureDetector(
-                          onTap: () => context.push('/album/${a.id}', extra: {'title': a.name, 'image': a.image}),
-                          child: SizedBox(
-                            width: 140,
+                          Center(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: CachedNetworkImage(imageUrl: a.image, width: 140, height: 132, fit: BoxFit.cover),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(a.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2)),
+                                const SizedBox(height: 48),
+                                if (img.isNotEmpty)
+                                  AlbumStage3D(imageUrl: img, heroTag: 'artist_$artistId', size: 140)
+                                else
+                                  const CircleAvatar(radius: 56, child: Icon(Icons.person, size: 48)),
+                                const SizedBox(height: 12),
+                                Text(title, style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
+                                Text('Artist Universe', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 12, letterSpacing: 1)),
                               ],
                             ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
-            ],
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(backgroundColor: AppColors.accent, minimumSize: const Size.fromHeight(52)),
+                            onPressed: () async {
+                              if (d.songs.isEmpty) return;
+                              await playSongWithContext(ref, d.songs.first, playlist: d.songs);
+                              if (context.mounted) context.push('/player');
+                            },
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: const Text('Play like this artist'),
+                          ),
+                          const SizedBox(height: 12),
+                          if (similar.isNotEmpty)
+                            RottyGlass(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Similar vibe', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700)),
+                                  const SizedBox(height: 8),
+                                  Text(similar.map((s) => s.title).take(3).join(' • '), style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12), maxLines: 2),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                      child: Text('Top Tracks', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+                    ),
+                  ),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final s = d.songs[i];
+                        return ListTile(
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: CachedNetworkImage(imageUrl: s.image, width: 48, height: 48, fit: BoxFit.cover),
+                          ),
+                          title: Text(s.title, style: GoogleFonts.inter(color: Colors.white)),
+                          subtitle: Text(s.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+                          onTap: () async {
+                            await playSongWithContext(ref, s, playlist: d.songs);
+                            if (context.mounted) context.push('/player');
+                          },
+                        );
+                      },
+                      childCount: d.songs.length,
+                    ),
+                  ),
+                  if (d.albums.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                        child: Text('Albums', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 196,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: d.albums.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 14),
+                          itemBuilder: (context, i) {
+                            final a = d.albums[i];
+                            return GestureDetector(
+                              onTap: () => context.push('/album/${a.id}', extra: {'title': a.name, 'image': a.image}),
+                              child: SizedBox(
+                                width: 140,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: CachedNetworkImage(imageUrl: a.image, width: 140, height: 132, fit: BoxFit.cover),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(a.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                ],
+              ),
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accent)),

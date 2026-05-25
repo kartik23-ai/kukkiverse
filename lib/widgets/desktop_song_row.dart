@@ -77,9 +77,24 @@ class _DesktopSongRowState extends ConsumerState<DesktopSongRow> {
                     Text(widget.song.title,
                         style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(widget.song.artist,
-                        style: GoogleFonts.inter(fontSize: 12, color: Colors.white38),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        navigateToArtist(context, ref, widget.song.artist);
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Text(
+                          widget.song.artist,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.white38,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

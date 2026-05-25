@@ -5,6 +5,7 @@ import '../models/song_model.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/local_audio_server.dart';
+import '../services/update_service.dart';
 
 class MusicRepository {
   final ApiService _api;
@@ -14,15 +15,23 @@ class MusicRepository {
     _api.setQuality(_storage.audioQuality);
   }
 
-  Future<Map<String, List<SongModel>>> getHomeSections() => _api.getHomeData();
-  Future<List<SongModel>> searchSongs(String q, {int limit = 25, int page = 1}) =>
-      _api.searchSongs(q, limit: limit, page: page);
+  Future<Map<String, List<SongModel>>> getHomeSections() {
+    UpdateService.instance.checkForUpdates();
+    return _api.getHomeData();
+  }
+
+  Future<List<SongModel>> searchSongs(String q, {int limit = 25, int page = 1}) {
+    UpdateService.instance.checkForUpdates();
+    return _api.searchSongs(q, limit: limit, page: page);
+  }
+
   Future<List<AlbumItem>> searchAlbums(String q) => _api.searchAlbums(q);
   Future<List<ArtistItem>> searchArtists(String q) => _api.searchArtists(q);
   Future<List<SongModel>> getAlbumSongs(String id) => _api.getAlbumSongs(id);
   Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String id) => _api.getArtist(id);
 
   Future<SongModel> resolveSong(SongModel song) async {
+    UpdateService.instance.checkForUpdates();
     if (_storage.isSongDownloaded(song.id)) {
       try {
         final docDir = await getApplicationDocumentsDirectory();

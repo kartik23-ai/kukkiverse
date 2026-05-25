@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
@@ -110,7 +111,7 @@ class _SearchResults extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _sectionTitle('Songs'),
-                ...list.take(8).map((song) => DesktopSongRow(song: song, playlist: list)),
+                ...list.take(8).map((song) => DesktopSongRow(song: song, playlist: [song])),
               ],
             );
           },
@@ -198,28 +199,35 @@ class _AlbumCardState extends State<_AlbumCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 160,
-        transform: _hovered ? Matrix4.translationValues(0, -3, 0) : Matrix4.identity(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
-                  imageUrl: widget.album.image ?? '',
-                  width: 160, fit: BoxFit.cover,
-                  memCacheWidth: 320,
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => context.push('/album/${widget.album.id}', extra: {
+          'title': widget.album.name,
+          'image': widget.album.image,
+        }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 160,
+          transform: _hovered ? Matrix4.translationValues(0, -3, 0) : Matrix4.identity(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: widget.album.image ?? '',
+                    width: 160, fit: BoxFit.cover,
+                    memCacheWidth: 320,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(widget.album.name ?? '',
-                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-          ],
+              const SizedBox(height: 8),
+              Text(widget.album.name ?? '',
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
         ),
       ),
     );
@@ -242,29 +250,36 @@ class _ArtistCardState extends State<_ArtistCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 140,
-        transform: _hovered ? Matrix4.translationValues(0, -3, 0) : Matrix4.identity(),
-        child: Column(
-          children: [
-            Expanded(
-              child: ClipOval(
-                child: CachedNetworkImage(
-                  imageUrl: widget.artist.image ?? '',
-                  width: 120, height: 120,
-                  fit: BoxFit.cover,
-                  memCacheWidth: 240,
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => context.push('/artist/${widget.artist.id}', extra: {
+          'name': widget.artist.name,
+          'image': widget.artist.image,
+        }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 140,
+          transform: _hovered ? Matrix4.translationValues(0, -3, 0) : Matrix4.identity(),
+          child: Column(
+            children: [
+              Expanded(
+                child: ClipOval(
+                  child: CachedNetworkImage(
+                    imageUrl: widget.artist.image ?? '',
+                    width: 120, height: 120,
+                    fit: BoxFit.cover,
+                    memCacheWidth: 240,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(widget.artist.name ?? '',
-                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text('Artist',
-                style: GoogleFonts.inter(fontSize: 11, color: Colors.white30)),
-          ],
+              const SizedBox(height: 8),
+              Text(widget.artist.name ?? '',
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text('Artist',
+                  style: GoogleFonts.inter(fontSize: 11, color: Colors.white30)),
+            ],
+          ),
         ),
       ),
     );

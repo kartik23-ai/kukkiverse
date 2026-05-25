@@ -27,7 +27,14 @@ class LocalAudioServer {
             if (await file.exists()) {
               final fileLength = await file.length();
               request.response.headers.add('Accept-Ranges', 'bytes');
-              request.response.headers.contentType = ContentType('audio', 'mpeg');
+
+              final extension = fileName.split('.').last.toLowerCase();
+              final contentType = switch (extension) {
+                'mp3' => ContentType('audio', 'mpeg'),
+                'm4a' || 'mp4' => ContentType('audio', 'mp4'),
+                _ => ContentType('audio', 'mpeg'),
+              };
+              request.response.headers.contentType = contentType;
 
               final rangeHeader = request.headers.value('range');
               if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {

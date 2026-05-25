@@ -27,4 +27,18 @@ class AppSecrets {
   }
 
   static bool get hasSpotify => spotifyClientId.isNotEmpty && spotifyClientSecret.isNotEmpty;
+
+  static String get supabaseUrl {
+    const fromEnv = String.fromEnvironment('SUPABASE_URL');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (kSupabaseUrl.trim().isNotEmpty) return kSupabaseUrl.trim();
+    return '';
+  }
+
+  static String get supabaseAnonKey {
+    const fromEnv = String.fromEnvironment('SUPABASE_ANON_KEY');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (kSupabaseAnonKey.trim().isNotEmpty) return kSupabaseAnonKey.trim();
+    return '';
+  }
 }

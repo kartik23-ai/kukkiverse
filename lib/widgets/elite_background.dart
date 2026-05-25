@@ -63,8 +63,6 @@ class _RottyAuroraBackgroundState extends State<RottyAuroraBackground>
                   colors: widget.paletteOverride,
                 ),
                 size: Size.infinite,
-                isComplex: true,
-                willChange: true,
               );
             },
           ),

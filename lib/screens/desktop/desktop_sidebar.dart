@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../widgets/liquid_glass.dart';
+import '../../services/storage_service.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Desktop Sidebar 3.0 — True Liquid Glass Navigation
@@ -128,7 +129,109 @@ class DesktopSidebar extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: _CreatePlaylistButton(ref: ref, accent: palette.primary),
           ),
+
+          // ─── User Profile Card ───
+          _UserProfileCard(accent: palette.primary, onTabChanged: onTabChanged),
         ],
+      ),
+    );
+  }
+}
+
+class _UserProfileCard extends StatelessWidget {
+  const _UserProfileCard({required this.accent, required this.onTabChanged});
+  final Color accent;
+  final ValueChanged<int> onTabChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSupporter = StorageService().isSupporter;
+    final name = StorageService().profileName.isEmpty ? 'Guest User' : StorageService().profileName;
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'G';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => onTabChanged(4), // Settings is index 4
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              boxShadow: isSupporter ? [
+                BoxShadow(
+                  color: Colors.pinkAccent.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                )
+              ] : null,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: isSupporter
+                      ? const LinearGradient(colors: [Colors.pinkAccent, Colors.purpleAccent])
+                      : LinearGradient(colors: [accent, accent.withValues(alpha: 0.6)]),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isSupporter) ...[
+                            const SizedBox(width: 4),
+                            const Icon(Icons.verified_rounded, color: Colors.pinkAccent, size: 12),
+                          ],
+                        ],
+                      ),
+                      Text(
+                        isSupporter ? 'Supporter 💖' : 'Free Account',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: Colors.white.withValues(alpha: 0.2), size: 16),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

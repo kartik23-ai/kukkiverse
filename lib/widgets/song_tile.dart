@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_colors.dart';
 import '../models/song_model.dart';
 import '../providers/providers.dart';
+import '../utils/play_song.dart';
 
 class SongTile extends ConsumerWidget {
   final SongModel song;
@@ -106,14 +107,38 @@ class SongTile extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      '${song.artist} • ${song.album}',
-                      style: TextStyle(
-                        color: isPlaying ? AppColors.accent.withAlpha(150) : AppColors.textTertiary,
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: GestureDetector(
+                            onTap: () => navigateToArtist(context, ref, song.artist),
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: Text(
+                                song.artist,
+                                style: TextStyle(
+                                  color: isPlaying ? AppColors.accent.withValues(alpha: 0.7) : AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            ' • ${song.album}',
+                            style: TextStyle(
+                              color: isPlaying ? AppColors.accent.withValues(alpha: 0.5) : AppColors.textTertiary,
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

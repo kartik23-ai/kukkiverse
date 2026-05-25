@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../core/constants/api_constants.dart';
 import '../models/media_item.dart';
@@ -60,24 +61,25 @@ class ApiService {
       'n': '$limit',
       'type': 'album',
     }));
-    if (r == null) return _fallbackSumitAlbums(query, limit);
-    try {
-      final body = json.decode(r.body);
-      final results = body is Map ? body['results'] : null;
-      if (results is! List) return [];
-      return results.whereType<Map>().map((e) {
-        final m = Map<String, dynamic>.from(e);
-        return AlbumItem(
-          id: m['albumid']?.toString() ?? m['id']?.toString() ?? '',
-          name: m['title']?.toString() ?? m['album']?.toString() ?? 'Album',
-          image: SongModel.hiResImage(m['image']?.toString() ?? ''),
-          year: m['year']?.toString() ?? '',
-          language: m['language']?.toString() ?? '',
-        );
-      }).where((a) => a.id.isNotEmpty).toList();
-    } catch (_) {
-      return [];
+    if (r != null) {
+      try {
+        final body = json.decode(r.body);
+        final results = body is Map ? body['results'] : null;
+        if (results is List) {
+          return results.whereType<Map>().map((e) {
+            final m = Map<String, dynamic>.from(e);
+            return AlbumItem(
+              id: m['albumid']?.toString() ?? m['id']?.toString() ?? '',
+              name: m['title']?.toString() ?? m['album']?.toString() ?? 'Album',
+              image: SongModel.hiResImage(m['image']?.toString() ?? ''),
+              year: m['year']?.toString() ?? '',
+              language: m['language']?.toString() ?? '',
+            );
+          }).where((a) => a.id.isNotEmpty).toList();
+        }
+      } catch (_) {}
     }
+    return _fallbackSumitAlbums(query, limit);
   }
 
   Future<List<ArtistItem>> searchArtists(String query, {int limit = 20}) async {
@@ -87,22 +89,23 @@ class ApiService {
       'p': '1',
       'n': '$limit',
     }));
-    if (r == null) return _fallbackSumitArtists(query, limit);
-    try {
-      final body = json.decode(r.body);
-      final results = body is Map ? body['results'] : null;
-      if (results is! List) return [];
-      return results.whereType<Map>().map((e) {
-        final m = Map<String, dynamic>.from(e);
-        return ArtistItem(
-          id: m['artistid']?.toString() ?? m['id']?.toString() ?? '',
-          name: m['title']?.toString() ?? m['name']?.toString() ?? 'Artist',
-          image: SongModel.hiResImage(m['image']?.toString() ?? ''),
-        );
-      }).where((a) => a.id.isNotEmpty).toList();
-    } catch (_) {
-      return [];
+    if (r != null) {
+      try {
+        final body = json.decode(r.body);
+        final results = body is Map ? body['results'] : null;
+        if (results is List) {
+          return results.whereType<Map>().map((e) {
+            final m = Map<String, dynamic>.from(e);
+            return ArtistItem(
+              id: m['artistid']?.toString() ?? m['id']?.toString() ?? '',
+              name: m['title']?.toString() ?? m['name']?.toString() ?? 'Artist',
+              image: SongModel.hiResImage(m['image']?.toString() ?? ''),
+            );
+          }).where((a) => a.id.isNotEmpty).toList();
+        }
+      } catch (_) {}
     }
+    return _fallbackSumitArtists(query, limit);
   }
 
   Future<List<SongModel>> getAlbumSongs(String albumId) async {
@@ -121,35 +124,39 @@ class ApiService {
 
   Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String artistId) async {
     if (artistId.isEmpty) return (artist: null, songs: <SongModel>[], albums: <AlbumItem>[]);
-    final r = await _get(_web('artist.getArtistPageDetails', {
-      'artistId': artistId,
-      'page': '1',
-    }));
-    if (r != null) {
-      try {
-        final body = json.decode(r.body);
-        if (body is Map) {
-          final name = body['name']?.toString() ?? body['title']?.toString() ?? 'Artist';
-          final image = SongModel.hiResImage(body['image']?.toString() ?? '');
-          final artist = ArtistItem(id: artistId, name: name, image: image);
-          final songs = body['topSongs'] is List
-              ? _mapsToSongs(body['topSongs'] as List)
-              : body['songs'] is List
-                  ? _mapsToSongs(body['songs'] as List)
-                  : <SongModel>[];
-          final albums = body['topAlbums'] is List
-              ? (body['topAlbums'] as List).whereType<Map>().map((e) {
-                  final m = Map<String, dynamic>.from(e);
-                  return AlbumItem(
-                    id: m['albumid']?.toString() ?? m['id']?.toString() ?? '',
-                    name: m['title']?.toString() ?? m['name']?.toString() ?? '',
-                    image: SongModel.hiResImage(m['image']?.toString() ?? ''),
-                  );
-                }).toList()
-              : <AlbumItem>[];
-          if (songs.isNotEmpty || albums.isNotEmpty) return (artist: artist, songs: songs, albums: albums);
-        }
-      } catch (_) {}
+    
+    final bool isAlphanumeric = RegExp(r'[a-zA-Z]').hasMatch(artistId);
+    if (!isAlphanumeric) {
+      final r = await _get(_web('artist.getArtistPageDetails', {
+        'artistId': artistId,
+        'page': '1',
+      }));
+      if (r != null) {
+        try {
+          final body = json.decode(r.body);
+          if (body is Map) {
+            final name = body['name']?.toString() ?? body['title']?.toString() ?? 'Artist';
+            final image = SongModel.hiResImage(body['image']?.toString() ?? '');
+            final artist = ArtistItem(id: artistId, name: name, image: image);
+            final songs = body['topSongs'] is List
+                ? _mapsToSongs(body['topSongs'] as List)
+                : body['songs'] is List
+                    ? _mapsToSongs(body['songs'] as List)
+                    : <SongModel>[];
+            final albums = body['topAlbums'] is List
+                ? (body['topAlbums'] as List).whereType<Map>().map((e) {
+                    final m = Map<String, dynamic>.from(e);
+                    return AlbumItem(
+                      id: m['albumid']?.toString() ?? m['id']?.toString() ?? '',
+                      name: m['title']?.toString() ?? m['name']?.toString() ?? '',
+                      image: SongModel.hiResImage(m['image']?.toString() ?? ''),
+                    );
+                  }).toList()
+                : <AlbumItem>[];
+            if (songs.isNotEmpty || albums.isNotEmpty) return (artist: artist, songs: songs, albums: albums);
+          }
+        } catch (_) {}
+      }
     }
     return _fallbackSumitArtist(artistId);
   }
@@ -446,18 +453,56 @@ class ApiService {
 
   Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> _fallbackSumitArtist(String id) async {
     try {
+      final bool isAlphanumeric = RegExp(r'[a-zA-Z]').hasMatch(id);
+      final String url;
+      if (isAlphanumeric) {
+        final link = 'https://www.jiosaavn.com/artist/a-songs/$id';
+        url = '${ApiConstants.fallbackBaseUrl}/artists?link=${Uri.encodeComponent(link)}';
+      } else {
+        url = '${ApiConstants.fallbackBaseUrl}/artists?id=$id';
+      }
+
       final r = await _client
-          .get(Uri.parse('${ApiConstants.fallbackBaseUrl}/artists?id=$id'), headers: _headers)
+          .get(Uri.parse(url), headers: _headers)
           .timeout(ApiConstants.timeout);
       if (r.statusCode == 200) {
         final body = json.decode(r.body);
         final data = body is Map ? body['data'] : null;
         if (data is Map) {
           final artist = ArtistItem.fromJson(Map<String, dynamic>.from(data));
-          final songs = data['topSongs'] is List ? _parseSumitSongs(data['topSongs']) : <SongModel>[];
+          
+          var songs = data['topSongs'] is List
+              ? _parseSumitSongs(data['topSongs'])
+              : data['songs'] is List
+                  ? _parseSumitSongs(data['songs'])
+                  : <SongModel>[];
+
           final albums = data['topAlbums'] is List
               ? (data['topAlbums'] as List).whereType<Map>().map((e) => AlbumItem.fromJson(Map<String, dynamic>.from(e))).toList()
               : <AlbumItem>[];
+
+          // If we got fewer than 15 songs, let's fetch more songs from the artist songs endpoint!
+          if (songs.length < 15) {
+            try {
+              final String numericId = isAlphanumeric ? (data['id']?.toString() ?? id) : id;
+              final songsResponse = await _client
+                  .get(Uri.parse('${ApiConstants.fallbackBaseUrl}/artists/$numericId/songs?limit=25'), headers: _headers)
+                  .timeout(ApiConstants.timeout);
+              if (songsResponse.statusCode == 200) {
+                final sBody = json.decode(songsResponse.body);
+                final sData = sBody is Map ? sBody['data'] : null;
+                if (sData != null) {
+                  final list = sData is List ? sData : (sData is Map ? sData['songs'] : null);
+                  if (list is List) {
+                    final sumitSongs = _parseSumitSongs(list);
+                    if (sumitSongs.isNotEmpty) {
+                      songs = sumitSongs;
+                    }
+                  }
+                }
+              }
+            } catch (_) {}
+          }
           return (artist: artist, songs: songs, albums: albums);
         }
       }
@@ -499,4 +544,22 @@ class ApiService {
     }
   }
 
+  Future<List<SongModel>> getRecommendations(String songId) async {
+    if (songId.isEmpty) return [];
+    try {
+      final uri = Uri.parse('https://www.jiosaavn.com/api.php?__call=reco.getreco&pid=$songId&_format=json&ctx=android&api_version=4');
+      final r = await _get(uri);
+      if (r != null) {
+        final data = json.decode(r.body);
+        if (data is Map && data[songId] is List) {
+          return (data[songId] as List)
+              .whereType<Map>()
+              .map((e) => SongModel.fromSaavnReco(Map<String, dynamic>.from(e), quality: _quality))
+              .where((s) => s.id.isNotEmpty)
+              .toList();
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
 }

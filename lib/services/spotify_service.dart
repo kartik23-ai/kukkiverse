@@ -69,14 +69,90 @@ class SpotifyService {
     return token;
   }
 
-  /// Fetch playlist tracks (up to 100) and construct a PlaylistModel
+  /// Fetch playlist tracks (up to 5000 songs) prioritizing official API first, fallback to Embed API (up to 100)
   Future<PlaylistModel> syncPlaylist(String playlistUrl) async {
     final playlistId = extractPlaylistId(playlistUrl);
     if (playlistId == null || playlistId.isEmpty) {
       throw Exception('Invalid Spotify playlist URL. Make sure it contains a valid playlist ID.');
     }
 
-    // 1. Try public embed page first (requires no authentication and bypasses Client Credentials limitations)
+    // 1. Try official Spotify API first (if credentials are set up)
+    if (AppSecrets.hasSpotify) {
+      try {
+        final token = await _getAccessToken();
+        final url = Uri.parse('https://api.spotify.com/v1/playlists/$playlistId');
+        final response = await _client.get(
+          url,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final name = data['name']?.toString() ?? 'Spotify Sync';
+          final desc = data['description']?.toString() ?? '';
+          final images = data['images'] as List?;
+          final imageUrl = (images != null && images.isNotEmpty) ? images[0]['url']?.toString() ?? '' : '';
+
+          final List<SongModel> songs = [];
+
+          // Parse tracks from initial payload
+          final tracksPayload = data['tracks'];
+          if (tracksPayload != null) {
+            final initialItems = tracksPayload['items'] as List?;
+            if (initialItems != null) {
+              _parseSpotifyItems(initialItems, songs, imageUrl);
+            }
+
+            // Loop pagination through tracks next endpoint up to 50 pages (5000 tracks total)
+            var nextUrl = tracksPayload['next']?.toString();
+            var pages = 1;
+            
+            while (nextUrl != null && nextUrl.isNotEmpty && pages < 50) {
+              try {
+                final pageRes = await _client.get(
+                  Uri.parse(nextUrl),
+                  headers: {
+                    'Authorization': 'Bearer $token',
+                    'Accept': 'application/json',
+                  },
+                ).timeout(const Duration(seconds: 8));
+
+                if (pageRes.statusCode != 200) break;
+
+                final pageData = json.decode(pageRes.body);
+                final pageItems = pageData['items'] as List?;
+                if (pageItems != null) {
+                  _parseSpotifyItems(pageItems, songs, imageUrl);
+                }
+
+                nextUrl = pageData['next']?.toString();
+                pages++;
+              } catch (_) {
+                break;
+              }
+            }
+          }
+
+          if (songs.isNotEmpty) {
+            return PlaylistModel(
+              id: 'spotify_playlist_$playlistId',
+              name: name,
+              description: desc,
+              image: imageUrl,
+              songs: songs,
+            );
+          }
+        }
+      } catch (e) {
+        // Log or print warning, then proceed to official API fallback
+        print('Spotify Official API sync failed: $e. Falling back to public Embed API...');
+      }
+    }
+
+    // 2. Fallback to public embed page (returns first 100 tracks without credentials)
     try {
       final embedUrl = Uri.parse('https://open.spotify.com/embed/playlist/$playlistId');
       final embedResponse = await _client.get(
@@ -143,80 +219,47 @@ class SpotifyService {
         }
       }
     } catch (e) {
-      // Log or print warning, then proceed to official API fallback
-      print('Spotify Embed sync failed: $e. Falling back to official API...');
+      print('Spotify Embed sync failed: $e');
     }
 
-    // 2. Fallback to official Spotify API (using user's credentials)
-    final token = await _getAccessToken();
+    throw Exception('Failed to fetch Spotify playlist. Make sure:\n1. The playlist is PUBLIC (not private).\n2. The URL is correct and active.\n3. It is not a Spotify Curated/Editorial playlist (ID starting with 37i9dQZF).\n\nWorkaround: If the playlist is private, open its settings in Spotify and make it public. If it is a curated playlist, copy its tracks to your own public playlist first!');
+  }
 
-    // Fetch playlist details and tracks
-    final url = Uri.parse('https://api.spotify.com/v1/playlists/$playlistId');
-    final response = await _client.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    ).timeout(const Duration(seconds: 15));
+  void _parseSpotifyItems(List items, List<SongModel> targetList, String defaultImg) {
+    for (final item in items) {
+      final track = item['track'];
+      if (track == null) continue;
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to fetch Spotify playlist (Status: ${response.statusCode}). Make sure it is public.');
+      final trackId = track['id']?.toString();
+      if (trackId == null || trackId.isEmpty) continue;
+
+      final trackName = track['name']?.toString() ?? 'Unknown Track';
+      
+      final artistsList = track['artists'] as List?;
+      final artistNames = (artistsList != null)
+          ? artistsList.map((a) => a['name']?.toString() ?? '').where((n) => n.isNotEmpty).join(', ')
+          : 'Various Artists';
+
+      final albumData = track['album'];
+      final albumName = albumData?['name']?.toString() ?? 'Single';
+      final albumImages = albumData?['images'] as List?;
+      final trackImage = (albumImages != null && albumImages.isNotEmpty)
+          ? albumImages[0]['url']?.toString() ?? defaultImg
+          : defaultImg;
+
+      final durationMs = int.tryParse(track['duration_ms']?.toString() ?? '0') ?? 0;
+
+      targetList.add(
+        SongModel(
+          id: 'spotify_track_$trackId',
+          title: trackName,
+          artist: artistNames.isNotEmpty ? artistNames : 'Unknown Artist',
+          album: albumName,
+          image: trackImage,
+          duration: Duration(milliseconds: durationMs),
+          url: '', // Will be dynamically resolved on play
+        ),
+      );
     }
-
-    final data = json.decode(response.body);
-    final name = data['name']?.toString() ?? 'Spotify Sync';
-    final desc = data['description']?.toString() ?? '';
-    final images = data['images'] as List?;
-    final imageUrl = (images != null && images.isNotEmpty) ? images[0]['url']?.toString() ?? '' : '';
-
-    final tracksData = data['tracks']?['items'] as List?;
-    final List<SongModel> songs = [];
-
-    if (tracksData != null) {
-      for (final item in tracksData) {
-        final track = item['track'];
-        if (track == null) continue;
-
-        final trackId = track['id']?.toString();
-        if (trackId == null || trackId.isEmpty) continue;
-
-        final trackName = track['name']?.toString() ?? 'Unknown Track';
-        
-        final artistsList = track['artists'] as List?;
-        final artistNames = (artistsList != null)
-            ? artistsList.map((a) => a['name']?.toString() ?? '').where((n) => n.isNotEmpty).join(', ')
-            : 'Various Artists';
-
-        final albumData = track['album'];
-        final albumName = albumData?['name']?.toString() ?? 'Single';
-        final albumImages = albumData?['images'] as List?;
-        final trackImage = (albumImages != null && albumImages.isNotEmpty)
-            ? albumImages[0]['url']?.toString() ?? imageUrl
-            : imageUrl;
-
-        final durationMs = int.tryParse(track['duration_ms']?.toString() ?? '0') ?? 0;
-
-        songs.add(
-          SongModel(
-            id: 'spotify_track_$trackId',
-            title: trackName,
-            artist: artistNames.isNotEmpty ? artistNames : 'Unknown Artist',
-            album: albumName,
-            image: trackImage,
-            duration: Duration(milliseconds: durationMs),
-            url: '', // Will be dynamically resolved on play
-          ),
-        );
-      }
-    }
-
-    return PlaylistModel(
-      id: 'spotify_playlist_$playlistId',
-      name: name,
-      description: desc,
-      image: imageUrl,
-      songs: songs,
-    );
   }
 }

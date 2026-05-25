@@ -100,6 +100,21 @@ final searchArtistsProvider = FutureProvider.family<List<ArtistItem>, String>((r
 });
 
 final albumSongsProvider = FutureProvider.family<List<SongModel>, String>((ref, albumId) async {
+  if (albumId.startsWith('genre_')) {
+    final genreName = albumId.replaceFirst('genre_', '').trim();
+    final query = switch (genreName.toLowerCase()) {
+      'love' || 'romantic' => 'Hindi Romantic',
+      'devotional' => 'Hindi Bhajans',
+      'party' => 'Hindi Party',
+      'workout' => 'Workout Hindi',
+      'chill' => 'Hindi Lofi Chill',
+      'sad' => 'Sad Hindi',
+      'punjabi' => 'Punjabi Hits',
+      'english' => 'English Pop Hits',
+      _ => '$genreName Hits',
+    };
+    return ref.read(musicRepositoryProvider).searchSongs(query, limit: 30);
+  }
   return ref.read(musicRepositoryProvider).getAlbumSongs(albumId);
 });
 
@@ -213,6 +228,10 @@ class RecentSongsNotifier extends StateNotifier<List<SongModel>> {
     await _storage.addRecentSong(song);
     state = _storage.getRecentSongs();
   }
+  Future<void> remove(String songId) async {
+    await _storage.removeRecentSong(songId);
+    state = _storage.getRecentSongs();
+  }
 }
 
 final downloadedSongsProvider = Provider<List<SongModel>>((ref) {
@@ -227,6 +246,10 @@ final playlistsProvider = StateNotifierProvider<PlaylistNotifier, List<PlaylistM
 class PlaylistNotifier extends StateNotifier<List<PlaylistModel>> {
   final StorageService _storage;
   PlaylistNotifier(this._storage) : super(_storage.getPlaylists());
+
+  void refresh() {
+    state = _storage.getPlaylists();
+  }
 
   Future<String> create(String name, {bool isPrivate = false}) async {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
@@ -281,5 +304,9 @@ class SearchHistoryNotifier extends StateNotifier<List<String>> {
   Future<void> clear() async {
     await _storage.clearSearchHistory();
     state = [];
+  }
+  Future<void> remove(String query) async {
+    await _storage.deleteSearchHistory(query);
+    state = _storage.getSearchHistory();
   }
 }

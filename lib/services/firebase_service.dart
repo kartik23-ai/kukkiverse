@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../firebase_options.dart';
 import '../models/song_model.dart';
+import '../models/playlist_model.dart';
 import 'storage_service.dart';
 
 class FirebaseService {
@@ -21,6 +22,7 @@ class FirebaseService {
 
   bool _useRestFallback = false;
   bool get useRestFallback => _useRestFallback;
+  set useRestFallback(bool val) => _useRestFallback = val;
 
   String get userId => _uid;
 
@@ -71,34 +73,164 @@ class FirebaseService {
     }
   }
 
-  Future<UserCredential> signInWithEmail(String email, String password) async {
+  Future<void> sendPasswordResetEmail(String email) async {
     if (_useRestFallback) {
-      throw UnsupportedError('Auth is not supported on desktop REST fallback.');
+      final apiKey = DefaultFirebaseOptions.android.apiKey;
+      final url = Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'requestType': 'PASSWORD_RESET',
+          'email': email.trim(),
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        final errBody = json.decode(response.body);
+        final errMsg = errBody['error']?['message']?.toString() ?? 'Failed to send reset email';
+        throw FirebaseAuthException(
+          code: errMsg.toLowerCase().replaceAll('_', '-'),
+          message: errMsg,
+        );
+      }
+      return;
     }
+
+    _ensureReady();
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException {
+      rethrow;
+    } catch (e) {
+      final apiKey = DefaultFirebaseOptions.android.apiKey;
+      final url = Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'requestType': 'PASSWORD_RESET',
+          'email': email.trim(),
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        throw FirebaseAuthException(
+          code: 'reset-failed',
+          message: 'Reset request failed. Check internet connection.',
+        );
+      }
+    }
+  }
+
+  Future<dynamic> signInWithEmail(String email, String password) async {
+    if (_useRestFallback) {
+      final apiKey = DefaultFirebaseOptions.android.apiKey;
+      final url = Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': email.trim(),
+          'password': password,
+          'returnSecureToken': true,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        final errBody = json.decode(response.body);
+        final errMsg = errBody['error']?['message']?.toString() ?? 'Sign in failed';
+        throw FirebaseAuthException(
+          code: errMsg.toLowerCase().replaceAll('_', '-'),
+          message: errMsg,
+        );
+      }
+
+      final resData = json.decode(response.body);
+      final localId = resData['localId'] as String;
+
+      // Save customSyncId to StorageService to link Windows database to email account
+      await StorageService().setCustomSyncId(localId);
+      await StorageService().setProfileName(email.split('@').first);
+      await StorageService().setProfileEmail(email);
+
+      await _ensureUserProfile(email: email.trim());
+      await syncUserData();
+      await syncAllLocalPlaylistsToCloud();
+      await restoreCloudPlaylists();
+      return null;
+    }
+
     _ensureReady();
     final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
+    await StorageService().setProfileEmail(email);
     await _ensureUserProfile(email: email.trim());
     await syncUserData();
+    await syncAllLocalPlaylistsToCloud();
+    await restoreCloudPlaylists();
     return cred;
   }
 
-  Future<UserCredential> signUpWithEmail({
+  Future<dynamic> signUpWithEmail({
     required String email,
     required String password,
     String? phone,
     String? displayName,
   }) async {
     if (_useRestFallback) {
-      throw UnsupportedError('Auth is not supported on desktop REST fallback.');
+      final apiKey = DefaultFirebaseOptions.android.apiKey;
+      final url = Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': email.trim(),
+          'password': password,
+          'returnSecureToken': true,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        final errBody = json.decode(response.body);
+        final errMsg = errBody['error']?['message']?.toString() ?? 'Sign up failed';
+        throw FirebaseAuthException(
+          code: errMsg.toLowerCase().replaceAll('_', '-'),
+          message: errMsg,
+        );
+      }
+
+      final resData = json.decode(response.body);
+      final localId = resData['localId'] as String;
+
+      // Save customSyncId to StorageService to link Windows database to email account
+      await StorageService().setCustomSyncId(localId);
+      await StorageService().setProfileEmail(email);
+      if (displayName != null && displayName.trim().isNotEmpty) {
+        await StorageService().setProfileName(displayName.trim());
+      } else {
+        await StorageService().setProfileName(email.split('@').first);
+      }
+
+      await _ensureUserProfile(
+        email: email.trim(),
+        phone: phone?.trim(),
+        displayName: displayName ?? email.split('@').first,
+      );
+      await syncUserData();
+      await syncAllLocalPlaylistsToCloud();
+      await restoreCloudPlaylists();
+      return null;
     }
+
     _ensureReady();
     final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
+    await StorageService().setProfileEmail(email);
     if (displayName != null && displayName.trim().isNotEmpty) {
       await cred.user?.updateDisplayName(displayName.trim());
     }
@@ -108,12 +240,16 @@ class FirebaseService {
       displayName: displayName ?? email.split('@').first,
     );
     await syncUserData();
+    await syncAllLocalPlaylistsToCloud();
+    await restoreCloudPlaylists();
     return cred;
   }
 
-  Future<UserCredential> signInAsGuest() async {
+  Future<dynamic> signInAsGuest() async {
     if (_useRestFallback) {
-      throw UnsupportedError('Auth is not supported on desktop REST fallback.');
+      await StorageService().setProfileName('Guest');
+      await _ensureUserProfile(displayName: 'Guest');
+      return null;
     }
     _ensureReady();
     final cred = await FirebaseAuth.instance.signInAnonymously();
@@ -122,8 +258,13 @@ class FirebaseService {
   }
 
   Future<void> signOut() async {
-    if (!_ready || _useRestFallback) return;
-    await FirebaseAuth.instance.signOut();
+    if (!_ready) return;
+    if (!_useRestFallback) {
+      await FirebaseAuth.instance.signOut();
+    }
+    // Securely clear supporter status locally on logout
+    await StorageService().setIsSupporter(false);
+    await StorageService().setProfileEmail('');
   }
 
   Future<void> _ensureUserProfile({String? email, String? phone, String? displayName}) async {
@@ -217,6 +358,10 @@ class FirebaseService {
     }
     if (data == null) return;
     final storage = StorageService();
+
+    // Pull and restore supporter status from cloud document
+    final isSupporterCloud = data['is_supporter'] as bool? ?? false;
+    await storage.setIsSupporter(isSupporterCloud);
     final dislikes = data['dislikedIds'];
     if (dislikes is List) {
       await storage.setDislikedSongIds(dislikes.whereType<String>().toSet());
@@ -256,6 +401,7 @@ class FirebaseService {
         await FirestoreRestClient.setDoc('party_rooms/$code', data);
       }
     }
+    await addMemberToPartyRoom(code);
     return code;
   }
 
@@ -275,28 +421,54 @@ class FirebaseService {
         if (doc == null) throw StateError('Party room not found');
       }
     }
+    await addMemberToPartyRoom(code);
   }
 
-  Stream<List<SongModel>> watchPartyQueue(String code) async* {
-    if (!_ready) return;
+  Stream<List<SongModel>> watchPartyQueue(String code) {
+    if (!_ready) return const Stream.empty();
     if (_useRestFallback) {
-      yield* _watchPartyQueueRest(code);
-      return;
+      return _watchPartyQueueRest(code);
     }
-    try {
-      yield* db!.collection('party_rooms').doc(code).snapshots().map((snap) {
-        final q = snap.data()?['queue'];
-        if (q is! List) return <SongModel>[];
-        return q
-            .whereType<Map>()
-            .map((e) => SongModel.fromHive(Map<String, dynamic>.from(e)))
-            .toList();
-      });
-    } catch (e) {
-      debugPrint('Firestore native watchPartyQueue stream error: $e. Falling back to REST.');
-      _useRestFallback = true;
-      yield* _watchPartyQueueRest(code);
+    
+    final controller = StreamController<List<SongModel>>();
+    StreamSubscription? sub;
+    
+    void startListen() {
+      sub = db!.collection('party_rooms').doc(code).snapshots().listen(
+        (snap) {
+          try {
+            final q = snap.data()?['queue'];
+            if (q is! List) {
+              controller.add(<SongModel>[]);
+              return;
+            }
+            final list = q
+                .whereType<Map>()
+                .map((e) => SongModel.fromHive(Map<String, dynamic>.from(e)))
+                .toList();
+            controller.add(list);
+          } catch (e) {
+            controller.addError(e);
+          }
+        },
+        onError: (err) {
+          debugPrint('watchPartyQueue native error: $err. Switching to REST.');
+          _useRestFallback = true;
+          sub?.cancel();
+          _watchPartyQueueRest(code).listen(
+            (event) => controller.add(event),
+            onError: (e) => controller.addError(e),
+          );
+        },
+      );
     }
+
+    controller.onListen = startListen;
+    controller.onCancel = () {
+      sub?.cancel();
+    };
+    
+    return controller.stream;
   }
 
   Stream<List<SongModel>> _watchPartyQueueRest(String code) {
@@ -312,34 +484,61 @@ class FirebaseService {
     }).asBroadcastStream();
   }
 
-  Stream<FirebasePartyRoom> watchPartyRoom(String code) async* {
-    if (!_ready) return;
+  Stream<FirebasePartyRoom> watchPartyRoom(String code) {
+    if (!_ready) return const Stream.empty();
     if (_useRestFallback) {
-      yield* _watchPartyRoomRest(code);
-      return;
+      return _watchPartyRoomRest(code);
     }
-    try {
-      yield* db!.collection('party_rooms').doc(code).snapshots().map((snap) {
-        final data = snap.data() ?? {};
-        final q = data['queue'];
-        final queue = q is List
-            ? q
-                .whereType<Map>()
-                .map((e) => SongModel.fromHive(Map<String, dynamic>.from(e)))
-                .toList()
-            : <SongModel>[];
-        final np = data['nowPlaying'];
-        final nowPlaying = np is Map
-            ? SongModel.fromHive(Map<String, dynamic>.from(np))
-            : null;
-        final isPlaying = data['isPlaying'] as bool? ?? false;
-        return FirebasePartyRoom(queue: queue, nowPlaying: nowPlaying, isPlaying: isPlaying);
-      });
-    } catch (e) {
-      debugPrint('Firestore native watchPartyRoom stream error: $e. Falling back to REST.');
-      _useRestFallback = true;
-      yield* _watchPartyRoomRest(code);
+    
+    final controller = StreamController<FirebasePartyRoom>();
+    StreamSubscription? sub;
+    
+    void startListen() {
+      sub = db!.collection('party_rooms').doc(code).snapshots().listen(
+        (snap) {
+          try {
+            final data = snap.data() ?? {};
+            final q = data['queue'];
+            final queue = q is List
+                ? q
+                    .whereType<Map>()
+                    .map((e) => SongModel.fromHive(Map<String, dynamic>.from(e)))
+                    .toList()
+                : <SongModel>[];
+            final np = data['nowPlaying'];
+            final nowPlaying = np is Map
+                ? SongModel.fromHive(Map<String, dynamic>.from(np))
+                : null;
+            final isPlaying = data['isPlaying'] as bool? ?? false;
+            final hostId = data['hostId'] as String?;
+            controller.add(FirebasePartyRoom(
+              queue: queue,
+              nowPlaying: nowPlaying,
+              isPlaying: isPlaying,
+              hostId: hostId,
+            ));
+          } catch (e) {
+            controller.addError(e);
+          }
+        },
+        onError: (err) {
+          debugPrint('watchPartyRoom native error: $err. Switching to REST.');
+          _useRestFallback = true;
+          sub?.cancel();
+          _watchPartyRoomRest(code).listen(
+            (event) => controller.add(event),
+            onError: (e) => controller.addError(e),
+          );
+        },
+      );
     }
+
+    controller.onListen = startListen;
+    controller.onCancel = () {
+      sub?.cancel();
+    };
+    
+    return controller.stream;
   }
 
   Stream<FirebasePartyRoom> _watchPartyRoomRest(String code) {
@@ -357,7 +556,8 @@ class FirebaseService {
           ? SongModel.fromHive(Map<String, dynamic>.from(np))
           : null;
       final isPlaying = data['isPlaying'] as bool? ?? false;
-      return FirebasePartyRoom(queue: queue, nowPlaying: nowPlaying, isPlaying: isPlaying);
+      final hostId = data['hostId'] as String?;
+      return FirebasePartyRoom(queue: queue, nowPlaying: nowPlaying, isPlaying: isPlaying, hostId: hostId);
     }).asBroadcastStream();
   }
 
@@ -444,7 +644,8 @@ class FirebaseService {
           'minVersion': data['minVersion'] as String?,
         };
       }
-      final snap = await db!.collection('app_config').doc('status').get();
+      final snap = await db!.collection('app_config').doc('status').get()
+          .timeout(const Duration(seconds: 3));
       if (!snap.exists) return {'enabled': true};
       final data = snap.data() ?? {};
       return {
@@ -461,17 +662,311 @@ class FirebaseService {
   void _ensureReady() {
     if (!_ready) throw StateError('Firebase not initialized');
   }
+
+  Future<void> syncPlaylist(Map<String, dynamic> playlistJson, String playlistId) async {
+    if (!_ready) return;
+    if (_useRestFallback) {
+      await FirestoreRestClient.setDoc('users/$_uid/playlists/$playlistId', playlistJson);
+    } else {
+      try {
+        await db!.collection('users').doc(_uid).collection('playlists').doc(playlistId).set(playlistJson);
+      } catch (e) {
+        debugPrint('Firestore native syncPlaylist error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        await FirestoreRestClient.setDoc('users/$_uid/playlists/$playlistId', playlistJson);
+      }
+    }
+  }
+
+  Future<void> deleteCloudPlaylist(String playlistId) async {
+    if (!_ready) return;
+    if (_useRestFallback) {
+      await FirestoreRestClient.deleteDoc('users/$_uid/playlists/$playlistId');
+    } else {
+      try {
+        await db!.collection('users').doc(_uid).collection('playlists').doc(playlistId).delete();
+      } catch (e) {
+        debugPrint('Firestore native deleteCloudPlaylist error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        await FirestoreRestClient.deleteDoc('users/$_uid/playlists/$playlistId');
+      }
+    }
+  }
+
+  Future<void> restoreCloudPlaylists() async {
+    if (!_ready) return;
+    List<Map<String, dynamic>> cloudPlaylists = [];
+    if (_useRestFallback) {
+      cloudPlaylists = await FirestoreRestClient.listDocs('users/$_uid/playlists');
+    } else {
+      try {
+        final snap = await db!.collection('users').doc(_uid).collection('playlists').get();
+        cloudPlaylists = snap.docs.map((doc) => doc.data()).toList();
+      } catch (e) {
+        debugPrint('Firestore native restoreCloudPlaylists error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        cloudPlaylists = await FirestoreRestClient.listDocs('users/$_uid/playlists');
+      }
+    }
+    
+    final storage = StorageService();
+    for (final data in cloudPlaylists) {
+      try {
+        final playlist = PlaylistModel.fromJson(data);
+        await storage.savePlaylist(playlist, syncToCloud: false);
+      } catch (e) {
+        debugPrint('Error restoring playlist: $e');
+      }
+    }
+  }
+
+  Future<void> syncAllLocalPlaylistsToCloud() async {
+    if (!_ready) return;
+    try {
+      final storage = StorageService();
+      final localPlaylists = storage.getPlaylists();
+      debugPrint('ROTTY CLOUD SYNC: Syncing ${localPlaylists.length} local playlists to email account...');
+      for (final playlist in localPlaylists) {
+        await syncPlaylist(playlist.toJson(), playlist.id);
+      }
+      debugPrint('ROTTY CLOUD SYNC: Local playlists upload complete!');
+    } catch (e) {
+      debugPrint('ROTTY CLOUD SYNC ERROR: $e');
+    }
+  }
+
+  Future<void> addMemberToPartyRoom(String code) async {
+    if (!_ready) return;
+    final name = StorageService().profileName.isEmpty ? 'Guest' : StorageService().profileName;
+    final data = {
+      'uid': _uid,
+      'name': name,
+      'joinedAt': _useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
+    };
+    if (_useRestFallback) {
+      await FirestoreRestClient.setDoc('party_rooms/$code/members/$_uid', data);
+    } else {
+      try {
+        await db!.collection('party_rooms').doc(code).collection('members').doc(_uid).set(data);
+      } catch (e) {
+        debugPrint('Firestore native addMemberToPartyRoom error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        await FirestoreRestClient.setDoc('party_rooms/$code/members/$_uid', data);
+      }
+    }
+  }
+
+  Future<void> removeMemberFromPartyRoom(String code) async {
+    if (!_ready) return;
+    if (_useRestFallback) {
+      await FirestoreRestClient.deleteDoc('party_rooms/$code/members/$_uid');
+    } else {
+      try {
+        await db!.collection('party_rooms').doc(code).collection('members').doc(_uid).delete();
+      } catch (e) {
+        debugPrint('Firestore native removeMemberFromPartyRoom error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        await FirestoreRestClient.deleteDoc('party_rooms/$code/members/$_uid');
+      }
+    }
+  }
+
+  Future<void> kickMemberFromPartyRoom(String code, String targetUid) async {
+    if (!_ready) return;
+    if (_useRestFallback) {
+      await FirestoreRestClient.deleteDoc('party_rooms/$code/members/$targetUid');
+    } else {
+      try {
+        await db!.collection('party_rooms').doc(code).collection('members').doc(targetUid).delete();
+      } catch (e) {
+        debugPrint('Firestore native kickMemberFromPartyRoom error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        await FirestoreRestClient.deleteDoc('party_rooms/$code/members/$targetUid');
+      }
+    }
+  }
+
+  Stream<bool> watchSelfMemberStatus(String code) {
+    if (!_ready) return Stream.value(false);
+    if (_useRestFallback) {
+      return _watchSelfMemberStatusRest(code);
+    }
+    
+    final controller = StreamController<bool>();
+    StreamSubscription? sub;
+    
+    void startListen() {
+      sub = db!.collection('party_rooms').doc(code).collection('members').doc(_uid).snapshots().listen(
+        (snap) {
+          controller.add(snap.exists);
+        },
+        onError: (err) {
+          debugPrint('watchSelfMemberStatus native error: $err. Switching to REST.');
+          _useRestFallback = true;
+          sub?.cancel();
+          _watchSelfMemberStatusRest(code).listen(
+            (event) => controller.add(event),
+            onError: (e) => controller.addError(e),
+          );
+        },
+      );
+    }
+
+    controller.onListen = startListen;
+    controller.onCancel = () {
+      sub?.cancel();
+    };
+    
+    return controller.stream;
+  }
+
+  Stream<bool> _watchSelfMemberStatusRest(String code) {
+    return Stream.periodic(const Duration(seconds: 4)).asyncMap((_) async {
+      final doc = await FirestoreRestClient.getDoc('party_rooms/$code/members/$_uid');
+      return doc != null;
+    }).asBroadcastStream();
+  }
+
+  Stream<List<FirebasePartyMember>> watchPartyMembers(String code) {
+    if (!_ready) return const Stream.empty();
+    if (_useRestFallback) {
+      return _watchPartyMembersRest(code);
+    }
+    
+    final controller = StreamController<List<FirebasePartyMember>>();
+    StreamSubscription? sub;
+    
+    void startListen() {
+      sub = db!.collection('party_rooms').doc(code).collection('members').snapshots().listen(
+        (snap) {
+          try {
+            final members = snap.docs.map((doc) {
+              final data = doc.data();
+              return FirebasePartyMember(
+                uid: data['uid'] as String? ?? doc.id,
+                name: data['name'] as String? ?? 'Guest',
+              );
+            }).toList();
+            controller.add(members);
+          } catch (e) {
+            controller.addError(e);
+          }
+        },
+        onError: (err) {
+          debugPrint('watchPartyMembers native error: $err. Switching to REST.');
+          _useRestFallback = true;
+          sub?.cancel();
+          _watchPartyMembersRest(code).listen(
+            (event) => controller.add(event),
+            onError: (e) => controller.addError(e),
+          );
+        },
+      );
+    }
+
+    controller.onListen = startListen;
+    controller.onCancel = () {
+      sub?.cancel();
+    };
+    
+    return controller.stream;
+  }
+
+  Stream<List<FirebasePartyMember>> _watchPartyMembersRest(String code) {
+    return Stream.periodic(const Duration(seconds: 4)).asyncMap((_) async {
+      final list = await FirestoreRestClient.listDocs('party_rooms/$code/members');
+      return list.map((m) {
+        return FirebasePartyMember(
+          uid: m['uid'] as String? ?? m['id'] as String? ?? '',
+          name: m['name'] as String? ?? 'Guest',
+        );
+      }).toList();
+    }).asBroadcastStream();
+  }
+
+  Future<void> updateUserSupporterStatus(bool isSupporter) async {
+    try {
+      if (_useRestFallback) {
+        await FirestoreRestClient.setDoc('users/$_uid', {'is_supporter': isSupporter}, merge: true);
+      } else {
+        final firestore = db;
+        if (firestore != null) {
+          await firestore.collection('users').doc(_uid).set({
+            'is_supporter': isSupporter,
+          }, SetOptions(merge: true));
+        }
+      }
+      debugPrint('ROTTY FIREBASE: Supporter status updated successfully');
+    } catch (e) {
+      debugPrint('ROTTY FIREBASE: Error updating supporter status: $e');
+    }
+  }
+
+  Future<void> updateUserDisplayName(String name) async {
+    try {
+      if (_useRestFallback) {
+        await FirestoreRestClient.setDoc('users/$_uid', {'displayName': name}, merge: true);
+      } else {
+        final firestore = db;
+        if (firestore != null) {
+          await firestore.collection('users').doc(_uid).set({
+            'displayName': name,
+          }, SetOptions(merge: true));
+        }
+      }
+      debugPrint('ROTTY FIREBASE: Display name updated successfully');
+    } catch (e) {
+      debugPrint('ROTTY FIREBASE: Error updating display name: $e');
+    }
+  }
+
+  bool get isAdmin {
+    if (!_ready) return false;
+    final email = _useRestFallback 
+        ? null
+        : FirebaseAuth.instance.currentUser?.email;
+    final savedEmail = StorageService().profileEmail;
+    final activeEmail = email ?? savedEmail;
+    return activeEmail.toLowerCase().trim() == 'kartikchauhan0509@gmail.com';
+  }
+
+  Future<void> submitPendingPayment(String email, String utr) async {
+    final data = {
+      'uid': _uid,
+      'email': email.trim(),
+      'utr': utr.trim(),
+      'status': 'pending',
+      'submittedAt': DateTime.now().toIso8601String(),
+    };
+    if (_useRestFallback) {
+      await FirestoreRestClient.setDoc('payments_pending/${utr.trim()}', data);
+    } else {
+      await FirebaseFirestore.instance.collection('payments_pending').doc(utr.trim()).set(data);
+    }
+  }
 }
 
 class FirebasePartyRoom {
   final List<SongModel> queue;
   final SongModel? nowPlaying;
   final bool isPlaying;
+  final String? hostId;
 
   FirebasePartyRoom({
     required this.queue,
     this.nowPlaying,
     this.isPlaying = false,
+    this.hostId,
+  });
+}
+
+class FirebasePartyMember {
+  final String uid;
+  final String name;
+
+  FirebasePartyMember({
+    required this.uid,
+    required this.name,
   });
 }
 
@@ -541,10 +1036,12 @@ class FirestoreRestClient {
           result[k] = decode(Map<String, dynamic>.from(v));
         });
         return result;
+      } else {
+        debugPrint('REST getDoc error for $path: HTTP ${response.statusCode} - ${response.body}');
       }
       return null;
     } catch (e) {
-      debugPrint('REST getDoc error for $path: $e');
+      debugPrint('REST getDoc exception for $path: $e');
       return null;
     }
   }
@@ -563,21 +1060,27 @@ class FirestoreRestClient {
           url += '&updateMask.fieldPaths=$key';
         }
       }
-      await http.patch(
+      final response = await http.patch(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: body,
       ).timeout(const Duration(seconds: 8));
+      if (response.statusCode >= 400) {
+        debugPrint('REST setDoc error for $path: HTTP ${response.statusCode} - ${response.body}');
+      }
     } catch (e) {
-      debugPrint('REST setDoc error for $path: $e');
+      debugPrint('REST setDoc exception for $path: $e');
     }
   }
 
   static Future<void> deleteDoc(String path) async {
     try {
-      await http.delete(Uri.parse('$baseUrl/$path?key=$apiKey')).timeout(const Duration(seconds: 8));
+      final response = await http.delete(Uri.parse('$baseUrl/$path?key=$apiKey')).timeout(const Duration(seconds: 8));
+      if (response.statusCode >= 400) {
+        debugPrint('REST deleteDoc error for $path: HTTP ${response.statusCode} - ${response.body}');
+      }
     } catch (e) {
-      debugPrint('REST deleteDoc error for $path: $e');
+      debugPrint('REST deleteDoc exception for $path: $e');
     }
   }
 
@@ -601,10 +1104,12 @@ class FirestoreRestClient {
           list.add(map);
         }
         return list;
+      } else {
+        debugPrint('REST listDocs error for $collectionPath: HTTP ${response.statusCode} - ${response.body}');
       }
       return [];
     } catch (e) {
-      debugPrint('REST listDocs error for $collectionPath: $e');
+      debugPrint('REST listDocs exception for $collectionPath: $e');
       return [];
     }
   }
@@ -616,13 +1121,16 @@ class FirestoreRestClient {
         fields[k] = encode(v);
       });
       final body = json.encode({'fields': fields});
-      await http.post(
+      final response = await http.post(
         Uri.parse('$baseUrl/$collectionPath?key=$apiKey'),
         headers: {'Content-Type': 'application/json'},
         body: body,
       ).timeout(const Duration(seconds: 8));
+      if (response.statusCode >= 400) {
+        debugPrint('REST addDoc error for $collectionPath: HTTP ${response.statusCode} - ${response.body}');
+      }
     } catch (e) {
-      debugPrint('REST addDoc error for $collectionPath: $e');
+      debugPrint('REST addDoc exception for $collectionPath: $e');
     }
   }
 
@@ -677,6 +1185,5 @@ class FirestoreRestClient {
       debugPrint('REST queryCollection error: $e');
       return [];
     }
-  }
-}
+  }}
 

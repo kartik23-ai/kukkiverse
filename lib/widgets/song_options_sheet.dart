@@ -178,6 +178,25 @@ class _SongOptionsSheet extends ConsumerWidget {
                 Navigator.pop(context);
               },
             ),
+            // Remove from Recents
+            if (ref.read(recentSongsProvider).any((s) => s.id == song.id))
+              _OptionTile(
+                icon: Icons.history_rounded,
+                label: 'Remove from Recents',
+                subtitle: 'Remove from continuous listening',
+                color: Colors.white60,
+                onTap: () {
+                  ref.read(recentSongsProvider.notifier).remove(song.id);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Removed "${song.title}" from continuous listening'),
+                      backgroundColor: const Color(0xFF1A1A2E),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
             const SizedBox(height: 12),
           ],
         ),
@@ -217,7 +236,7 @@ class _SongOptionsSheet extends ConsumerWidget {
                         style: TextButton.styleFrom(foregroundColor: AppColors.accent),
                         onPressed: () {
                           Navigator.pop(ctx);
-                          _showCreatePlaylist(context, ref, song);
+                          _showCreatePlaylist(context, watchRef, song);
                         },
                       ),
                     ],
@@ -494,6 +513,18 @@ class _SongOptionsDialog extends ConsumerWidget {
               Navigator.pop(context);
             },
           ),
+          if (ref.read(recentSongsProvider).any((s) => s.id == song.id))
+            _OptionTile(
+              icon: Icons.history_rounded,
+              label: 'Remove from Recents',
+              subtitle: 'Remove from continuous listening',
+              color: Colors.white60,
+              onTap: () {
+                ref.read(recentSongsProvider.notifier).remove(song.id);
+                Navigator.pop(context);
+                _showSnackBar(context, 'Removed "${song.title}" from continuous listening');
+              },
+            ),
           const SizedBox(height: 12),
         ],
       ),
@@ -544,7 +575,7 @@ void _showDesktopPlaylistPicker(BuildContext context, WidgetRef ref, SongModel s
                           style: TextButton.styleFrom(foregroundColor: AppColors.accent),
                           onPressed: () {
                             Navigator.pop(ctx);
-                            _showDesktopCreatePlaylist(context, ref, song);
+                            _showDesktopCreatePlaylist(context, watchRef, song);
                           },
                         ),
                       ],

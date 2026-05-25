@@ -158,6 +158,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.history_rounded, color: AppColors.textTertiary),
                 title: Text(q, style: GoogleFonts.inter(color: Colors.white)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close_rounded, color: AppColors.textTertiary, size: 18),
+                  onPressed: () => ref.read(searchHistoryProvider.notifier).remove(q),
+                ),
                 onTap: () {
                   _input.text = q;
                   _submit(q);
@@ -274,7 +278,7 @@ Widget _songList(BuildContext context, WidgetRef ref, List<SongModel> songs) {
         song: s,
         isPlaying: currentSong?.id == s.id,
         onTap: () async {
-          await playSongWithContext(ref, s, playlist: songs);
+          await playSongWithContext(ref, s);
           if (context.mounted) context.push('/player');
         },
         onMore: () => showSongOptionsSheet(context, ref, s),

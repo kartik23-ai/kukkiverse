@@ -87,8 +87,8 @@ class RemotePlaybackState {
       title: map['title'],
       artist: map['artist'],
       image: map['image'],
-      positionMs: map['positionMs'] ?? 0,
-      durationMs: map['durationMs'] ?? 0,
+      positionMs: (map['positionMs'] as num?)?.toInt() ?? 0,
+      durationMs: (map['durationMs'] as num?)?.toInt() ?? 0,
       isPlaying: map['isPlaying'] ?? false,
       updatedAt: _parseDateTime(map['updatedAt']),
     );
@@ -270,7 +270,7 @@ class RottyConnectService {
           if (from == _deviceId) continue;
           
           final action = doc['action'] as String?;
-          final value = doc['value'] as int?;
+          final value = (doc['value'] as num?)?.toInt();
           if (action != null) {
             final cmd = ConnectCommand.values.firstWhere(
               (c) => c.name == action,
@@ -296,7 +296,7 @@ class RottyConnectService {
           if (data == null) continue;
           if (data['from'] == _deviceId) continue;
           final action = data['action'] as String?;
-          final value = data['value'] as int?;
+          final value = (data['value'] as num?)?.toInt();
           if (action != null) {
             final cmd = ConnectCommand.values.firstWhere(
               (c) => c.name == action,

@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../models/song_model.dart';
 import '../providers/providers.dart';
 import '../providers/feature_providers.dart';
@@ -38,11 +39,13 @@ Future<void> playSongWithContext(
 
   final room = ref.read(partyRoomProvider);
   if (room.code != null) {
-    await ref.read(partyRoomProvider.notifier).addSong(track);
-    await ref.read(partyRoomProvider.notifier).updatePlayback(track, true);
+    if (room.isHost) {
+      await ref.read(partyRoomProvider.notifier).setQueue(queue);
+      await ref.read(partyRoomProvider.notifier).updatePlayback(track, true);
+    } else {
+      await ref.read(partyRoomProvider.notifier).addSong(track);
+    }
   }
-
-
 }
 
 Future<void> refreshAiQueue(WidgetRef ref) async {
@@ -62,5 +65,53 @@ Future<void> refreshAiQueue(WidgetRef ref) async {
   final filtered = smart.where((s) => !blocked.contains(s.id)).toList();
   if (filtered.isNotEmpty) {
     await handler.appendUpcoming(filtered);
+  }
+}
+
+Future<void> navigateToArtist(BuildContext context, WidgetRef ref, String artistName) async {
+  final cleanName = artistName.split(RegExp(r'[,&]')).first.trim();
+  if (cleanName.isEmpty) return;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => const Center(
+      child: CircularProgressIndicator(color: Color(0xFFFA2D48)),
+    ),
+  );
+
+  try {
+    final repo = ref.read(musicRepositoryProvider);
+    final results = await repo.searchArtists(cleanName);
+    if (context.mounted) Navigator.pop(context); // Dismiss loading dialog
+
+    if (results.isNotEmpty) {
+      final artist = results.first;
+      if (context.mounted) {
+        context.push('/artist/${artist.id}', extra: {
+          'name': artist.name,
+          'image': artist.image,
+        });
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Artist "$cleanName" not found'),
+            backgroundColor: const Color(0xFF16162A),
+          ),
+        );
+      }
+    }
+  } catch (e) {
+    if (context.mounted) Navigator.pop(context); // Dismiss loading dialog
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading artist: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 }

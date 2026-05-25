@@ -13,6 +13,8 @@ import '../screens/lyrics/lyrics_screen.dart';
 import '../screens/lyrics/lyrics_clip_studio.dart';
 import '../screens/playlist/playlist_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/settings/about_screen.dart';
+import '../screens/settings/support_screen.dart';
 import '../screens/album/album_screen.dart';
 import '../screens/artist/artist_screen.dart';
 import '../screens/queue/queue_screen.dart';
@@ -23,6 +25,7 @@ import '../screens/party/party_sync_screen.dart';
 import '../screens/memory/memory_lane_screen.dart';
 import '../screens/wrapped/weekly_wrapped_screen.dart';
 import '../screens/labs/labs_hub_screen.dart';
+import '../screens/admin/admin_dashboard_screen.dart';
 import '../screens/labs/studio_lab_screen.dart';
 import '../screens/labs/time_machine_screen.dart';
 import '../screens/labs/sleep_oracle_screen.dart';
@@ -49,7 +52,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/home', builder: (context, __) {
       return LayoutBuilder(
         builder: (context, constraints) {
-          if (constraints.maxWidth > 900) {
+          if (Theme.of(context).platform == TargetPlatform.windows || constraints.maxWidth > 900) {
             return const DesktopShell();
           }
           return const MainScreen();
@@ -126,6 +129,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/wrapped', pageBuilder: (_, __) => rottyPage(child: const WeeklyWrappedScreen(), from: AxisDirection.up)),
     GoRoute(path: '/library', builder: (_, __) => const PlaylistScreen()),
     GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+    GoRoute(path: '/admin', pageBuilder: (_, __) => rottyPage(child: const AdminDashboardScreen(), from: AxisDirection.right)),
     GoRoute(path: '/labs', pageBuilder: (_, __) => rottyPage(child: const LabsHubScreen(), from: AxisDirection.right)),
     GoRoute(path: '/labs/studio', pageBuilder: (_, __) => rottyPage(child: const StudioLabScreen(), from: AxisDirection.right)),
     GoRoute(path: '/labs/time-machine', pageBuilder: (_, __) => rottyPage(child: const TimeMachineScreen(), from: AxisDirection.right)),
@@ -146,5 +150,13 @@ final appRouter = GoRouter(
     GoRoute(path: '/drive', pageBuilder: (_, __) => rottyPage(child: const NightDriveScreen(), from: AxisDirection.up)),
     GoRoute(path: '/focus', pageBuilder: (_, __) => rottyPage(child: const FocusScreen(), from: AxisDirection.up)),
     GoRoute(path: '/sleep', pageBuilder: (_, __) => rottyPage(child: const SleepScreen(), from: AxisDirection.up)),
+    GoRoute(
+      path: '/about',
+      pageBuilder: (_, __) => rottyPage(child: const AboutScreen(), from: AxisDirection.right),
+    ),
+    GoRoute(
+      path: '/support',
+      pageBuilder: (_, __) => rottyPage(child: const SupportScreen(), from: AxisDirection.right),
+    ),
   ],
 );

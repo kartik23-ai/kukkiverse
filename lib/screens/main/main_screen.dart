@@ -5,7 +5,9 @@ import '../home/home_screen.dart';
 import '../search/search_screen.dart';
 import '../playlist/playlist_screen.dart';
 import '../settings/settings_screen.dart';
+import '../../widgets/party_lock_overlay.dart';
 import '../../widgets/mini_player.dart';
+import '../../widgets/first_launch_support_overlay.dart';
 import '../../widgets/elite_background.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/mode_theme.dart';
@@ -14,6 +16,7 @@ import '../../core/modes/app_mode.dart';
 import '../../providers/providers.dart';
 import '../../providers/premium_providers.dart';
 import '../../providers/feature_providers.dart';
+import '../../services/notification_service.dart';
 
 class MainScreen extends ConsumerWidget {
   const MainScreen({super.key});
@@ -27,15 +30,20 @@ class MainScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService.instance.initialize(context, ref);
+    });
     final tab = ref.watch(mainTabIndexProvider);
     final mode = ref.watch(appModeProvider);
     final mt = ModeTheme(mode);
     final tt = ref.watch(timeThemeProvider);
+    final showOverlay = ref.watch(supportOverlayVisibilityProvider);
+    final party = ref.watch(partyRoomProvider);
 
     // Blend mode bg with time-of-day bg
     final dynamicBg = mode == RottyAppMode.normal ? tt.bgDeep : mt.bg;
 
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: dynamicBg,
       body: AnimatedContainer(
         duration: ModeTheme.transitionDuration,
@@ -102,12 +110,18 @@ class MainScreen extends ConsumerWidget {
                     switchInCurve: Curves.easeOutCubic,
                     switchOutCurve: Curves.easeInCubic,
                     transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
-                    child: switch (tab) {
-                      0 => const HomeScreen(key: ValueKey('tab_home')),
-                      1 => const SearchScreen(key: ValueKey('tab_search'), embedded: true),
-                      2 => const PlaylistScreen(key: ValueKey('tab_lib')),
-                      _ => const SettingsScreen(key: ValueKey('tab_set'), embedded: true),
-                    },
+                    child: (party.code != null && (tab == 0 || tab == 1 || tab == 2))
+                        ? PartyLockOverlay(
+                            key: const ValueKey('tab_party_lock'),
+                            roomCode: party.code!,
+                            isHost: party.isHost,
+                          )
+                        : switch (tab) {
+                            0 => const HomeScreen(key: ValueKey('tab_home')),
+                            1 => const SearchScreen(key: ValueKey('tab_search'), embedded: true),
+                            2 => const PlaylistScreen(key: ValueKey('tab_lib')),
+                            _ => const SettingsScreen(key: ValueKey('tab_set'), embedded: true),
+                          },
                   ),
                 ),
                 const MiniPlayer(),
@@ -182,6 +196,16 @@ class MainScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (showOverlay)
+          FirstLaunchSupportOverlay(
+            onDismissed: () => ref.read(supportOverlayVisibilityProvider.notifier).dismiss(),
+          ),
+      ],
     );
   }
 }

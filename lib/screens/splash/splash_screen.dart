@@ -22,6 +22,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   bool _killed = false;
   bool _isUpdateRequired = false;
   String _killMessage = '';
+  bool _showGuestPrompt = false;
 
   @override
   void initState() {
@@ -64,7 +65,20 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _checkAndNavigate() async {
     final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
-    final status = await FirebaseService.instance.checkKillSwitch();
+    // Quick offline detection to prevent startup freeze/delay
+    bool online = true;
+    try {
+      final result = await InternetAddress.lookup('firestore.googleapis.com')
+          .timeout(const Duration(milliseconds: 1500));
+      online = result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+    } catch (_) {
+      online = false;
+    }
+
+    Map<String, dynamic> status = {'enabled': true};
+    if (online) {
+      status = await FirebaseService.instance.checkKillSwitch();
+    }
     final minVersion = status['minVersion'] as String?;
     final isOutdated = _isVersionOutdated(AppConstants.version, minVersion);
 
@@ -83,15 +97,19 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Wait for animation
     await Future.delayed(const Duration(milliseconds: 2200));
     if (!mounted) return;
-    _goNext(isDesktop);
+
+    final storage = StorageService();
+    final isGuest = !storage.authSessionDone;
+    if (isGuest && storage.profileName.isEmpty) {
+      setState(() {
+        _showGuestPrompt = true;
+      });
+    } else {
+      _goNext();
+    }
   }
 
-  void _goNext([bool isDesktop = false]) {
-    // On desktop, skip auth/onboarding — go straight to home
-    if (isDesktop) {
-      context.go('/home');
-      return;
-    }
+  void _goNext() {
     final storage = StorageService();
     if (!storage.authSessionDone) {
       context.go('/auth');
@@ -112,12 +130,143 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     return Scaffold(
       backgroundColor: const Color(0xFF050508),
       body: RottyAuroraBackground(
         intensity: 1.2,
         child: Center(
-          child: _killed ? _maintenanceView() : _splashView(),
+          child: _killed
+              ? _maintenanceView()
+              : (_showGuestPrompt
+                  ? _guestPromptView(isDesktop)
+                  : _splashView()),
+        ),
+      ),
+    );
+  }
+
+  Widget _guestPromptView(bool isDesktop) {
+    final TextEditingController nameCtrl = TextEditingController();
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.all(32),
+        constraints: const BoxConstraints(maxWidth: 400),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          color: Colors.white.withValues(alpha: 0.03),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accent.withValues(alpha: 0.15),
+              blurRadius: 40,
+              spreadRadius: -10,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFA2D48), Color(0xFF7B61FF)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accent.withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.face_retouching_natural_rounded, color: Colors.white, size: 36),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Welcome to Rotty! 🎵',
+              style: GoogleFonts.outfit(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'What should we call you?',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.white.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: nameCtrl,
+              autofocus: true,
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                hintText: 'Enter your name...',
+                hintStyle: GoogleFonts.inter(color: Colors.white30, fontSize: 13),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.04),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () async {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) return;
+                  final storage = StorageService();
+                  await storage.setProfileName(name);
+                  try {
+                    if (FirebaseService.instance.isReady && FirebaseService.instance.currentUser != null) {
+                      await FirebaseService.instance.currentUser?.updateDisplayName(name);
+                    }
+                  } catch (_) {}
+                  _goNext();
+                },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "LET'S GO",
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

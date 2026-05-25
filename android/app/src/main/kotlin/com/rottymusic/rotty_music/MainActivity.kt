@@ -80,6 +80,24 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // ── OTA Channel ──
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.rottymusic.rotty_music/ota").setMethodCallHandler { call, result ->
+            if (call.method == "installApk") {
+                val path = call.argument<String>("path") ?: run {
+                    result.error("invalid", "path required", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val success = installApk(path)
+                    result.success(success)
+                } catch (e: Exception) {
+                    result.error("install_failed", e.message, null)
+                }
+            } else {
+                result.notImplemented()
+            }
+        }
     }
 
     private fun getUpiApps(): List<Map<String, Any?>> {
@@ -171,5 +189,26 @@ class MainActivity : FlutterActivity() {
         } else {
             result.success(response)
         }
+    }
+
+    private fun installApk(filePath: String): Boolean {
+        val file = java.io.File(filePath)
+        if (!file.exists()) return false
+
+        val context = applicationContext
+        val intent = Intent(Intent.ACTION_VIEW)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val authority = "${context.packageName}.fileprovider"
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+            intent.setDataAndType(uri, "application/vnd.android.package-archive")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } else {
+            intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive")
+        }
+
+        context.startActivity(intent)
+        return true
     }
 }

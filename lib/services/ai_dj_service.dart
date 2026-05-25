@@ -139,12 +139,38 @@ class AiDjService {
     int limit = 25,
   }) async {
     final hour = DateTime.now().hour;
-    final insight = analyze(
+    
+    // Evaluate active session mood override (from last 10 tracks)
+    var activeVibeMood = analyze(
       nowPlaying: nowPlaying,
       recent: recent,
       favorites: favorites,
       hour: hour,
-    );
+    ).mood;
+
+    if (recent.isNotEmpty) {
+      final sessionCount = min(10, recent.length);
+      final sessionSample = recent.take(sessionCount).toList();
+      var romanticCount = 0;
+      var energeticCount = 0;
+      var chillCount = 0;
+      var sadCount = 0;
+      for (final s in sessionSample) {
+        final lower = '${s.title} ${s.artist}'.toLowerCase();
+        if (_hasAny(lower, ['love', 'dil', 'romantic', 'heart', 'mohabbat', 'pyar', 'ishq'])) romanticCount++;
+        if (_hasAny(lower, ['party', 'dance', 'dj', 'remix', 'club', 'hits', 'punjabi', 'gabru'])) energeticCount++;
+        if (_hasAny(lower, ['lofi', 'chill', 'acoustic', 'ambient', 'peaceful'])) chillCount++;
+        if (_hasAny(lower, ['sad', 'raat', 'akh', 'tear', 'dard', 'alone', 'broken'])) sadCount++;
+      }
+      
+      final maxVibe = [romanticCount, energeticCount, chillCount, sadCount].reduce(max);
+      if (maxVibe >= 2) {
+        if (maxVibe == romanticCount) activeVibeMood = AiMood.romantic;
+        else if (maxVibe == energeticCount) activeVibeMood = AiMood.energetic;
+        else if (maxVibe == chillCount) activeVibeMood = AiMood.chill;
+        else if (maxVibe == sadCount) activeVibeMood = AiMood.night;
+      }
+    }
 
     final excludeIdSet = Set<String>.from(excludeIds);
     final excludeFingerprints = <String>{};
@@ -157,75 +183,68 @@ class AiDjService {
       excludeFingerprints.add(_fingerprint(s));
     }
 
-    final queries = <String>[];
     final result = <SongModel>[];
     final isIndian = nowPlaying != null ? _isIndianVibe(nowPlaying) : true;
+
+    // A. Native V4 Collaborative Recommendations (Primary Source)
+    if (nowPlaying != null) {
+      try {
+        debugPrint('ROTTY SMART RECO ENGINE: Pulling V4 Android recommendations for "${nowPlaying.title}"...');
+        final nativeRecommended = await _api.getRecommendations(nowPlaying.id);
+        if (nativeRecommended.isNotEmpty) {
+          for (final s in nativeRecommended) {
+            if (result.length >= limit) break;
+            if (s.id.isEmpty || excludeIdSet.contains(s.id)) continue;
+            if (_isIndianVibe(s) != isIndian) continue;
+            final fp = _fingerprint(s);
+            if (excludeFingerprints.contains(fp)) continue;
+            
+            excludeIdSet.add(s.id);
+            excludeFingerprints.add(fp);
+            result.add(s);
+          }
+        }
+      } catch (e) {
+        debugPrint('ROTTY SMART RECO ENGINE: Native Mobile Recommendations failed ($e)');
+      }
+      
+      excludeIdSet.add(nowPlaying.id);
+      excludeFingerprints.add(_fingerprint(nowPlaying));
+    }
+
+    // B. Smart Queries & Fallbacks
+    final queries = <String>[];
     bool useLocalFallback = true;
 
-    // 1. Contextual recommendations from Groq
-    if (nowPlaying != null) {
+    if (nowPlaying != null && result.length < limit) {
       try {
         final groqQ = await _groq.suggestSearchQueries(
           nowPlayingTitle: nowPlaying.title,
           nowPlayingArtist: nowPlaying.artist,
-          moodLabel: insight.mood.label,
+          moodLabel: activeVibeMood.label,
           recentTitles: recent.map((s) => s.title).toList(),
         );
         if (groqQ.isNotEmpty) {
           queries.addAll(groqQ);
           useLocalFallback = false;
         }
-      } catch (e) {
-        debugPrint('ROTTY AI: Groq unavailable ($e). Falling back to local engine...');
-      }
+      } catch (_) {}
 
       if (useLocalFallback) {
-        // Local rules-based recommendation engine
         final primaryArtist = nowPlaying.artist.split(RegExp(r'[,&]')).first.trim();
         queries.add('$primaryArtist popular');
         queries.add('$primaryArtist hits');
-        queries.add('$primaryArtist songs');
-        
-        if (nowPlaying.album.isNotEmpty && nowPlaying.album != 'Single') {
-          queries.add(nowPlaying.album);
-          queries.add('$primaryArtist ${nowPlaying.album}');
-        }
-
-        // Fetch matching local items directly
-        final localCandidates = <SongModel>[];
-        for (final s in favorites) {
-          if (_isIndianVibe(s) == isIndian && !excludeIdSet.contains(s.id) && !excludeFingerprints.contains(_fingerprint(s))) {
-            localCandidates.add(s);
-          }
-        }
-        for (final s in recent) {
-          if (_isIndianVibe(s) == isIndian && !excludeIdSet.contains(s.id) && !excludeFingerprints.contains(_fingerprint(s))) {
-            localCandidates.add(s);
-          }
-        }
-        localCandidates.shuffle(_rng);
-        for (final s in localCandidates.take(5)) {
-          excludeIdSet.add(s.id);
-          excludeFingerprints.add(_fingerprint(s));
-          result.add(s);
-        }
-      } else {
-        final primaryArtist = nowPlaying.artist.split(RegExp(r'[,&]')).first.trim();
-        queries.add('$primaryArtist hits');
         if (nowPlaying.album.isNotEmpty && nowPlaying.album != 'Single') {
           queries.add(nowPlaying.album);
         }
       }
-
-      excludeIdSet.add(nowPlaying.id);
-      excludeFingerprints.add(_fingerprint(nowPlaying));
     }
 
-    // 2. Mood queries (Language Locked)
-    String moodQuery = insight.mood.searchQuery;
+    // Mood query based on dynamic session vibe evaluation
+    String moodQuery = activeVibeMood.searchQuery;
     if (!isIndian) {
-      moodQuery = switch (insight.mood) {
-        AiMood.energetic => 'workout dance pop hits workout',
+      moodQuery = switch (activeVibeMood) {
+        AiMood.energetic => 'workout dance pop hits english',
         AiMood.chill => 'lofi study chill acoustic english',
         AiMood.romantic => 'romantic pop love songs english',
         AiMood.focus => 'ambient focus study post-rock lofi',
@@ -235,7 +254,7 @@ class AiDjService {
     }
     queries.add(moodQuery);
 
-    // 3. Favorites-based artist queries
+    // Add popular songs from user's absolute favorite artists
     if (favorites.isNotEmpty) {
       final favArtists = favorites
           .map((s) => s.artist)
@@ -243,26 +262,24 @@ class AiDjService {
           .toSet()
           .toList()
         ..shuffle(_rng);
-      for (final a in favArtists.take(2)) {
+      for (final a in favArtists.take(3)) {
         final primary = a.split(RegExp(r'[,&]')).first.trim();
-        queries.add('$primary popular songs');
+        queries.add('$primary hits');
       }
     }
 
-    // 4. Language-locked variety fallbacks
+    // Language-locked diversity filters
     if (isIndian) {
       queries.addAll([
-        'trending hindi songs ${DateTime.now().year}',
+        'trending hindi songs',
         'latest bollywood hits',
-        'new indie hindi songs',
-        'punjabi latest hits',
+        'punjabi popular hits',
       ]);
     } else {
       queries.addAll([
-        'billboard hot 100',
-        'trending pop songs ${DateTime.now().year}',
+        'billboard top hits',
+        'trending pop songs',
         'viral hits english',
-        'indie pop rock hits',
       ]);
     }
 
@@ -276,18 +293,14 @@ class AiDjService {
       usedQueries.add(q);
 
       try {
-        final songs = await _api.searchSongs(rawQ.trim(), limit: 15, page: 1);
+        final songs = await _api.searchSongs(rawQ.trim(), limit: 12, page: 1);
         if (songs.isEmpty) continue;
 
         final shuffled = List<SongModel>.from(songs)..shuffle(_rng);
         
         for (final s in shuffled) {
           if (result.length >= limit) break;
-          if (s.id.isEmpty) continue;
-          
-          if (excludeIdSet.contains(s.id)) continue;
-          
-          // Strict language vibe filter
+          if (s.id.isEmpty || excludeIdSet.contains(s.id)) continue;
           if (nowPlaying != null && _isIndianVibe(s) != isIndian) continue;
 
           final fp = _fingerprint(s);
@@ -298,9 +311,7 @@ class AiDjService {
           addedFingerprints.add(fp);
           result.add(s);
         }
-      } catch (_) {
-        continue;
-      }
+      } catch (_) {}
     }
 
     result.shuffle(_rng);
