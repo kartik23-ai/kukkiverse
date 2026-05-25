@@ -333,13 +333,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
             onTap: () => context.push('/about'), // Open direct to About Rotty screen
           ),
-          ListTile(
-            leading: const Icon(Icons.admin_panel_settings_rounded, color: Colors.cyanAccent),
-            title: Text('Admin Control Panel', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text('Manage live users, VIP roles & system notifications', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-            onTap: () => context.push('/admin'),
-          ),
+
           ListTile(
             leading: const Icon(Icons.logout_rounded, color: AppColors.accent),
             title: Text('Sign out', style: GoogleFonts.inter(color: AppColors.accent, fontWeight: FontWeight.w600)),
