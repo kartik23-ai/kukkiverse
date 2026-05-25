@@ -29,7 +29,7 @@ class UpdateService extends ChangeNotifier {
   static final UpdateService instance = UpdateService._();
 
   static const String currentVersion = '1.1.0';
-  static const String versionJsonUrl = 'https://kukkiverse.github.io/website/version_info.json';
+  static const String versionJsonUrl = 'https://kartik23-ai.github.io/kukkiverse/version_info.json';
 
   bool _isLockActive = false;
   bool get isLockActive => _isLockActive;
