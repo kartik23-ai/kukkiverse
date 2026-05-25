@@ -8,11 +8,11 @@ import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
 import android.net.Uri
 import android.os.Build
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     private val channelName = "com.rottymusic.rotty_music/upi"
     private val flashChannel = "com.rottymusic.rotty_music/flashlight"
     private val requestCode = 99127
