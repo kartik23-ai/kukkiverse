@@ -324,9 +324,9 @@ body, html {
 /* Download Container */
 .download-container {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1.5rem;
-    max-width: 580px;
+    max-width: 860px;
     margin-bottom: 2rem;
 }
 
@@ -404,6 +404,18 @@ body, html {
     background: var(--accent-green);
     color: #020204;
     box-shadow: 0 8px 30px var(--neon-glow-green);
+}
+
+.web-btn {
+    background: rgba(250, 45, 120, 0.08);
+    border: 1px solid rgba(250, 45, 120, 0.25);
+    color: #FF2E93;
+}
+
+.web-btn:hover {
+    background: #FF2E93;
+    color: #fff;
+    box-shadow: 0 8px 30px rgba(250, 45, 120, 0.4);
 }
 
 /* System Diagnostics */
