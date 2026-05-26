@@ -8,6 +8,8 @@ import { NowPlayingPanel, LyricsPane, QueuePane, ConnectPane } from './component
 import { AuthModal } from './components/AuthModal';
 import { LibrarySyncService } from './services/librarySync';
 import { SongOptionsMenu } from './components/SongOptionsMenu';
+import { PwaInstallPrompt } from './components/PwaInstallPrompt';
+
 
 // Views
 import { Home } from './views/Home';
@@ -900,7 +902,9 @@ const AppContent: React.FC = () => {
       )}
 
       {isAuthOpen && <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />}
+      <PwaInstallPrompt />
     </div>
+
   );
 };
 
