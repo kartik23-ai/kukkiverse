@@ -16,12 +16,14 @@
  */
 
 const express  = require('express');
+const cors     = require('cors');
 const crypto   = require('crypto');
 const https    = require('https');
 const http     = require('http');
 const url      = require('url');
 
 const app = express();
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // ─── Rate Limiting (in-memory, simple) ─────────────────────────────
@@ -260,6 +262,81 @@ app.post('/api/stream', async (req, res) => {
   return res.json({ d: encryptPayload(streamUrl) });
 });
 
+// POST /api/spotify-sync
+app.post('/api/spotify-sync', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  let playlistId = '';
+  const trimmedUrl = url.trim();
+  if (trimmedUrl.startsWith('spotify:playlist:')) {
+    playlistId = trimmedUrl.substring('spotify:playlist:'.length);
+  } else {
+    const match = trimmedUrl.match(/playlist\/([a-zA-Z0-9]{22})/);
+    if (match) {
+      playlistId = match[1];
+    }
+  }
+
+  if (!playlistId) return res.status(400).json({ error: 'invalid_spotify_url' });
+
+  try {
+    const embedUrl = `https://open.spotify.com/embed/playlist/${playlistId}`;
+    const response = await fetchUrl(embedUrl, {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+    });
+
+    const html = response.body;
+    const scriptMatch = html.match(/<script\s+id="resource"\s+type="application\/json">(.*?)<\/script>/s)
+      || html.match(/<script\s+id="initial-state"\s+type="application\/json">(.*?)<\/script>/s)
+      || html.match(/<script\s+id="__NEXT_DATA__"\s+type="application\/json">(.*?)<\/script>/s);
+
+    if (scriptMatch) {
+      const jsonStr = scriptMatch[1].trim();
+      const decoded = JSON.parse(jsonStr);
+      const state = decoded.props?.pageProps?.state || decoded.state;
+      const entity = state?.data?.entity;
+
+      if (entity) {
+        const name = entity.name || 'Spotify Sync';
+        const desc = entity.subtitle || '';
+        const images = entity.coverArt?.sources || [];
+        const imageUrl = images.length > 0 ? images[0].url || '' : '';
+        const trackList = entity.trackList || [];
+
+        const songs = trackList.map((item) => {
+          const uri = item.uri || '';
+          const trackId = uri.split(':').pop() || '';
+          return {
+            id: `spotify_track_${trackId}`,
+            title: item.title || 'Unknown Track',
+            artist: item.subtitle || 'Unknown Artist',
+            album: 'Spotify Playlist',
+            image: imageUrl,
+            duration: Math.floor((Number(item.duration) || 0) / 1000),
+            url: ''
+          };
+        }).filter((s) => s.id);
+
+        const playlist = {
+          id: `spotify_playlist_${playlistId}`,
+          name,
+          description: desc,
+          image: imageUrl,
+          songs
+        };
+
+        return res.json({ d: encryptPayload(JSON.stringify(playlist)) });
+      }
+    }
+
+    return res.status(404).json({ error: 'playlist_not_found_or_private' });
+  } catch (e) {
+    return res.status(500).json({ error: e.message || 'internal_server_error' });
+  }
+});
+
 // POST /api/lyrics
 app.post('/api/lyrics', async (req, res) => {
   const { title, artist, duration = 0 } = req.body;
@@ -291,6 +368,42 @@ app.post('/api/home', async (req, res) => {
     } catch (_) { sections[key] = []; }
   }
   return res.json({ d: encryptPayload(JSON.stringify(sections)) });
+});
+
+// POST /api/recommendations — Get song recommendations
+app.post('/api/recommendations', async (req, res) => {
+  const { id, limit = 15 } = req.body;
+  if (!id) return res.status(400).json({ error: 'id required' });
+
+  try {
+    const qs = new URLSearchParams({
+      __call: 'reco.getreco',
+      _format: 'json',
+      ctx: 'web6dot0',
+      pid: id,
+      api_version: '4',
+      n: String(limit),
+    });
+    const r = await fetchUrl(`https://www.jiosaavn.com/api.php?${qs}`, {
+      Referer: 'https://www.jiosaavn.com',
+    });
+    if (r.status === 200) {
+      const list = JSON.parse(r.body);
+      const sanitized = (Array.isArray(list) ? list : []).map(s => ({
+        id: s.id || '',
+        title: s.song || s.title || '',
+        artist: s.primary_artists || s.subtitle || '',
+        album: s.album || '',
+        image: (s.image || '').replace('http://', 'https://'),
+        duration: Number(s.duration) || 0,
+        language: s.language || '',
+      })).filter(s => s.id);
+
+      return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
+    }
+  } catch (_) {}
+
+  return res.status(404).json({ error: 'recommendations_not_found' });
 });
 
 // POST /api/details — Get song details

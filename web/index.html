@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- PWA primary configs -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#FA2D48" />
+    
+    <!-- iOS meta tags for custom PWA standalone app support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Rotty Music" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    
+    <title>ROTTY MUSIC - Web Player</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Service Worker registration script -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('Rotty ServiceWorker registered successfully with scope: ', registration.scope);
+            })
+            .catch((err) => {
+              console.error('Rotty ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
