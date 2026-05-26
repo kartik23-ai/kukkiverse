@@ -104,7 +104,8 @@ function decryptDesEcb(ciphertextBase64: string): string {
 // Extract media URL
 function extractMediaUrl(song: any) {
   // 1. Try to decrypt the encrypted media URL first
-  const encUrl = song.encrypted_media_url || song.encrypted_media_path;
+  const info = song.more_info || song;
+  const encUrl = info.encrypted_media_url || song.encrypted_media_url || info.encrypted_media_path || song.encrypted_media_path;
   if (encUrl) {
     const decrypted = decryptDesEcb(encUrl);
     if (decrypted) {
@@ -117,7 +118,7 @@ function extractMediaUrl(song: any) {
   }
 
   // 2. Fallback to media_preview_url
-  const mediaPreviewUrl = song.media_preview_url || '';
+  const mediaPreviewUrl = info.media_preview_url || song.media_preview_url || '';
   if (!mediaPreviewUrl) return '';
   let url = mediaPreviewUrl.replace('http:', 'https:');
   url = url.replace('_96_p.mp4', '_320.mp4').replace('_96.mp4', '_320.mp4');
@@ -203,6 +204,7 @@ export default defineConfig({
                     image: (s.image || '').replace('http://', 'https://'),
                     duration: Number(s.duration) || 0,
                     language: s.language || '',
+                    url: extractMediaUrl(s)
                   })).filter((s: any) => s.id);
                   
                   res.writeHead(200);
@@ -314,6 +316,7 @@ export default defineConfig({
                     image: (s.image || '').replace('http://', 'https://'),
                     duration: Number(s.duration) || 0,
                     language: s.language || '',
+                    url: extractMediaUrl(s)
                   })).filter((s: any) => s.id);
                   
                   res.writeHead(200);
@@ -441,6 +444,7 @@ export default defineConfig({
                         image: (s.image || '').replace('http://', 'https://'),
                         duration: Number(s.duration) || 0,
                         language: s.language || '',
+                        url: extractMediaUrl(s)
                       })).filter((s: any) => s.id);
                     } catch (_) {
                       sections[key] = [];

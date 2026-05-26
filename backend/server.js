@@ -21,6 +21,7 @@ const crypto   = require('crypto');
 const https    = require('https');
 const http     = require('http');
 const url      = require('url');
+const CryptoJS = require('crypto-js');
 
 const app = express();
 app.use(cors({ origin: '*' }));
@@ -151,10 +152,43 @@ async function saavnFallbackSearch(query, limit = 25) {
   return body?.data?.results || [];
 }
 
+function decryptDesEcb(ciphertextBase64) {
+  if (!ciphertextBase64) return '';
+  try {
+    const key = CryptoJS.enc.Utf8.parse('38346591');
+    const decrypted = CryptoJS.DES.decrypt(
+      { ciphertext: CryptoJS.enc.Base64.parse(ciphertextBase64) },
+      key,
+      {
+        mode: CryptoJS.mode.ECB,
+        padding: CryptoJS.pad.Pkcs7
+      }
+    );
+    return decrypted.toString(CryptoJS.enc.Utf8);
+  } catch (e) {
+    console.error('DES decryption error:', e);
+    return '';
+  }
+}
+
 function extract320Url(song) {
   if (!song) return null;
 
-  // 1. Try Sumit API downloadUrl array first
+  // 1. Try to decrypt the encrypted media URL first
+  const info = song.more_info || song;
+  const encUrl = info.encrypted_media_url || song.encrypted_media_url || info.encrypted_media_path || song.encrypted_media_path;
+  if (encUrl) {
+    const decrypted = decryptDesEcb(encUrl);
+    if (decrypted) {
+      let finalUrl = decrypted.replace('_96.mp4', '_320.mp4');
+      if (finalUrl.includes('preview.saavncdn.com')) {
+        finalUrl = finalUrl.replace('preview.saavncdn.com', 'aac.saavncdn.com');
+      }
+      return finalUrl;
+    }
+  }
+
+  // 2. Try Sumit API downloadUrl array first
   if (Array.isArray(song.downloadUrl)) {
     const h = song.downloadUrl.find(d => d.quality === '320kbps') ||
               song.downloadUrl.find(d => d.quality === '160kbps') ||
@@ -163,8 +197,7 @@ function extract320Url(song) {
     if (url) return url;
   }
 
-  // 2. Fallback to media_preview_url with domain replacement
-  const info = song.more_info || song;
+  // 3. Fallback to media_preview_url with domain replacement
   const preview = info.media_preview_url || song.media_preview_url;
   if (preview) {
     let url = preview.replace('http:', 'https:');
@@ -232,6 +265,7 @@ app.post('/api/search', async (req, res) => {
     image   : (s.image || '').replace('http://', 'https://'),
     duration: s.duration || s.more_info?.duration || 0,
     language: s.language || '',
+    url     : extract320Url(s)
   })).filter(s => s.id);
 
   return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
@@ -376,6 +410,7 @@ app.post('/api/home', async (req, res) => {
         album: s.album || '', image: (s.image || '').replace('http://', 'https://'),
         duration: s.duration || s.more_info?.duration || 0,
         language: s.language || '',
+        url: extract320Url(s)
       })).filter(s => s.id);
     } catch (_) { sections[key] = []; }
   }
@@ -409,6 +444,7 @@ app.post('/api/recommendations', async (req, res) => {
         image: (s.image || '').replace('http://', 'https://'),
         duration: Number(s.duration) || 0,
         language: s.language || '',
+        url: extract320Url(s)
       })).filter(s => s.id);
 
       return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
