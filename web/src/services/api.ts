@@ -45,7 +45,7 @@ export async function decryptPayload(payload: string): Promise<string> {
     const ivBytes = base64ToBytes(parts[0]);
     const cipherBytes = base64ToBytes(parts[1]);
     
-    const secretKey = 'rotty-ghost-key-32chars-xxxxxxxx';
+    const secretKey = import.meta.env.VITE_ROTTY_SECRET_KEY || 'rotty-ghost-key-32chars-xxxxxxxx';
     const keyBytes = new TextEncoder().encode(secretKey);
     
     // Import raw key data into SubtleCrypto key
