@@ -444,23 +444,20 @@ app.post('/api/details', async (req, res) => {
 
   try {
     let song = null;
-    if (isSumit) {
-      const data = rawData.data || rawData;
-      if (Array.isArray(data) && data.length > 0) {
-        song = data[0];
-      } else if (data && typeof data === 'object') {
-        song = data;
-      }
-    } else {
-      const data = rawData;
-      if (Array.isArray(data) && data.length > 0) {
-        song = data[0];
-      } else if (data && data.songs && data.songs.length > 0) {
-        song = data.songs[0];
-      } else if (data && typeof data === 'object') {
-        const keys = Object.keys(data);
-        if (keys.length > 0 && data[keys[0]] && data[keys[0]].id) {
-          song = data[keys[0]];
+    if (Array.isArray(rawData) && rawData.length > 0) {
+      song = rawData[0];
+    } else if (rawData && Array.isArray(rawData.songs) && rawData.songs.length > 0) {
+      song = rawData.songs[0];
+    } else if (rawData && Array.isArray(rawData.data) && rawData.data.length > 0) {
+      song = rawData.data[0];
+    } else if (rawData && typeof rawData === 'object') {
+      const keys = Object.keys(rawData);
+      if (keys.length > 0) {
+        const first = rawData[keys[0]];
+        if (first && (first.id || first.songid)) {
+          song = first;
+        } else if (rawData.id || rawData.songid) {
+          song = rawData;
         }
       }
     }
