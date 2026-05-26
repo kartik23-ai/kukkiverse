@@ -15,7 +15,7 @@ const isLocal = typeof window !== 'undefined' &&
    window.location.hostname.startsWith('192.168.'));
 
 // Dynamic base URL fallback: uses local proxy in development, absolute Railway url in production
-const API_BASE = isLocal ? '/api' : (import.meta.env.VITE_API_URL || 'https://rotty-music.up.railway.app/api');
+const API_BASE = isLocal ? '/api' : (import.meta.env.VITE_API_URL || 'https://kukkiverse-production.up.railway.app/api');
 
 export function getApiUrl(endpoint: string): string {
   if (endpoint.startsWith('http')) return endpoint;
