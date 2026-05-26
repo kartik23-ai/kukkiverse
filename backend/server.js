@@ -411,6 +411,9 @@ app.post('/api/details', async (req, res) => {
   const { id } = req.body;
   if (!id) return res.status(400).json({ error: 'id required' });
 
+  let rawData = null;
+  let isSumit = false;
+
   try {
     const qs = new URLSearchParams({
       __call: 'song.getDetails', _format: 'json', _marker: '0',
@@ -420,17 +423,64 @@ app.post('/api/details', async (req, res) => {
       Referer: 'https://www.jiosaavn.com',
     });
     if (r.status === 200) {
-      return res.json({ d: encryptPayload(r.body) });
+      rawData = JSON.parse(r.body);
     }
   } catch (_) {}
 
   // Fallback
+  if (!rawData) {
+    try {
+      const r = await fetchUrl(`https://saavn.sumit.co/api/songs/${id}`);
+      if (r.status === 200) {
+        rawData = JSON.parse(r.body);
+        isSumit = true;
+      }
+    } catch (_) {}
+  }
+
+  if (!rawData) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
   try {
-    const r = await fetchUrl(`https://saavn.sumit.co/api/songs/${id}`);
-    if (r.status === 200) {
-      return res.json({ d: encryptPayload(r.body) });
+    let song = null;
+    if (isSumit) {
+      const data = rawData.data || rawData;
+      if (Array.isArray(data) && data.length > 0) {
+        song = data[0];
+      } else if (data && typeof data === 'object') {
+        song = data;
+      }
+    } else {
+      const data = rawData;
+      if (Array.isArray(data) && data.length > 0) {
+        song = data[0];
+      } else if (data && data.songs && data.songs.length > 0) {
+        song = data.songs[0];
+      } else if (data && typeof data === 'object') {
+        const keys = Object.keys(data);
+        if (keys.length > 0 && data[keys[0]] && data[keys[0]].id) {
+          song = data[keys[0]];
+        }
+      }
     }
-  } catch (_) {}
+
+    if (song) {
+      const sanitized = {
+        id: song.id || song.songid || '',
+        title: song.song || song.title || song.name || '',
+        artist: song.primary_artists || song.singers || song.subtitle || song.artist || 'Artist',
+        album: song.album || '',
+        image: (song.image || '').replace('http://', 'https://'),
+        duration: Number(song.duration || song.more_info?.duration) || 0,
+        language: song.language || '',
+        url: extract320Url(song)
+      };
+      return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
+    }
+  } catch (e) {
+    console.error("Error sanitizing details:", e);
+  }
 
   return res.status(404).json({ error: 'not_found' });
 });
