@@ -151,17 +151,29 @@ async function saavnFallbackSearch(query, limit = 25) {
   return body?.data?.results || [];
 }
 
-// ─── Extract 320kbps URL ──────────────────────────────────────────
 function extract320Url(song) {
+  if (!song) return null;
+
+  // 1. Try Sumit API downloadUrl array first
   if (Array.isArray(song.downloadUrl)) {
     const h = song.downloadUrl.find(d => d.quality === '320kbps') ||
+              song.downloadUrl.find(d => d.quality === '160kbps') ||
               song.downloadUrl[song.downloadUrl.length - 1];
-    if (h?.link) return h.link;
+    const url = h?.url || h?.link;
+    if (url) return url;
   }
+
+  // 2. Fallback to media_preview_url with domain replacement
   const info = song.more_info || song;
-  if (info.media_preview_url) {
-    return info.media_preview_url.replace('/preview/', '/aac/').replace('_96_p.mp4', '_320.mp4');
+  const preview = info.media_preview_url || song.media_preview_url;
+  if (preview) {
+    let url = preview.replace('http:', 'https:');
+    url = url.replace('_96_p.mp4', '_320.mp4').replace('_96.mp4', '_320.mp4');
+    url = url.replace('media-saavn.akamaized.net', 'aac.saavncdn.com');
+    url = url.replace('preview.saavncdn.com', 'aac.saavncdn.com');
+    return url;
   }
+
   if (typeof info.vlink === 'string') return info.vlink;
   return null;
 }
