@@ -127,6 +127,13 @@ function extractMediaUrl(song: any) {
   return url;
 }
 
+function upgradeImageUrl(imgUrl: string): string {
+  if (!imgUrl) return '';
+  let url = imgUrl.replace('http://', 'https://');
+  url = url.replace('150x150', '500x500').replace('50x50', '500x500');
+  return url;
+}
+
 // LRCLIB Synced Lyrics fetcher
 async function fetchLrclib(title: string, artist: string, duration = 0) {
   try {
@@ -201,7 +208,7 @@ export default defineConfig({
                     title: s.song || s.title || s.name || '',
                     artist: s.primary_artists || s.singers || s.subtitle || s.artist || 'Artist',
                     album: s.album || '',
-                    image: (s.image || '').replace('http://', 'https://'),
+                    image: upgradeImageUrl(s.image),
                     duration: Number(s.duration) || 0,
                     language: s.language || '',
                     url: extractMediaUrl(s)
@@ -243,7 +250,7 @@ export default defineConfig({
                       title: song.song || song.name || '',
                       artist: song.primary_artists || song.singers || 'Artist',
                       album: song.album || '',
-                      image: (song.image || '').replace('http://', 'https://'),
+                      image: upgradeImageUrl(song.image),
                       duration: Number(song.duration) || 0,
                       language: song.language || '',
                       url: extractMediaUrl(song)
@@ -313,7 +320,7 @@ export default defineConfig({
                     title: s.song || s.title || '',
                     artist: s.primary_artists || s.subtitle || '',
                     album: s.album || '',
-                    image: (s.image || '').replace('http://', 'https://'),
+                    image: upgradeImageUrl(s.image),
                     duration: Number(s.duration) || 0,
                     language: s.language || '',
                     url: extractMediaUrl(s)
@@ -441,7 +448,7 @@ export default defineConfig({
                         title: s.song || s.title || '',
                         artist: s.primary_artists || s.subtitle || '',
                         album: s.album || '',
-                        image: (s.image || '').replace('http://', 'https://'),
+                        image: upgradeImageUrl(s.image),
                         duration: Number(s.duration) || 0,
                         language: s.language || '',
                         url: extractMediaUrl(s)

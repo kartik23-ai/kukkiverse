@@ -171,6 +171,13 @@ function decryptDesEcb(ciphertextBase64) {
   }
 }
 
+function upgradeImageUrl(imgUrl) {
+  if (!imgUrl) return '';
+  let url = imgUrl.replace('http://', 'https://');
+  url = url.replace('150x150', '500x500').replace('50x50', '500x500');
+  return url;
+}
+
 function extract320Url(song) {
   if (!song) return null;
 
@@ -262,7 +269,7 @@ app.post('/api/search', async (req, res) => {
     title   : s.title || s.song || '',
     artist  : s.subtitle || s.primary_artists || s.artist || '',
     album   : s.album || '',
-    image   : (s.image || '').replace('http://', 'https://'),
+    image   : upgradeImageUrl(s.image),
     duration: s.duration || s.more_info?.duration || 0,
     language: s.language || '',
     url     : extract320Url(s)
@@ -407,7 +414,7 @@ app.post('/api/home', async (req, res) => {
       sections[key] = songs.slice(0, 12).map(s => ({
         id: s.id || '', title: s.title || s.song || '',
         artist: s.subtitle || s.primary_artists || '',
-        album: s.album || '', image: (s.image || '').replace('http://', 'https://'),
+        album: s.album || '', image: upgradeImageUrl(s.image),
         duration: s.duration || s.more_info?.duration || 0,
         language: s.language || '',
         url: extract320Url(s)
@@ -441,7 +448,7 @@ app.post('/api/recommendations', async (req, res) => {
         title: s.song || s.title || '',
         artist: s.primary_artists || s.subtitle || '',
         album: s.album || '',
-        image: (s.image || '').replace('http://', 'https://'),
+        image: upgradeImageUrl(s.image),
         duration: Number(s.duration) || 0,
         language: s.language || '',
         url: extract320Url(s)
@@ -516,7 +523,7 @@ app.post('/api/details', async (req, res) => {
         title: song.song || song.title || song.name || '',
         artist: song.primary_artists || song.singers || song.subtitle || song.artist || 'Artist',
         album: song.album || '',
-        image: (song.image || '').replace('http://', 'https://'),
+        image: upgradeImageUrl(song.image),
         duration: Number(song.duration || song.more_info?.duration) || 0,
         language: song.language || '',
         url: extract320Url(song)
