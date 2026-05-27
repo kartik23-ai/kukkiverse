@@ -200,16 +200,16 @@ class ApiService {
   Future<String?> getLyrics(String songId, {String? title, String? artist, int? durationSec}) async {
     if (songId.isEmpty) return null;
 
-    // 1. Try LRCLIB (time-synced karaoke lyrics) — best quality
-    if (title != null && title.isNotEmpty) {
-      final lrclib = await _fetchLrclibLyrics(title, artist ?? '', durationSec ?? 0);
-      if (lrclib != null && lrclib.trim().isNotEmpty) return lrclib;
-    }
-
-    // 2. Fallback: Backend proxy (bypasses rate limit and ISP block of lrclib.net)
+    // 1. Try Backend proxy (bypasses rate limit and ISP block of lrclib.net instantly)
     if (title != null && title.isNotEmpty) {
       final backendLyrics = await _fetchBackendLyrics(title, artist ?? '', durationSec ?? 0);
       if (backendLyrics != null && backendLyrics.trim().isNotEmpty) return backendLyrics;
+    }
+
+    // 2. Try LRCLIB (time-synced karaoke lyrics) direct
+    if (title != null && title.isNotEmpty) {
+      final lrclib = await _fetchLrclibLyrics(title, artist ?? '', durationSec ?? 0);
+      if (lrclib != null && lrclib.trim().isNotEmpty) return lrclib;
     }
 
     // 3. Fallback: JioSaavn direct
@@ -377,7 +377,7 @@ class ApiService {
           'duration': durationSec,
           'raw': true,
         }),
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -386,7 +386,9 @@ class ApiService {
           if (lyrics != null && lyrics.trim().isNotEmpty) return lyrics;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      print('Backend lyrics proxy error: $e');
+    }
     return null;
   }
 

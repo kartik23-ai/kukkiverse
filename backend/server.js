@@ -218,11 +218,30 @@ function extract320Url(song) {
   return null;
 }
 
+function cleanSearchTerm(term) {
+  return term
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\b(from|feat|featuring|remix|lofi|version|edit|cover|audio|video|lyrics|lyric|full video|original|soundtrack|ost|mp3|download|karaoke|with lyrics)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanArtist(artist) {
+  let mainArtist = artist.split(/[,&]/)[0].trim();
+  mainArtist = mainArtist.split(/\b(feat|featuring|ft)\b/i)[0].trim();
+  return mainArtist.toLowerCase();
+}
+
 // ─── LRCLIB — synced lyrics ────────────────────────────────────────
 async function fetchLrclib(title, artist, duration = 0) {
   try {
-    const q = encodeURIComponent(title);
-    const a = encodeURIComponent(artist);
+    const cleanedTitle = cleanSearchTerm(title);
+    const cleanedArtist = artist ? cleanArtist(artist) : '';
+    
+    const q = encodeURIComponent(cleanedTitle);
+    const a = encodeURIComponent(cleanedArtist);
     const res = await fetchUrl(
       `https://lrclib.net/api/search?q=${q}&artist_name=${a}`,
       { 'Lrclib-Client': 'RottyMusic v2.0' }
@@ -233,15 +252,55 @@ async function fetchLrclib(title, artist, duration = 0) {
 
     let best = null;
     let bestScore = Infinity;
+    
+    const lowerSearchTitle = cleanedTitle.toLowerCase();
+    
     for (const r of results) {
       if (!r.syncedLyrics && !r.plainLyrics) continue;
-      const durDiff = duration > 0 ? Math.abs((r.duration || 0) - duration) : 0;
-      const score   = durDiff + (r.syncedLyrics ? 0 : 100);
-      if (score < bestScore) { bestScore = score; best = r; }
+      
+      const itemTitle = cleanSearchTerm(r.trackName || '');
+      const itemArtist = cleanArtist(r.artistName || '');
+      
+      if (!itemTitle) continue;
+      
+      // Strict title validation: check word overlap
+      let isTitleMatch = false;
+      const titleWords = lowerSearchTitle.split(' ').filter(w => w.length > 2);
+      if (titleWords.length === 0) {
+        isTitleMatch = itemTitle.includes(lowerSearchTitle) || lowerSearchTitle.includes(itemTitle);
+      } else {
+        let matchCount = 0;
+        for (const word of titleWords) {
+          if (itemTitle.includes(word)) matchCount++;
+        }
+        isTitleMatch = matchCount >= Math.ceil(titleWords.length / 2);
+      }
+      
+      if (!isTitleMatch) continue; // Discard completely different songs
+      
+      const itemDur = Number(r.duration) || 0;
+      const durDiff = duration > 0 ? Math.abs(itemDur - duration) : 0;
+      if (duration > 0 && durDiff > 35) continue; // Discard completely different lengths
+      
+      let score = durDiff;
+      if (cleanedArtist && !itemArtist.includes(cleanedArtist) && !cleanedArtist.includes(itemArtist)) {
+        score += 100; // Penalty for imperfect artist matching
+      }
+      if (!r.syncedLyrics) {
+        score += 300; // Heavy penalty for unsynced lyrics
+      }
+      
+      if (score < bestScore) {
+        bestScore = score;
+        best = r;
+      }
     }
+    
     if (!best) return null;
     return best.syncedLyrics || best.plainLyrics;
-  } catch (_) { return null; }
+  } catch (_) {
+    return null;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
