@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../core/constants/api_constants.dart';
 import '../models/media_item.dart';
 import '../models/song_model.dart';
@@ -205,11 +206,17 @@ class ApiService {
       if (lrclib != null && lrclib.trim().isNotEmpty) return lrclib;
     }
 
-    // 2. Fallback: JioSaavn direct
+    // 2. Fallback: Backend proxy (bypasses rate limit and ISP block of lrclib.net)
+    if (title != null && title.isNotEmpty) {
+      final backendLyrics = await _fetchBackendLyrics(title, artist ?? '', durationSec ?? 0);
+      if (backendLyrics != null && backendLyrics.trim().isNotEmpty) return backendLyrics;
+    }
+
+    // 3. Fallback: JioSaavn direct
     final direct = await _fetchSaavnLyrics(songId);
     if (direct != null && direct.trim().isNotEmpty) return direct;
 
-    // 3. Fallback: Sumit mirror
+    // 4. Fallback: Sumit mirror
     return _fetchMirrorLyrics(songId);
   }
 
@@ -345,6 +352,68 @@ class ApiService {
       return best['plainLyrics']?.toString();
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Backend proxy for LRCLIB lyrics (bypass blocks)
+  Future<String?> _fetchBackendLyrics(String title, String artist, int durationSec) async {
+    if (title.isEmpty) return null;
+
+    final mainTitle = title.split(' - ').first.trim();
+    final cleanedTitle = _cleanSearchTerm(mainTitle);
+
+    final bool isVarious = artist.toLowerCase().contains('various artists') || artist.toLowerCase().contains('various');
+    final cleanedArtist = isVarious ? '' : _cleanArtist(artist);
+
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiConstants.backendUrl}/api/lyrics'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'title': cleanedTitle,
+          'artist': cleanedArtist,
+          'duration': durationSec,
+          'raw': true,
+        }),
+      ).timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map) {
+          final lyrics = data['lyrics']?.toString();
+          if (lyrics != null && lyrics.trim().isNotEmpty) return lyrics;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Search YouTube Music/YouTube for songs
+  Future<List<SongModel>> searchYouTube(String query) async {
+    if (query.trim().isEmpty) return [];
+    try {
+      final yt = YoutubeExplode();
+      final searchList = await yt.search.search(query).timeout(const Duration(seconds: 8));
+      final List<SongModel> songs = [];
+      
+      for (final video in searchList) {
+        songs.add(SongModel(
+          id: 'youtube_${video.id.value}',
+          title: video.title,
+          artist: video.author,
+          album: 'YouTube',
+          image: video.thumbnails.highResUrl,
+          duration: video.duration ?? const Duration(minutes: 3),
+          url: '',
+        ));
+      }
+      yt.close();
+      return songs;
+    } catch (e) {
+      print('YouTube search error: $e');
+      return [];
     }
   }
 

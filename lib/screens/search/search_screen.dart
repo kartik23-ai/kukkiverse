@@ -31,7 +31,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     _speech.initialize();
   }
 
@@ -119,13 +119,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
               indicatorColor: AppColors.accent,
               labelColor: AppColors.accent,
               unselectedLabelColor: AppColors.textTertiary,
-              tabs: const [Tab(text: 'Songs'), Tab(text: 'Albums'), Tab(text: 'Artists')],
+              tabs: const [Tab(text: 'Songs'), Tab(text: 'YouTube'), Tab(text: 'Albums'), Tab(text: 'Artists')],
             ),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
                 children: [
                   _SongsTab(query: query),
+                  _YouTubeTab(query: query),
                   _AlbumsTab(query: query),
                   _ArtistsTab(query: query),
                 ],
@@ -201,6 +202,21 @@ class _SongsTab extends ConsumerWidget {
       data: (songs) => _songList(context, ref, songs),
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
       error: (_, __) => const Center(child: Text('Error', style: TextStyle(color: Colors.white54))),
+    );
+  }
+}
+
+class _YouTubeTab extends ConsumerWidget {
+  const _YouTubeTab({required this.query});
+  final String query;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final results = ref.watch(searchYouTubeSongsProvider(query));
+    return results.when(
+      data: (songs) => _songList(context, ref, songs),
+      loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+      error: (_, __) => const Center(child: Text('Error searching YouTube', style: TextStyle(color: Colors.white54))),
     );
   }
 }

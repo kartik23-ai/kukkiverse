@@ -89,6 +89,11 @@ final searchSongsProvider = FutureProvider.family<List<SongModel>, String>((ref,
   return ref.read(musicRepositoryProvider).searchSongs(query);
 });
 
+final searchYouTubeSongsProvider = FutureProvider.family<List<SongModel>, String>((ref, query) async {
+  if (query.isEmpty) return [];
+  return ref.read(apiServiceProvider).searchYouTube(query);
+});
+
 final searchAlbumsProvider = FutureProvider.family<List<AlbumItem>, String>((ref, query) async {
   if (query.isEmpty) return [];
   return ref.read(musicRepositoryProvider).searchAlbums(query);

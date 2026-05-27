@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../models/media_item.dart';
 import '../models/song_model.dart';
 import '../services/api_service.dart';
@@ -32,6 +33,24 @@ class MusicRepository {
 
   Future<SongModel> resolveSong(SongModel song) async {
     UpdateService.instance.checkForUpdates();
+    if (song.id.startsWith('youtube_')) {
+      try {
+        final videoId = song.id.replaceFirst('youtube_', '');
+        final yt = YoutubeExplode();
+        final manifest = await yt.videos.streamsClient.getManifest(videoId).timeout(const Duration(seconds: 8));
+        final audioOnly = manifest.audioOnly;
+        if (audioOnly.isNotEmpty) {
+          final bestAudio = audioOnly.withHighestBitrate();
+          final streamUrl = bestAudio.url.toString();
+          yt.close();
+          return song.copyWith(url: streamUrl);
+        }
+        yt.close();
+      } catch (e) {
+        print('YouTube stream resolution failed: $e');
+      }
+      return song;
+    }
     if (_storage.isSongDownloaded(song.id)) {
       try {
         final docDir = await getApplicationDocumentsDirectory();

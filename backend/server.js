@@ -392,10 +392,13 @@ app.post('/api/spotify-sync', async (req, res) => {
 
 // POST /api/lyrics
 app.post('/api/lyrics', async (req, res) => {
-  const { title, artist, duration = 0 } = req.body;
+  const { title, artist, duration = 0, raw = false } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
   const lyrics = await fetchLrclib(title, artist || '', Number(duration));
   if (!lyrics) return res.status(404).json({ error: 'lyrics_not_found' });
+  if (raw === true || raw === 'true') {
+    return res.json({ lyrics });
+  }
   return res.json({ d: encryptPayload(lyrics) });
 });
 
