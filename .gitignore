@@ -46,3 +46,11 @@ lib/core/config/secrets.local.dart
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local secrets and config files
+.env
+.env.*
+secrets.local.dart
+google-services.json
+google-services*.json
+test_api.json
