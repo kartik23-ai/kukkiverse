@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rotty Music | Core Engine Reloaded</title>
+    <meta name="description" content="Rotty Music — AES-256 encrypted, AI-powered, GPU-accelerated music player. Standalone Windows Desktop and Android updates. Download now.">
+    <meta name="theme-color" content="#020204">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;900&family=Syncopate:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 3D Background Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Cyberpunk Overlay FX -->
+    <div class="noise-overlay"></div>
+    <div class="scanlines"></div>
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- Navigation Header -->
+    <nav class="navbar" id="navbar">
+        <div class="logo">ROTTY<span class="dot">.</span><span class="sub-logo">EXE</span></div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#demo">Live Sandbox</a>
+            <a href="#updates">Changelog</a>
+            <a href="#security">Security</a>
+        </div>
+        <div class="nav-cta">
+            <a href="#download" class="btn-nav">
+                <span class="btn-nav-pulse"></span>
+                GET APP
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Scroll Body -->
+    <main class="scroll-container">
+
+        <!-- ═══ HERO SECTION ═══ -->
+        <section class="section hero" id="home">
+            <div class="hero-grid">
+                
+                <!-- Hero Left: Branding & Core Download Controls -->
+                <div class="hero-content">
+                    <div class="badge-container">
+                        <span class="badge glow-pulse">V1.1.0 DONATION & ADMIN RELOADED</span>
+                    </div>
+                    <h1 class="title">
+                        DEFIES<br>
+                        <span class="gradient-text">GRAVITY</span><br>
+                        OF SOUND<span class="dot">.</span>
+                    </h1>
+                    <p class="subtitle">Experience music like never before. 8D spatial orbit audio, fluid art bleed effects, and real-time GPU audio rendering. Zero compromises.</p>
+ 
+                    <!-- Platform-Specific Download Cards -->
+                    <div class="download-container">
+                        <!-- Android Card -->
+                        <div class="dl-card glass-card">
+                            <div class="dl-platform">
+                                <span class="platform-icon">🤖</span>
+                                <div>
+                                    <h4>Android Build</h4>
+                                    <p class="dl-details">v1.1.0 • APK • 62.7 MB</p>
+                                </div>
+                            </div>
+                            <a href="rotty-music-android.apk" download class="btn-dl android-btn magnetic">
+                                <span>INSTALL APK</span>
+                            </a>
+                        </div>
+ 
+                        <!-- Windows Card -->
+                        <div class="dl-card glass-card">
+                            <div class="dl-platform">
+                                <span class="platform-icon">🪟</span>
+                                <div>
+                                    <h4>Windows Desktop</h4>
+                                    <p class="dl-details">v1.1.0 • EXE (Standalone) • 16.6 MB</p>
+                                </div>
+                            </div>
+                            <a href="rotty-music-windows-setup.exe" download class="btn-dl windows-btn magnetic">
+                                <span>INSTALL SETUP</span>
+                            </a>
+                        </div>
+
+                        <!-- Web App Card -->
+                        <div class="dl-card glass-card">
+                            <div class="dl-platform">
+                                <span class="platform-icon">🌐</span>
+                                <div>
+                                    <h4>Web Player</h4>
+                                    <p class="dl-details">Live Web App • Instant Play • v1.2.0</p>
+                                </div>
+                            </div>
+                            <a href="https://rottymusic.vercel.app" target="_blank" class="btn-dl web-btn magnetic">
+                                <span>OPEN WEBAPP</span>
+                            </a>
+                        </div>
+                    </div>
+ 
+                    <!-- System Diagnostics Ticker -->
+                    <div class="diagnostics-ticker glass-card">
+                        <span class="diag-item"><span class="indicator green"></span> Core Server: ONLINE</span>
+                        <span class="diag-item"><span class="indicator purple"></span> Encrypter: AES-256</span>
+                        <span class="diag-item"><span class="indicator blue"></span> Build: v1.1.0-GOLD</span>
+                    </div>
+                </div>
+
+                <!-- Hero Right: Interactive 3D Audio Card Mockup -->
+                <div class="hero-mockup-wrapper">
+                    <div class="mockup-card glass-card tilt-card" id="mockupCard">
+                        <div class="mockup-header">
+                            <div class="mockup-dots"><span></span><span></span><span></span></div>
+                            <div class="mockup-title">ROTTY CONTROLLER</div>
+                        </div>
+                        <div class="mockup-body">
+                            <!-- Album Art and Glow -->
+                            <div class="mockup-album-art">
+                                <div class="glow-ring"></div>
+                                <div class="inner-art">
+                                    <span class="music-wave-icon">🎵</span>
+                                </div>
+                            </div>
+                            <!-- Song Details -->
+                            <div class="mockup-song-info">
+                                <h3>Kabira (8D Orbit Edit)</h3>
+                                <p>Audio Pipeline</p>
+                            </div>
+                            <!-- Real-time CSS Audio Visualizer Lines -->
+                            <div class="visualizer-waves">
+                                <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                            </div>
+                            <!-- App Player Controls -->
+                            <div class="mockup-controls">
+                                <button class="ctrl-btn">⏮</button>
+                                <button class="ctrl-btn play-btn" id="mockupPlayBtn">▶</button>
+                                <button class="ctrl-btn">⏭</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Scroll Indicator -->
+            <div class="scroll-indicator">
+                <p>SCROLL TO SYSTEM DETECT</p>
+                <div class="line"></div>
+            </div>
+        </section>
+
+        <!-- ═══ BENTO GRID FEATURES ═══ -->
+        <section class="section" id="features">
+            <h2 class="section-header">ENGINEERED<br><span class="gradient-text">WITHOUT BOUNDS.</span></h2>
+
+            <div class="bento-grid">
+                <div class="bento-card bento-large glass-card tilt-card">
+                    <div class="bento-icon">💎</div>
+                    <h3>Crystal Shatter UI</h3>
+                    <p>Static layouts are history. Watch frosted glass screens fracture, crack, and dissolve into your playlist. Built with physics-driven modular particle engines.</p>
+                    <div class="bento-glow" style="--glow-color: #8B5CF6;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🩸</div>
+                    <h3>Fluid Audio Bleed</h3>
+                    <p>Album art colors dissolve and stream down your interface like molten light. Bass hits generate fluid ripples on the fly.</p>
+                    <div class="bento-glow" style="--glow-color: #FF5F38;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🎤</div>
+                    <h3>3D Spatial Lyrics</h3>
+                    <p>Cinema mode with deep perspective layout. Synchronized words fly in from 3D space, sweeping dynamically as the vocals play.</p>
+                    <div class="bento-glow" style="--glow-color: #00F0FF;"></div>
+                </div>
+                <div class="bento-card bento-large glass-card tilt-card">
+                    <div class="bento-icon">🎛️</div>
+                    <h3>8D Volume Orbit Engine</h3>
+                    <p>Hear sound orbit around your head in 360-degree space. Real-time periodic panning and amplitude adjustments simulate a spatial concert dome.</p>
+                    <div class="bento-glow" style="--glow-color: #8A2BE2;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🪟</div>
+                    <h3>Native Windows Runner</h3>
+                    <p>Optimized C++ shell, native keybindings (Spacebar play/pause), custom launcher icons, and low-latency audio processing threads.</p>
+                    <div class="bento-glow" style="--glow-color: #39FF14;"></div>
+                </div>
+                <div class="bento-card glass-card tilt-card">
+                    <div class="bento-icon">🛡️</div>
+                    <h3>Ghost Proxy Shield</h3>
+                    <p>Untraceable reverse API proxy with AES-256 decryption. Hides streaming endpoints from compilation packages for complete security.</p>
+                    <div class="bento-glow" style="--glow-color: #FFD700;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ LIVE AUDIO INTERACTIVE SANDBOX ═══ -->
+        <section class="section" id="demo">
+            <h2 class="section-header">AUDIO ENGINE<br><span class="gradient-text">SIMULATOR.</span></h2>
+            
+            <div class="sandbox-container glass-card massive-card">
+                <div class="sandbox-controls">
+                    <h3>Configure Spatial Audio Mesh</h3>
+                    <p class="sandbox-desc">Interact with the toggles below to preview how Rotty Music's hardware equalizer and 8D orbits reshape the audio rendering frequencies in real-time.</p>
+                    
+                    <div class="sandbox-buttons">
+                        <button class="sandbox-toggle active" data-effect="normal">
+                            <span class="status-light"></span> Normal Vibe
+                        </button>
+                        <button class="sandbox-toggle" data-effect="bass">
+                            <span class="status-light"></span> Bass Boost +12dB
+                        </button>
+                        <button class="sandbox-toggle" data-effect="orbit">
+                            <span class="status-light"></span> 8D Spatial Orbit
+                        </button>
+                        <button class="sandbox-toggle" data-effect="vocal">
+                            <span class="status-light"></span> Vocal Forward
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sandbox-visualizer">
+                    <div class="freq-mesh" id="freqMesh">
+                        <!-- Custom CSS grid lines representing EQ bands -->
+                        <span style="--h: 30%"></span>
+                        <span style="--h: 55%"></span>
+                        <span style="--h: 80%"></span>
+                        <span style="--h: 40%"></span>
+                        <span style="--h: 90%"></span>
+                        <span style="--h: 60%"></span>
+                        <span style="--h: 30%"></span>
+                        <span style="--h: 45%"></span>
+                        <span style="--h: 75%"></span>
+                        <span style="--h: 50%"></span>
+                        <span style="--h: 95%"></span>
+                        <span style="--h: 35%"></span>
+                        <span style="--h: 60%"></span>
+                        <span style="--h: 85%"></span>
+                        <span style="--h: 50%"></span>
+                    </div>
+                    <div class="visualizer-tag" id="visualizerTag">NORMAL STEREO MODE</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ SYSTEM UPDATES / CHANGELOG ═══ -->
+        <section class="section" id="updates">
+            <h2 class="section-header">SYSTEM RELEASES<br><span class="gradient-text">CHANGELOG</span></h2>
+
+            <div class="changelog">
+                
+                <!-- Version 1.1.0-GOLD -->
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #39FF14;"></div>
+                    <div class="cl-content glass-card">
+                        <div class="cl-header-row">
+                            <h4>v1.1.0 — Supporter Badges, Cross-Device Sync & Audio Stability</h4>
+                            <span class="cl-version-badge green">NEW</span>
+                        </div>
+                        <p class="cl-date">Released: May 25, 2026</p>
+                        
+                        <ul class="cl-list">
+                            <li><strong>Background Playback Lock-Screen Fix:</strong> Resolved the Android background service suspension bug. Music will now continue playing smoothly even when you lock your device or put the app in the background.</li>
+                            <li><strong>Queue Repeat & Loop Logic Fix:</strong> Fixed the bug where the repeat button would lock on a single track. Switching between "Repeat All" and "Repeat One" now works seamlessly to loop the entire queue.</li>
+                            <li><strong>Rotty Connect (Live Multi-Device Sync):</strong> Added real-time device control using Supabase. Play music on your Windows PC and control it (play, pause, change tracks, or adjust volume) directly from your Android phone.</li>
+                            <li><strong>Cross-Device Playlist Email Sync:</strong> Link your devices using a Sync ID / Email to automatically restore and synchronize all your local playlists and favorite tracks across phone and desktop.</li>
+                            <li><strong>Elite Synced Lyrics & Cinema Mode:</strong> Beautiful 3D perspective scrolling lyrics. Text characters sweep in and out with live glow reflections mapped dynamically to active playback.</li>
+                            <li><strong>Private Vault (PIN-Locked Playlists):</strong> Store your personal tracks and custom playlists inside a secure vault protected by a 4-digit PIN. Vaulted tracks are completely hidden from standard browse and search screens.</li>
+                            <li><strong>Hardware EQ & 8D Spatial Orbit:</strong> 360-degree volume orbits and hardware equalizer presets (Bass Boost +12dB, Vocal Forward, Wide Audio) are permanently free and unlocked.</li>
+                            <li><strong>Night Drive, Focus Lock & Sleep Oracle:</strong> Experience modes tailored for every vibe. Night Drive provides a minimal UI with a digital speedometer sync; Focus lock helps you study; Sleep Oracle sets off-timers.</li>
+                            <li><strong>Jitter & UI Lag Optimizations:</strong> Fine-tuned UI rendering threads and next-track pre-resolvers to run in background threads, eliminating UI stutters and playback lag.</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Version 1.0.2-GOLD -->
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #8B5CF6;"></div>
+                    <div class="cl-content glass-card">
+                        <div class="cl-header-row">
+                            <h4>v1.0.2 — Premium Liberation & Vault Security</h4>
+                            <span class="cl-version-badge">LEGACY</span>
+                        </div>
+                        <p class="cl-date">Released: May 22, 2026</p>
+                        
+                        <ul class="cl-list">
+                            <li><strong>Private Vault Playlist Integration:</strong> Added real-time playlist adding inside the secure vault via an intuitive "+" addition interface. All vaulted files/playlists are completely hidden globally from standard browse and search streams until unlocked.</li>
+                            <li><strong>Robust PIN Protection:</strong> Enforced strict 4-digit PIN vault verification. Integrated a secure app reset protocol allowing a user to recover by wiping stored vault credentials if needed.</li>
+                            <li><strong>Core Premium Liberation:</strong> Removed all purchase banners, "Pro" tags, and trial triggers. Equalizers, 8D audio modes, and Concert/Focus/Sleep interfaces are now permanently free and unlocked for everyone.</li>
+                            <li><strong>Stability & Screen Fixes:</strong> Resolved rare red-screen layout exceptions during page changes, optimized layout constraints to eliminate UI overflow on mobile devices, and smoothed animations.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Version 1.0.1-GOLD -->
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #8B5CF6;"></div>
+                    <div class="cl-content glass-card">
+                        <div class="cl-header-row">
+                            <h4>v1.0.1 — Core Engine Reloaded</h4>
+                            <span class="cl-version-badge">LEGACY</span>
+                        </div>
+                        <p class="cl-date">Released: May 21, 2026</p>
+                        
+                        <ul class="cl-list">
+                            <li><strong>Windows Desktop Runner:</strong> Native C++ shell supporting spacebar playback triggers, customized launcher icon, and low-latency audio resource locking.</li>
+                            <li><strong>Drive Mode Layout Fixes:</strong> Fully responsive HUD structure. Speedometer progress ring now dynamically scales by viewport aspect ratio and width constraints, resolving all layout overflows.</li>
+                            <li><strong>Firebase Force Update / Kill Switch:</strong> Integrated startup version control for both mobile and desktop (viaREST client API fallback) to instantly prompt or restrict outdated builds.</li>
+                            <li><strong>Audio Thread Stability:</strong> Pauses 8D orbit periodic timers when stopping audio to avoid thread locking on WinRT audio channels.</li>
+                            <li><strong>Auto-Token URL Resolution:</strong> Audio engine automatically re-requests fresh streaming tokens if playback URLs expire.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Version 0.9.0-BETA -->
+                <div class="changelog-item">
+                    <div class="cl-dot" style="--dot-color: #8B5CF6;"></div>
+                    <div class="cl-content glass-card">
+                        <div class="cl-header-row">
+                            <h4>v0.9.0 — Beta Launcher</h4>
+                            <span class="cl-version-badge">LEGACY</span>
+                        </div>
+                        <p class="cl-date">Released: May 12, 2026</p>
+                        
+                        <ul class="cl-list">
+                            <li>Added 3D Cinematic perspective lyrics mode.</li>
+                            <li>Initial release of the 8D Spatial Orbit effect.</li>
+                            <li>Implemented local cache caching and search optimization protocols.</li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ═══ SECURITY SECTION ═══ -->
+        <section class="section" id="security">
+            <div class="glass-card massive-card tilt-card security-card">
+                <div class="lock-icon">🔒</div>
+                <h2 class="section-title text-center">GHOST<br>PROXY SECURITY<span class="dot">.</span></h2>
+                <p class="desc text-center">AES-256-CBC encryption relays keep your endpoints completely invisible. No hardcoded credentials exist in client binaries. All API operations run through highly optimized, rate-limited secure routing relays.</p>
+
+                <div class="security-grid">
+                    <div class="sec-item">
+                        <span class="sec-icon">🛡️</span>
+                        <span>AES-256 Encryption</span>
+                    </div>
+                    <div class="sec-item">
+                        <span class="sec-icon">🗝️</span>
+                        <span>Zero Key Signatures</span>
+                    </div>
+                    <div class="sec-item">
+                        <span class="sec-icon">⚡</span>
+                        <span>API Rate Limiting</span>
+                    </div>
+                    <div class="sec-item">
+                        <span class="sec-icon">👻</span>
+                        <span>Dynamic Proxy Relays</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ FINAL CTA ═══ -->
+        <section class="section center-align" id="download">
+            <div class="final-block">
+                <h2 class="mega-title">DOWNLOAD<br><span class="gradient-text">ROTTY.</span></h2>
+                
+                <div class="final-buttons">
+                    <a href="rotty-music-android.apk" download class="btn primary-btn massive-btn magnetic">
+                        <span class="btn-text">GET FOR ANDROID</span>
+                        <div class="btn-bg"></div>
+                    </a>
+                    
+                    <a href="rotty-music-windows-setup.exe" download class="btn primary-btn massive-btn magnetic" style="border-color: rgba(57, 255, 20, 0.4);">
+                        <span class="btn-text" style="color: #ffffff;">GET FOR WINDOWS</span>
+                        <div class="btn-bg" style="background: linear-gradient(135deg, #00C6FF, #0072FF);"></div>
+                    </a>
+
+                    <a href="https://rottymusic.vercel.app" target="_blank" class="btn primary-btn massive-btn magnetic" style="border-color: rgba(250, 45, 120, 0.4);">
+                        <span class="btn-text" style="color: #ffffff;">OPEN WEB PLAYER</span>
+                        <div class="btn-bg" style="background: linear-gradient(135deg, #FF2E93, #A259FF);"></div>
+                    </a>
+                </div>
+                
+                <p class="sub-text">Direct APK & Desktop Installer Builds • Secure Downloads</p>
+            </div>
+        </section>
+
+        <footer>
+            <div class="footer-content">
+                <div class="logo footer-logo">ROTTY<span class="dot">.</span></div>
+                <p>Engineered for next-generation playback. &copy; 2026</p>
+                <div class="footer-links">
+                    <a href="https://github.com/kartik23-ai/kukkiverse" target="_blank">Workspace Repository</a>
+                </div>
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
