@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rotty Music | Live Sandbox</title>
+    <meta name="description" content="Rotty Music Interactive Live Sandbox — Experience physical Laptop and Mobile device mockups showcasing real-time features.">
+    <meta name="theme-color" content="#020204">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;900&family=Syncopate:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 3D Background Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Cyberpunk Overlay FX -->
+    <div class="noise-overlay"></div>
+    <div class="scanlines"></div>
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- Navigation Header -->
+    <nav class="navbar" id="navbar">
+        <div class="logo"><a href="index.html" style="text-decoration: none; color: inherit;">ROTTY<span class="dot">.</span><span class="sub-logo">EXE</span></a></div>
+        <div class="nav-links">
+            <a href="index.html#features" class="nav-link-item">Features</a>
+            <a href="sandbox.html" class="nav-link-item active">Live Sandbox</a>
+            <a href="support.html" class="nav-link-item">Support</a>
+            <a href="about.html" class="nav-link-item">About</a>
+            <a href="contact.html" class="nav-link-item">Contact</a>
+        </div>
+        <div class="nav-cta">
+            <a href="index.html#download" class="btn-nav">
+                <span class="btn-nav-pulse"></span>
+                GET APP
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Scroll Body -->
+    <main class="scroll-container">
+
+        <!-- ═══ SANDBOX SECTION ═══ -->
+        <section class="section subpage-hero" id="sandbox">
+            <div class="subpage-content-wrapper" style="max-width: 1300px; width: 100%;">
+                <h2 class="section-header">LIVE SANDBOX<br><span class="gradient-text">INTERACTIVE TOUR.</span></h2>
+                <p class="subpage-desc text-center" style="max-width: 700px; margin: 0 auto 3.5rem auto; color: var(--text-muted); font-size: 1.1rem; line-height: 1.6; font-weight: 300;">
+                    Rotty Music ke real-time interfaces aur platform features ka direct tour lijiye. Laptop aur mobile screenshots ko side-by-side select karke check karein aur unke mechanics ko samjhein.
+                </p>
+
+                <!-- Sandbox Layout: Side-by-side Devices -->
+                <div class="sandbox-devices-grid">
+                    
+                    <!-- 💻 Laptop Frame Mockup -->
+                    <div class="sandbox-device-card laptop-card-wrapper">
+                        <div class="device-label">🖥️ Windows Desktop View</div>
+                        <div class="physical-laptop">
+                            <div class="laptop-screen-bezel">
+                                <div class="laptop-webcam"></div>
+                                <div class="laptop-screen-content">
+                                    <div class="screen-glare"></div>
+                                    <img src="screenshots/homepc.png" id="laptop-screen-img" class="sandbox-screenshot-view" alt="Rotty Music Laptop View">
+                                </div>
+                            </div>
+                            <div class="laptop-keyboard-base">
+                                <div class="keyboard-notch"></div>
+                            </div>
+                            <div class="laptop-base-shadow"></div>
+                        </div>
+                    </div>
+
+                    <!-- 📱 Mobile Smartphone Frame Mockup -->
+                    <div class="sandbox-device-card mobile-card-wrapper">
+                        <div class="device-label">📱 Android Mobile View</div>
+                        <div class="physical-mobile">
+                            <div class="mobile-outer-chassis">
+                                <div class="mobile-speaker"></div>
+                                <div class="mobile-dynamic-island"></div>
+                                <div class="mobile-screen-content">
+                                    <div class="screen-glare"></div>
+                                    <img src="screenshots/homemobile.jpg" id="mobile-screen-img" class="sandbox-screenshot-view" alt="Rotty Music Mobile View">
+                                </div>
+                            </div>
+                            <div class="mobile-base-shadow"></div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Showcase Buttons Controller Bar -->
+                <div class="sandbox-tour-controls glass-card">
+                    <button class="tour-btn active" data-tour="home">
+                        <span class="tour-icon">🏠</span> Home Universe
+                    </button>
+                    <button class="tour-btn" data-tour="concert">
+                        <span class="tour-icon">🎵</span> Concert Hall
+                    </button>
+                    <button class="tour-btn" data-tour="focus">
+                        <span class="tour-icon">⏱️</span> Focus Mode
+                    </button>
+                    <button class="tour-btn" data-tour="sync">
+                        <span class="tour-icon">🔗</span> Party Connect
+                    </button>
+                    <button class="tour-btn" data-tour="labs">
+                        <span class="tour-icon">🧪</span> ROTTY Labs
+                    </button>
+                    <button class="tour-btn" data-tour="vault">
+                        <span class="tour-icon">🔐 Private Vault</span>
+                    </button>
+                </div>
+
+                <!-- Dynamic Detail / Feature Description Panel -->
+                <div class="sandbox-feature-details glass-card" id="sandbox-details-card">
+                    <div class="details-header-row">
+                        <div class="details-badge" id="details-badge-el" style="background: rgba(255, 95, 56, 0.12); color: var(--accent-red); border-color: rgba(255, 95, 56, 0.3);">HOME ENGINE</div>
+                        <h3 class="details-title" id="details-title-el">Rotty Music Home Universe</h3>
+                    </div>
+                    <p class="details-description" id="details-desc-el">
+                        Rotty Music ka main home dashboard. Mobile view me dynamic horizontal scroll "Scenes", "Concert", "Labs" shortcuts, smart "AI DJ" switcher, streak modules aur quick listening history dynamic album cover art ke saath load hoti hai. Desktop / Laptop view me side-by-side premium dynamic navigation, ramu user profile (Supporter 💖 badge ke saath) aur fully populated play metrics dashboard seamlessly render hote hain.
+                    </p>
+                    <div class="details-points-grid" id="details-points-el">
+                        <div class="point-item"><span>✦</span> **Fully Customizable Sidebar**: Desktop view has interactive playlist controls.</div>
+                        <div class="point-item"><span>✦</span> **AI DJ Integration**: Toggle for customized queue recommendation.</div>
+                        <div class="point-item"><span>✦</span> **Streak Engine**: Daily listening targets tracked in real-time.</div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <footer>
+            <div class="footer-content">
+                <div class="logo footer-logo">ROTTY<span class="dot">.</span></div>
+                <p>Engineered for next-generation playback. &copy; 2026</p>
+                <div class="footer-links">
+                    <a href="about.html">About</a>
+                    <a href="contact.html">Contact</a>
+                    <a href="support.html">Support</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                    <a href="https://github.com/kartik23-ai/kukkiverse" target="_blank">Repository</a>
+                </div>
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

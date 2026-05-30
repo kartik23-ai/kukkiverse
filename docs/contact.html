@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rotty Music | Contact</title>
+    <meta name="description" content="Contact Rotty Music Support — Get in touch for help, feedback, or metadata removal requests.">
+    <meta name="theme-color" content="#020204">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;900&family=Syncopate:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 3D Background Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Cyberpunk Overlay FX -->
+    <div class="noise-overlay"></div>
+    <div class="scanlines"></div>
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- Navigation Header -->
+    <nav class="navbar" id="navbar">
+        <div class="logo"><a href="index.html" style="text-decoration: none; color: inherit;">ROTTY<span class="dot">.</span><span class="sub-logo">EXE</span></a></div>
+        <div class="nav-links">
+            <a href="index.html#features" class="nav-link-item">Features</a>
+            <a href="sandbox.html" class="nav-link-item">Live Sandbox</a>
+            <a href="support.html" class="nav-link-item">Support</a>
+            <a href="about.html" class="nav-link-item">About</a>
+            <a href="contact.html" class="nav-link-item active">Contact</a>
+        </div>
+        <div class="nav-cta">
+            <a href="index.html#download" class="btn-nav">
+                <span class="btn-nav-pulse"></span>
+                GET APP
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Scroll Body -->
+    <main class="scroll-container">
+
+        <!-- ═══ CONTACT SECTION ═══ -->
+        <section class="section subpage-hero" id="contact">
+            <div class="subpage-content-wrapper">
+                <h2 class="section-header">GET IN TOUCH<br><span class="gradient-text">CONTACT SUPPORT.</span></h2>
+                
+                <div class="contact-grid">
+                    
+                    <!-- Left: Contact Details Cards -->
+                    <div class="contact-left">
+                        
+                        <!-- Email Card -->
+                        <div class="contact-card glass-card purple-glow">
+                            <div class="c-icon-box">📧</div>
+                            <div class="c-details">
+                                <h4>Email Address</h4>
+                                <p>kartikchauhan0509@gmail.com</p>
+                                <a href="mailto:kartikchauhan0509@gmail.com" class="btn btn-c magnetic"><span>Write Email</span></a>
+                            </div>
+                        </div>
+
+                        <!-- Phone Card -->
+                        <div class="contact-card glass-card blue-glow">
+                            <div class="c-icon-box">📞</div>
+                            <div class="c-details">
+                                <h4>Phone Number</h4>
+                                <p>+91 8532999011</p>
+                                <a href="tel:8532999011" class="btn btn-c magnetic" style="border-color: rgba(0, 240, 255, 0.3);"><span>Call Support</span></a>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Right: Message Form -->
+                    <div class="contact-right">
+                        <div class="contact-form-card glass-card">
+                            <h3>Send a Message</h3>
+                            <form id="contact-submit-form" onsubmit="return false;">
+                                
+                                <!-- Name -->
+                                <div class="input-group">
+                                    <input type="text" id="contact-name" required placeholder=" ">
+                                    <label for="contact-name">Name</label>
+                                </div>
+
+                                <!-- Email -->
+                                <div class="input-group">
+                                    <input type="email" id="contact-email" required placeholder=" ">
+                                    <label for="contact-email">Email Address</label>
+                                </div>
+
+                                <!-- Subject -->
+                                <div class="input-group">
+                                    <input type="text" id="contact-subject" required placeholder=" ">
+                                    <label for="contact-subject">Subject</label>
+                                </div>
+
+                                <!-- Message -->
+                                <div class="input-group">
+                                    <textarea id="contact-message" required placeholder=" " rows="4"></textarea>
+                                    <label for="contact-message">Your Message</label>
+                                </div>
+
+                                <!-- Submit Btn -->
+                                <button type="submit" class="btn submit-btn magnetic" id="contactSubmitBtn">
+                                    <span class="btn-text">Send Message</span>
+                                    <span class="btn-loader" id="contactLoader"></span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <footer>
+            <div class="footer-content">
+                <div class="logo footer-logo">ROTTY<span class="dot">.</span></div>
+                <p>Engineered for next-generation playback. &copy; 2026</p>
+                <div class="footer-links">
+                    <a href="about.html">About</a>
+                    <a href="contact.html">Contact</a>
+                    <a href="support.html">Support</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                    <a href="https://github.com/kartik23-ai/kukkiverse" target="_blank">Repository</a>
+                </div>
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rotty Music | Privacy Policy</title>
+    <meta name="description" content="Rotty Music Privacy Policy — Learn how we protect your music listening privacy with zero-tracking and local storage.">
+    <meta name="theme-color" content="#020204">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;900&family=Syncopate:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 3D Background Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Cyberpunk Overlay FX -->
+    <div class="noise-overlay"></div>
+    <div class="scanlines"></div>
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- Navigation Header -->
+    <nav class="navbar" id="navbar">
+        <div class="logo"><a href="index.html" style="text-decoration: none; color: inherit;">ROTTY<span class="dot">.</span><span class="sub-logo">EXE</span></a></div>
+        <div class="nav-links">
+            <a href="index.html#features" class="nav-link-item">Features</a>
+            <a href="sandbox.html" class="nav-link-item">Live Sandbox</a>
+            <a href="support.html" class="nav-link-item">Support</a>
+            <a href="about.html" class="nav-link-item">About</a>
+            <a href="contact.html" class="nav-link-item">Contact</a>
+        </div>
+        <div class="nav-cta">
+            <a href="index.html#download" class="btn-nav">
+                <span class="btn-nav-pulse"></span>
+                GET APP
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Scroll Body -->
+    <main class="scroll-container">
+
+        <!-- ═══ PRIVACY SECTION ═══ -->
+        <section class="section subpage-hero" id="privacy">
+            <div class="subpage-content-wrapper">
+                <h2 class="section-header">DATA PRIVACY<br><span class="gradient-text">PRIVACY POLICY.</span></h2>
+                
+                <!-- Privacy Document Card -->
+                <div class="privacy-doc-card glass-card">
+                    
+                    <div class="privacy-section">
+                        <h3>1. Core Architecture: Local First</h3>
+                        <p>Rotty Music does not operate like mainstream, data-harvesting commercial music players. All favorites, play queues, equalizer settings, search history, and personalized configurations are stored <strong>strictly on your local device</strong>. If you do not create a sync account, your app usage data never leaves your physical device.</p>
+                    </div>
+
+                    <div class="privacy-section">
+                        <h3>2. Optional Cloud Synchronization</h3>
+                        <p>For users who wish to synchronize playlists and favorites across multiple devices (e.g., Android tablets and Windows PC), we provide an optional cloud sync service powered by secure Cloud Firestore:</p>
+                        <ul>
+                            <li>Syncing requires a voluntary sign-up using an email address.</li>
+                            <li>Only playlist metadata, favorited song IDs, and active play counts are stored in the database.</li>
+                            <li>This information is locked down with Firebase Security Rules so that only you (via your authenticated UID) can access or rewrite it.</li>
+                        </ul>
+                    </div>
+
+                    <div class="privacy-section">
+                        <h3>3. Ghost Proxy Shield &amp; Media Privacy</h3>
+                        <p>When searching for tracks or streaming audio, your requests are routed through our remote **Ghost Proxy Server**. This server decrypts metadata queries, hides your device IP signature from third-party APIs, and relays response streams using end-to-end AES-256 encryption. Your search habits remain completely private and anonymous.</p>
+                    </div>
+
+                    <div class="privacy-section">
+                        <h3>4. PIN Vault Protection</h3>
+                        <p>The "Private Vault" feature encrypts hidden playlists locally on your device. PIN code comparisons and hash verifications run inside isolated client runtimes and are never transmitted to external cloud systems. Wiping your app cache or performing a manual vault reset completely erases this local data.</p>
+                    </div>
+
+                    <div class="privacy-section">
+                        <h3>5. Third-Party Wrappers</h3>
+                        <p>All music metadata is loaded dynamically via public REST APIs. Rotty Music does not load tracking cookies or scripts from advertisement networks. We do not display third-party advertisements or trackers inside our software clients.</p>
+                    </div>
+
+                    <div class="privacy-section" style="border: none; padding-bottom: 0; margin-bottom: 0;">
+                        <h3>6. Contact For Queries</h3>
+                        <p>If you have any questions regarding your data privacy, local caches, or wish to request data removal under G.D.P.R. / C.C.P.A., contact us at <a href="mailto:kartikchauhan0509@gmail.com" class="text-link">kartikchauhan0509@gmail.com</a>.</p>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <footer>
+            <div class="footer-content">
+                <div class="logo footer-logo">ROTTY<span class="dot">.</span></div>
+                <p>Engineered for next-generation playback. &copy; 2026</p>
+                <div class="footer-links">
+                    <a href="about.html">About</a>
+                    <a href="contact.html">Contact</a>
+                    <a href="support.html">Support</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                    <a href="https://github.com/kartik23-ai/kukkiverse" target="_blank">Repository</a>
+                </div>
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

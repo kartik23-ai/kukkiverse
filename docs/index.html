@@ -22,15 +22,16 @@
 
     <!-- Navigation Header -->
     <nav class="navbar" id="navbar">
-        <div class="logo">ROTTY<span class="dot">.</span><span class="sub-logo">EXE</span></div>
+        <div class="logo"><a href="index.html" style="text-decoration: none; color: inherit;">ROTTY<span class="dot">.</span><span class="sub-logo">EXE</span></a></div>
         <div class="nav-links">
-            <a href="#features">Features</a>
-            <a href="#demo">Live Sandbox</a>
-            <a href="#updates">Changelog</a>
-            <a href="#security">Security</a>
+            <a href="index.html#features" class="nav-link-item">Features</a>
+            <a href="sandbox.html" class="nav-link-item">Live Sandbox</a>
+            <a href="support.html" class="nav-link-item">Support</a>
+            <a href="about.html" class="nav-link-item">About</a>
+            <a href="contact.html" class="nav-link-item">Contact</a>
         </div>
         <div class="nav-cta">
-            <a href="#download" class="btn-nav">
+            <a href="index.html#download" class="btn-nav">
                 <span class="btn-nav-pulse"></span>
                 GET APP
             </a>
@@ -363,6 +364,117 @@
             </div>
         </section>
 
+        <!-- ═══ REVIEWS & FEEDBACK SECTION ═══ -->
+        <section class="section" id="reviews">
+            <h2 class="section-header">USER REVIEWS<br><span class="gradient-text">&amp; FEEDBACK.</span></h2>
+
+            <!-- Review Deletion Policy Disclaimer -->
+            <div class="policy-card glass-card">
+                <div class="policy-icon">📢</div>
+                <div class="policy-text">
+                    <h4>Transparency Policy</h4>
+                    <p>Koi bot, fake, ya negative review delete nahi kiya jayega. Sabhi reviews ko dhyan me rakhte hue system updates aayenge.</p>
+                </div>
+            </div>
+
+            <div class="reviews-grid">
+                
+                <!-- Left: Review Form and Stats -->
+                <div class="reviews-left">
+                    
+                    <!-- Stats Card -->
+                    <div class="stats-card glass-card">
+                        <div class="stats-summary">
+                            <h1 id="avg-rating">0.0</h1>
+                            <div class="stats-stars-container">
+                                <div class="glowing-stars" id="avg-stars">★★★★★</div>
+                                <p id="total-reviews-count">Based on 0 reviews</p>
+                            </div>
+                        </div>
+                        
+                        <div class="rating-bars">
+                            <div class="rating-bar-row">
+                                <span class="bar-label">5 ★</span>
+                                <div class="bar-bg"><div class="bar-fill" id="bar-5" style="width: 0%"></div></div>
+                                <span class="bar-count" id="count-5">0</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="bar-label">4 ★</span>
+                                <div class="bar-bg"><div class="bar-fill" id="bar-4" style="width: 0%"></div></div>
+                                <span class="bar-count" id="count-4">0</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="bar-label">3 ★</span>
+                                <div class="bar-bg"><div class="bar-fill" id="bar-3" style="width: 0%"></div></div>
+                                <span class="bar-count" id="count-3">0</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="bar-label">2 ★</span>
+                                <div class="bar-bg"><div class="bar-fill" id="bar-2" style="width: 0%"></div></div>
+                                <span class="bar-count" id="count-2">0</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="bar-label">1 ★</span>
+                                <div class="bar-bg"><div class="bar-fill" id="bar-1" style="width: 0%"></div></div>
+                                <span class="bar-count" id="count-1">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Input Form -->
+                    <div class="review-form-card glass-card">
+                        <h3>Write a Review</h3>
+                        <form id="review-submit-form" onsubmit="return false;">
+                            
+                            <!-- Stars Picker -->
+                            <div class="star-picker-container">
+                                <label>Your Rating</label>
+                                <div class="star-rating-picker" id="starPicker">
+                                    <span class="picker-star" data-rating="1">★</span>
+                                    <span class="picker-star" data-rating="2">★</span>
+                                    <span class="picker-star" data-rating="3">★</span>
+                                    <span class="picker-star" data-rating="4">★</span>
+                                    <span class="picker-star" data-rating="5">★</span>
+                                </div>
+                                <input type="hidden" id="selected-rating" value="0">
+                            </div>
+
+                            <!-- Name Input -->
+                            <div class="input-group">
+                                <input type="text" id="reviewer-name" required placeholder=" ">
+                                <label for="reviewer-name">Your Name</label>
+                            </div>
+
+                            <!-- Comment Textarea -->
+                            <div class="input-group">
+                                <textarea id="reviewer-comment" required placeholder=" " rows="4"></textarea>
+                                <label for="reviewer-comment">Your Feedback</label>
+                            </div>
+
+                            <!-- Submit Btn -->
+                            <button type="submit" class="btn submit-btn magnetic" id="reviewSubmitBtn">
+                                <span class="btn-text">Submit Review</span>
+                                <span class="btn-loader" id="submitLoader"></span>
+                            </button>
+                        </form>
+                    </div>
+
+                </div>
+
+                <!-- Right: Reviews Feed -->
+                <div class="reviews-right">
+                    <h3>Recent Reviews</h3>
+                    <div class="reviews-feed" id="reviewsFeed">
+                        <!-- Skeletons shown during load -->
+                        <div class="skeleton-card glass-card"></div>
+                        <div class="skeleton-card glass-card"></div>
+                        <div class="skeleton-card glass-card"></div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
         <!-- ═══ FINAL CTA ═══ -->
         <section class="section center-align" id="download">
             <div class="final-block">
@@ -394,7 +506,11 @@
                 <div class="logo footer-logo">ROTTY<span class="dot">.</span></div>
                 <p>Engineered for next-generation playback. &copy; 2026</p>
                 <div class="footer-links">
-                    <a href="https://github.com/kartik23-ai/kukkiverse" target="_blank">Workspace Repository</a>
+                    <a href="about.html">About</a>
+                    <a href="contact.html">Contact</a>
+                    <a href="support.html">Support</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                    <a href="https://github.com/kartik23-ai/kukkiverse" target="_blank">Repository</a>
                 </div>
             </div>
         </footer>
