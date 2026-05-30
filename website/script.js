@@ -355,6 +355,33 @@ function initAJAXRouter() {
     window.addEventListener('popstate', () => {
         loadPage(window.location.pathname, false);
     });
+
+    // Mobile Hamburger Menu Toggle Setup
+    const hamburger = document.getElementById('navHamburger');
+    const navLinks = document.querySelector('.nav-links');
+    
+    if (hamburger && navLinks) {
+        hamburger.addEventListener('click', () => {
+            hamburger.classList.toggle('active');
+            navLinks.classList.toggle('active');
+            
+            // Disable or enable body scrolling when menu is active
+            if (navLinks.classList.contains('active')) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = '';
+            }
+        });
+
+        // Close mobile menu when any nav link item is clicked (for AJAX loads)
+        document.querySelectorAll('.nav-link-item').forEach(item => {
+            item.addEventListener('click', () => {
+                hamburger.classList.remove('active');
+                navLinks.classList.remove('active');
+                document.body.style.overflow = '';
+            });
+        });
+    }
 }
 
 function navigateTo(url) {
