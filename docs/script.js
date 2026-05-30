@@ -386,15 +386,31 @@ function initAJAXRouter() {
 
 function navigateTo(url) {
     const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-    const targetUrl = basePath + url;
+    
+    // Pretty URL segment formatting
+    let prettySegment = url;
+    if (prettySegment === 'index.html' || prettySegment === '') {
+        prettySegment = 'home'; // Show as /home in address bar
+    } else if (prettySegment.endsWith('.html')) {
+        prettySegment = prettySegment.replace('.html', ''); // Strip .html
+    }
+    
+    const targetUrl = basePath + prettySegment;
     history.pushState(null, null, targetUrl);
-    loadPage(targetUrl, true);
+    loadPage(url, true); // Fetch the actual .html file internally
 }
 
 function loadPage(url, shouldPushHistory) {
     // Strip hash or query parameters from URL to parse correct target filename
     const cleanUrl = url.split('#')[0].split('?')[0];
-    const filename = cleanUrl.substring(cleanUrl.lastIndexOf('/') + 1) || 'index.html';
+    let filename = cleanUrl.substring(cleanUrl.lastIndexOf('/') + 1) || 'index.html';
+    
+    // Resolve pretty URL tokens back to physical files
+    if (filename === 'home' || filename === '') {
+        filename = 'index.html';
+    } else if (filename && !filename.includes('.')) {
+        filename = filename + '.html';
+    }
     
     // Crossfade slide-down container transition
     gsap.to('.scroll-container', {
