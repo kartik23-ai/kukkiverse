@@ -594,7 +594,7 @@ function initMagneticButtons() {
 // INDEX PAGE SPECIFIC INTERACTIONS & FIRESTORE REVIEWS
 // ═══════════════════════════════════════════════════════════
 const FIREBASE_REST_BASE = "https://firestore.googleapis.com/v1/projects/rotty-music/databases/(default)/documents";
-const API_KEY = "AIzaSyDkD9uaVanSvrsAg_Myg7mYKW0GSjB0t7w";
+const API_KEY = "AIzaSyAGyGpIQWwnQWtfzL9v06asQqLmYjbPIH8";
 
 // Global audio streaming declaration
 const audioFile = new Audio('song.mp3');
