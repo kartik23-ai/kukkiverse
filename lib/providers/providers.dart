@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/audio_handler.dart';
 import '../services/api_service.dart';
+import '../services/ghost_proxy_client.dart';
 import '../services/storage_service.dart';
 import '../services/ai_dj_service.dart';
 import '../repositories/music_repository.dart';
@@ -241,6 +242,19 @@ String _cleanGoogleTitle(String title) {
 }
 
 Future<List<SongModel>> _fetchFromGoogle(Ref ref, String searchQuery, String fallbackQuery) async {
+  if (GhostProxyClient.isEnabled) {
+    try {
+      final proxyClient = GhostProxyClient();
+      final results = await proxyClient.getScrapedSongs(searchQuery, fallbackQuery, limit: 20);
+      if (results != null && results.isNotEmpty) {
+        final qual = StorageService().preferredQuality;
+        return results.map((e) => SongModel.fromJson(e, preferredQuality: qual)).toList();
+      }
+    } catch (e) {
+      debugPrint('ROTTY GOOGLE QUERY: getScrapedSongs through proxy failed: $e');
+    }
+  }
+
   final repo = ref.read(musicRepositoryProvider);
   final songs = <SongModel>[];
   final titleRegistry = <String, bool>{};

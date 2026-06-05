@@ -197,6 +197,24 @@ class GhostProxyClient {
     }
   }
 
+  /// Get scraped google/ddg songs through proxy
+  Future<List<Map<String, dynamic>>?> getScrapedSongs(String searchQuery, String fallbackQuery, {int limit = 20}) async {
+    final resp = await _post('/api/scraped-songs', {
+      'searchQuery': searchQuery,
+      'fallbackQuery': fallbackQuery,
+      'limit': limit,
+    });
+    if (resp == null || resp['d'] == null) return null;
+    try {
+      final decrypted = _decrypt(resp['d'] as String);
+      if (decrypted.isEmpty) return null;
+      final list = json.decode(decrypted) as List;
+      return list.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Search albums through proxy
   Future<List<Map<String, dynamic>>?> searchAlbums(String query, {int limit = 20}) async {
     final resp = await _post('/api/search-albums', {'query': query, 'limit': limit});

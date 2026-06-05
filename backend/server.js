@@ -425,6 +425,113 @@ async function saavnGetEditorialPlaylistSongs(query, limit = 30) {
   return [];
 }
 
+// ─── Scraper Helper functions for DDG & Google ─────────────────────
+async function scrapeDdgTitles(query) {
+  try {
+    const encQ = encodeURIComponent(query);
+    const url = `https://html.duckduckgo.com/html/?q=${encQ}`;
+    const res = await fetchUrl(url, {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    });
+    if (res.status === 200) {
+      const html = res.body;
+      const titles = [];
+      const regex = /class="result__a"[^>]*>([\s\S]*?)<\/a>/gi;
+      let match;
+      while ((match = regex.exec(html)) !== null) {
+        let text = match[1] || '';
+        text = text.replace(/<[^>]*>/g, '');
+        text = text.replace(/&amp;/g, '&')
+                   .replace(/&quot;/g, '"')
+                   .replace(/&#39;/g, "'")
+                   .replace(/&lt;/g, '<')
+                   .replace(/&gt;/g, '>');
+        text = text.trim();
+        if (text && text.length < 120) {
+          titles.push(text);
+        }
+      }
+      return titles;
+    }
+  } catch (err) {
+    console.error('scrapeDdgTitles error:', err);
+  }
+  return [];
+}
+
+async function scrapeGoogleTitles(query) {
+  try {
+    const encQ = encodeURIComponent(query);
+    const url = `https://www.google.com/search?q=${encQ}`;
+    const res = await fetchUrl(url, {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    });
+    if (res.status === 200) {
+      const html = res.body;
+      const titles = [];
+      const regex = /<h3[^>]*>([\s\S]*?)<\/h3>/gi;
+      let match;
+      while ((match = regex.exec(html)) !== null) {
+        let text = match[1] || '';
+        text = text.replace(/<[^>]*>/g, '');
+        text = text.replace(/&amp;/g, '&')
+                   .replace(/&quot;/g, '"')
+                   .replace(/&#39;/g, "'")
+                   .replace(/&lt;/g, '<')
+                   .replace(/&gt;/g, '>');
+        text = text.trim();
+        if (text && text.length < 120) {
+          titles.push(text);
+        }
+      }
+      return titles;
+    }
+  } catch (err) {
+    console.error('scrapeGoogleTitles error:', err);
+  }
+  return [];
+}
+
+function cleanGoogleTitle(title) {
+  let clean = title.toLowerCase();
+  clean = clean.replace(/youtube/g, '')
+               .replace(/jiosaavn/g, '')
+               .replace(/spotify/g, '')
+               .replace(/gaana/g, '')
+               .replace(/wynk/g, '')
+               .replace(/hungama/g, '')
+               .replace(/official video/g, '')
+               .replace(/official audio/g, '')
+               .replace(/lyrical video/g, '')
+               .replace(/full song/g, '')
+               .replace(/music video/g, '')
+               .replace(/video song/g, '')
+               .replace(/lyrics/g, '');
+
+  const parts = clean.split(/[-:|]/);
+  if (parts.length > 0) {
+    clean = parts[0];
+  }
+
+  clean = clean.replace(/\(.*?\)/g, '')
+               .replace(/\[.*?\]/g, '')
+               .replace(/[^\w\s']/g, ' ');
+  clean = clean.replace(/\s+/g, ' ');
+  return clean.trim();
+}
+
+function normalizeTitle(title) {
+  let clean = (title || '').toLowerCase();
+  clean = clean.replace(/\(.*?\)/g, '')
+               .replace(/\[.*?\]/g, '')
+               .replace(/from/g, '')
+               .replace(/theme/g, '')
+               .replace(/soundtrack/g, '')
+               .replace(/[^\w\s']/g, ' ');
+  clean = clean.replace(/\s+/g, ' ');
+  return clean.trim();
+}
+
 function decryptDesEcb(ciphertextBase64) {
   if (!ciphertextBase64) return '';
   try {
@@ -981,8 +1088,59 @@ app.post('/api/search-artists', async (req, res) => {
   return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
 });
 
+// ─── Curated Playlists Helper ─────────────────────────────────────
+async function getPlaylistSongs(playlistId, limit = 35) {
+  // Try direct JioSaavn first
+  try {
+    const detailQs = new URLSearchParams({
+      __call: 'playlist.getDetails',
+      _format: 'json',
+      _marker: '0',
+      ctx: 'web6dot0',
+      listid: playlistId,
+    });
+    const detailRes = await fetchUrl(`https://www.jiosaavn.com/api.php?${detailQs}`, {
+      Referer: 'https://www.jiosaavn.com',
+    });
+    if (detailRes.status === 200) {
+      const detailBody = JSON.parse(detailRes.body);
+      if (detailBody && detailBody.songs && Array.isArray(detailBody.songs)) {
+        return detailBody.songs.slice(0, limit);
+      }
+    }
+  } catch (err) {
+    console.error(`getPlaylistSongs direct failed for ${playlistId}:`, err);
+  }
+
+  // Fallback to Sumit API
+  try {
+    const r = await fetchUrl(`https://saavn.sumit.co/api/playlists?id=${playlistId}`);
+    if (r.status === 200) {
+      const body = JSON.parse(r.body);
+      const songs = body?.data?.songs || body?.data?.results || [];
+      if (Array.isArray(songs) && songs.length > 0) {
+        return songs.slice(0, limit);
+      }
+    }
+  } catch (err) {
+    console.error(`getPlaylistSongs Sumit fallback failed for ${playlistId}:`, err);
+  }
+
+  return [];
+}
+
+// Memory caches
+let cachedHomeSections = null;
+let lastHomeCacheTime = 0;
+const googleSongsCache = {};
+
 // POST /api/home
 app.post('/api/home', async (req, res) => {
+  const now = Date.now();
+  if (cachedHomeSections && (now - lastHomeCacheTime < 2 * 60 * 60 * 1000)) {
+    return res.json({ d: cachedHomeSections });
+  }
+
   const sections = {};
   const dayIndex = new Date().getDay();
   const hourIndex = new Date().getHours() % 4; // Vary queries throughout the day
@@ -1038,29 +1196,71 @@ app.post('/api/home', async (req, res) => {
   const qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + 2) % editorsPicksPool.length];
 
   const queries = {
-    Trending: qTrending,
-    Bollywood: qBollywood,
-    Punjabi: qPunjabi,
-    TopHits: qTopHits,
-    'Viral Songs': qViral,
-    'Editor\'s Picks': qEditorsPicks,
+    Trending: { q: qTrending, playlistId: '82974051' },
+    Bollywood: { q: qBollywood, playlistId: '49040' },
+    Punjabi: { q: qPunjabi, playlistId: '46624508' },
+    TopHits: { q: qTopHits, playlistId: '82974051' },
+    'Viral Songs': { q: qViral, playlistId: '110756784' },
+    'Editor\'s Picks': { q: qEditorsPicks, playlistId: '104618770' },
   };
 
-  const promises = Object.entries(queries).map(async ([key, q]) => {
+  const promises = Object.entries(queries).map(async ([key, info]) => {
     try {
-      let songs = await saavnGetEditorialPlaylistSongs(q, 35);
-      if (!songs || songs.length === 0) {
-        songs = await saavnSearch(q, 35);
-      }
-      if (!songs || songs.length === 0) {
-        songs = await saavnFallbackSearch(q, 35);
+      let songs = [];
+      // Step 1: Try fetching directly from the official playlist ID
+      if (info.playlistId) {
+        songs = await getPlaylistSongs(info.playlistId, 35);
       }
       
-      // Shuffle the results
+      // Step 2: Try fetching by editorial playlist search
+      if (!songs || songs.length === 0) {
+        songs = await saavnGetEditorialPlaylistSongs(info.q, 35);
+      }
+      
+      // Step 3: Try Google/DDG search scraper fallback
+      if (!songs || songs.length === 0) {
+        const ddgQuery = `${info.q} songs official music video site:youtube.com`;
+        let scrapedTitles = await scrapeDdgTitles(ddgQuery);
+        if (!scrapedTitles || scrapedTitles.length === 0) {
+          scrapedTitles = await scrapeGoogleTitles(ddgQuery);
+        }
+        if (scrapedTitles && scrapedTitles.length > 0) {
+          const resolvePromises = scrapedTitles.slice(0, 10).map(async (rawTitle) => {
+            const cleaned = cleanGoogleTitle(rawTitle);
+            if (cleaned.length < 3) return null;
+            try {
+              let results = [];
+              try {
+                results = await saavnSearch(cleaned, 3);
+              } catch (_) {
+                results = await saavnFallbackSearch(cleaned, 3);
+              }
+              for (const s of results) {
+                const mapped = mapSongToRotty(s);
+                if (mapped && mapped.id && isOriginalSong(mapped)) return mapped;
+              }
+            } catch (_) {}
+            return null;
+          });
+          const resolved = await Promise.all(resolvePromises);
+          songs = resolved.filter(Boolean);
+        }
+      }
+
+      // Step 4: Try standard search fallback
+      if (!songs || songs.length === 0) {
+        try {
+          songs = await saavnSearch(info.q, 35);
+        } catch (_) {
+          songs = await saavnFallbackSearch(info.q, 35);
+        }
+      }
+
+      // Shuffle the results slightly for variety
       const shuffled = songs.sort(() => 0.5 - Math.random());
       
       const mapped = shuffled
-        .map(s => mapSongToRotty(s))
+        .map(s => (s.id && s.title) ? s : mapSongToRotty(s))
         .filter(s => s && s.id && isOriginalSong(s));
       
       sections[key] = deduplicateSongs(mapped).slice(0, 12);
@@ -1071,8 +1271,118 @@ app.post('/api/home', async (req, res) => {
   });
 
   await Promise.all(promises);
-  return res.json({ d: encryptPayload(JSON.stringify(sections)) });
+
+  const encrypted = encryptPayload(JSON.stringify(sections));
+  cachedHomeSections = encrypted;
+  lastHomeCacheTime = now;
+
+  return res.json({ d: encrypted });
 });
+
+// POST /api/scraped-songs
+app.post('/api/scraped-songs', async (req, res) => {
+  const { searchQuery, fallbackQuery, limit = 20 } = req.body;
+  if (!searchQuery) return res.status(400).json({ error: 'searchQuery required' });
+
+  const cacheKey = searchQuery + '_' + limit;
+  const now = Date.now();
+  if (googleSongsCache[cacheKey] && (now - googleSongsCache[cacheKey].timestamp < 2 * 60 * 60 * 1000)) {
+    return res.json({ d: googleSongsCache[cacheKey].data });
+  }
+
+  try {
+    let titles = await scrapeDdgTitles(searchQuery);
+    if (!titles || titles.length === 0) {
+      titles = await scrapeGoogleTitles(searchQuery);
+    }
+
+    let songs = [];
+    const titleRegistry = new Set();
+    const albumCounts = {};
+
+    if (titles && titles.length > 0) {
+      const resolvePromises = titles.slice(0, 15).map(async (rawTitle) => {
+        const cleaned = cleanGoogleTitle(rawTitle);
+        if (cleaned.length < 3) return null;
+        try {
+          let results = [];
+          try {
+            results = await saavnSearch(cleaned, 3);
+          } catch (_) {
+            results = await saavnFallbackSearch(cleaned, 3);
+          }
+          for (const s of results) {
+            const mapped = mapSongToRotty(s);
+            if (mapped && mapped.id && isOriginalSong(mapped)) {
+              return mapped;
+            }
+          }
+        } catch (_) {}
+        return null;
+      });
+
+      const resolved = await Promise.all(resolvePromises);
+      for (const s of resolved) {
+        if (s) {
+          const normTitle = normalizeTitle(s.title);
+          if (titleRegistry.has(normTitle)) continue;
+          
+          const album = (s.album || '').toLowerCase().trim();
+          if (album) {
+            const count = albumCounts[album] || 0;
+            if (count >= 2) continue;
+            albumCounts[album] = count + 1;
+          }
+
+          titleRegistry.add(normTitle);
+          songs.push(s);
+        }
+      }
+    }
+
+    // Fallback if we have fewer than 10 songs
+    if (songs.length < 10 && fallbackQuery) {
+      try {
+        let list = [];
+        try {
+          list = await saavnSearch(fallbackQuery, 35);
+        } catch (_) {
+          list = await saavnFallbackSearch(fallbackQuery, 35);
+        }
+        for (const s of list) {
+          const mapped = mapSongToRotty(s);
+          if (mapped && mapped.id && isOriginalSong(mapped)) {
+            const normTitle = normalizeTitle(mapped.title);
+            if (titleRegistry.has(normTitle)) continue;
+
+            const album = (mapped.album || '').toLowerCase().trim();
+            if (album) {
+              const count = albumCounts[album] || 0;
+              if (count >= 2) continue;
+              albumCounts[mapped.album] = count + 1;
+            }
+
+            titleRegistry.add(normTitle);
+            songs.push(mapped);
+            if (songs.length >= limit) break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    const finalSongs = songs.slice(0, limit);
+    const encrypted = encryptPayload(JSON.stringify(finalSongs));
+    googleSongsCache[cacheKey] = {
+      timestamp: now,
+      data: encrypted
+    };
+    return res.json({ d: encrypted });
+  } catch (err) {
+    console.error('Error in /api/scraped-songs:', err);
+    return res.json({ d: encryptPayload(JSON.stringify([])) });
+  }
+});
+
 
 
 // POST /api/recommendations — Get song recommendations
