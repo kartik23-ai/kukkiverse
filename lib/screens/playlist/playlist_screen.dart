@@ -92,7 +92,12 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         ],
     );
 
-    if (widget.embedded) return body;
+    if (widget.embedded) {
+      return SafeArea(
+        bottom: false,
+        child: body,
+      );
+    }
     return AppScaffold(bottomPadding: 150, body: body);
   }
 

@@ -644,11 +644,11 @@ async function fetchLrclib(title, artist, duration = 0) {
       }
     } catch (_) {}
 
-    // 2. Fallback to /api/search
-    const q = encodeURIComponent(cleanedTitle);
-    const a = encodeURIComponent(cleanedArtist);
+    // 2. Fallback to /api/search using combined track + artist query (more robust than strict artist_name param)
+    const combinedQuery = `${cleanedTitle} ${cleanedArtist}`.trim();
+    const q = encodeURIComponent(combinedQuery);
     const res = await fetchUrl(
-      `https://lrclib.net/api/search?q=${q}&artist_name=${a}`,
+      `https://lrclib.net/api/search?q=${q}`,
       { 'Lrclib-Client': 'RottyMusic v2.0' }
     );
     if (res.status !== 200) return null;
@@ -685,7 +685,7 @@ async function fetchLrclib(title, artist, duration = 0) {
       
       const itemDur = Number(r.duration) || 0;
       const durDiff = duration > 0 ? Math.abs(itemDur - duration) : 0;
-      if (duration > 0 && durDiff > 35) continue; // Discard completely different lengths
+      if (duration > 0 && durDiff > 80) continue; // Discard completely different lengths
       
       let score = durDiff;
       if (cleanedArtist && !itemArtist.includes(cleanedArtist) && !cleanedArtist.includes(itemArtist)) {
@@ -2420,6 +2420,27 @@ app.post('/api/search-albums', async (req, res) => {
   } catch (err) {
     console.error('search-albums failed:', err);
   }
+
+  // Fallback to Sumit API
+  try {
+    const encQ = encodeURIComponent(query);
+    const r = await fetchUrl(`https://saavn.sumit.co/api/search/albums?query=${encQ}&page=1&limit=${limit}`);
+    if (r.status === 200) {
+      const body = JSON.parse(r.body);
+      const results = body?.data?.results || body?.data || [];
+      const sanitized = results.map(m => ({
+        id: m.albumid || m.id || '',
+        name: m.title || m.name || m.album || 'Album',
+        image: upgradeImageUrl(m.image || ''),
+        year: m.year || '',
+        language: m.language || '',
+      })).filter(a => a.id);
+      return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
+    }
+  } catch (err) {
+    console.error('search-albums fallback failed:', err);
+  }
+
   return res.status(500).json({ error: 'search_albums_failed' });
 });
 
@@ -2456,6 +2477,29 @@ app.post('/api/album-details', async (req, res) => {
   } catch (err) {
     console.error('album-details failed:', err);
   }
+
+  // Fallback to Sumit API
+  try {
+    const r = await fetchUrl(`https://saavn.sumit.co/api/albums?id=${id}`);
+    if (r.status === 200) {
+      const body = JSON.parse(r.body);
+      const songs = body?.data?.songs || body?.data?.results || [];
+      const sanitized = songs.map(s => ({
+        id: s.id || '',
+        title: s.song || s.title || s.name || '',
+        artist: s.primary_artists || (s.artists?.primary && Array.isArray(s.artists.primary) ? s.artists.primary.map(a => a.name).join(', ') : '') || s.subtitle || '',
+        album: s.album || (typeof s.album === 'object' ? s.album.name : '') || '',
+        image: upgradeImageUrl(s.image),
+        duration: Number(s.duration) || 0,
+        language: s.language || '',
+        url: extract320Url(s)
+      })).filter(s => s.id);
+      return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
+    }
+  } catch (err) {
+    console.error('album-details fallback failed:', err);
+  }
+
   return res.status(500).json({ error: 'album_details_failed' });
 });
 
@@ -2511,6 +2555,49 @@ app.post('/api/artist-details', async (req, res) => {
   } catch (err) {
     console.error('artist-details failed:', err);
   }
+
+  // Fallback to Sumit API
+  try {
+    const r = await fetchUrl(`https://saavn.sumit.co/api/artists?id=${id}`);
+    if (r.status === 200) {
+      const body = JSON.parse(r.body);
+      const data = body?.data || {};
+      
+      const artist = {
+        id: data.id || id,
+        name: data.name || 'Artist',
+        image: upgradeImageUrl(data.image || ''),
+        follower_count: data.followerCount || '',
+        bio: data.bio || '',
+      };
+
+      const topSongs = (data.songs || []).map(s => ({
+        id: s.id || '',
+        title: s.song || s.title || s.name || '',
+        artist: s.primary_artists || (s.artists?.primary && Array.isArray(s.artists.primary) ? s.artists.primary.map(a => a.name).join(', ') : '') || s.subtitle || '',
+        album: s.album || (typeof s.album === 'object' ? s.album.name : '') || '',
+        image: upgradeImageUrl(s.image),
+        duration: Number(s.duration) || 0,
+        language: s.language || '',
+        url: extract320Url(s)
+      })).filter(s => s.id);
+
+      const topAlbums = (data.albums || []).map(m => ({
+        id: m.id || '',
+        name: m.name || m.title || 'Album',
+        image: upgradeImageUrl(m.image || ''),
+        year: m.year || '',
+        language: m.language || '',
+      })).filter(a => a.id);
+
+      return res.json({
+        d: encryptPayload(JSON.stringify({ artist, songs: topSongs, albums: topAlbums }))
+      });
+    }
+  } catch (err) {
+    console.error('artist-details fallback failed:', err);
+  }
+
   return res.status(500).json({ error: 'artist_details_failed' });
 });
 

@@ -658,9 +658,9 @@ class ApiService {
 
     // 2. Fallback to /api/search with strict multi-criteria scoring
     try {
-      final q = Uri.encodeComponent(cleanedTitle);
-      final a = Uri.encodeComponent(cleanedArtist);
-      final url = 'https://lrclib.net/api/search?q=$q&artist_name=$a';
+      final queryStr = '$cleanedTitle $cleanedArtist'.trim();
+      final q = Uri.encodeComponent(queryStr);
+      final url = 'https://lrclib.net/api/search?q=$q';
 
       final r = await _client.get(
         Uri.parse(url),
@@ -715,7 +715,7 @@ class ApiService {
         final itemDur = item['duration'] is num ? (item['duration'] as num).toInt() : 0;
         final durDiff = durationSec > 0 ? (itemDur - durationSec).abs() : 0;
 
-        if (durationSec > 0 && durDiff > 35) continue; // Discard completely different lengths
+        if (durationSec > 0 && durDiff > 80) continue; // Discard completely different lengths
 
         int score = durDiff;
         if (lowerSearchArtist.isNotEmpty && !itemArtist.contains(lowerSearchArtist) && !lowerSearchArtist.contains(itemArtist)) {
