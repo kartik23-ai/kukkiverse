@@ -296,7 +296,7 @@ function fetchUrl(targetUrl, headers = {}, method = 'GET', body = null) {
       isTerminated = true;
       req.destroy();
       reject(new Error('timeout'));
-    }, isLrc ? 4000 : 12000); // 4s for lrclib, 12s otherwise
+    }, isLrc ? 10000 : 12000); // 10s for lrclib, 12s otherwise
 
     const req = lib.request(options, (res) => {
       let data = '';
@@ -958,9 +958,11 @@ app.post('/api/spotify-sync', async (req, res) => {
 
 // POST /api/lyrics
 app.post('/api/lyrics', async (req, res) => {
+  console.log('--- Incoming /api/lyrics request:', req.body);
   const { title, artist, duration = 0, raw = false } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
   const lyrics = await fetchLrclib(title, artist || '', Number(duration));
+  console.log('--- fetchLrclib result:', lyrics ? 'FOUND' : 'NOT FOUND');
   if (!lyrics) return res.status(404).json({ error: 'lyrics_not_found' });
   if (raw === true || raw === 'true') {
     return res.json({ lyrics });

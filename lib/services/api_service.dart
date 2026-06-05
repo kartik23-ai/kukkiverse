@@ -643,7 +643,7 @@ class ApiService {
           'User-Agent': 'RottyMusic/1.0',
           'Lrclib-Client': 'RottyMusic v1.0',
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -668,7 +668,7 @@ class ApiService {
           'User-Agent': 'RottyMusic/1.0',
           'Lrclib-Client': 'RottyMusic v1.0',
         },
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 10));
 
       if (r.statusCode != 200) return null;
 
@@ -763,7 +763,7 @@ class ApiService {
           'duration': durationSec,
           'raw': true,
         }),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
