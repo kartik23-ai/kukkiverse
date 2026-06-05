@@ -212,13 +212,13 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 error: (err, stack) => const SliverToBoxAdapter(child: SizedBox.shrink()),
               ),
+              
+              SliverToBoxAdapter(child: NewReleasesBox(mt: mt)),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              // Popular Albums Section at the absolute bottom of the Home screen
+              SliverToBoxAdapter(child: PopularAlbumsSection(mt: mt)),
             ],
 
-
-            SliverToBoxAdapter(child: NewReleasesBox(mt: mt)),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
-            // Popular Albums Section at the absolute bottom of the Home screen
-            SliverToBoxAdapter(child: PopularAlbumsSection(mt: mt)),
             const SliverToBoxAdapter(child: BrandedFooter()),
             const SliverToBoxAdapter(child: SizedBox(height: 180)),
           ],

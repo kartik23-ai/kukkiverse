@@ -398,6 +398,30 @@ async function saavnGetEditorialPlaylistSongs(query, limit = 30) {
   } catch (err) {
     console.error(`saavnGetEditorialPlaylistSongs failed for "${query}":`, err);
   }
+
+  // Fallback to Sumit API for Playlists
+  try {
+    const encQ = encodeURIComponent(query);
+    const r = await fetchUrl(`https://saavn.sumit.co/api/search/playlists?query=${encQ}`);
+    if (r.status === 200) {
+      const body = JSON.parse(r.body);
+      const playlists = body?.data?.results || [];
+      const playlist = playlists[0];
+      if (playlist && playlist.id) {
+        const detailRes = await fetchUrl(`https://saavn.sumit.co/api/playlists?id=${playlist.id}`);
+        if (detailRes.status === 200) {
+          const detailBody = JSON.parse(detailRes.body);
+          const songs = detailBody?.data?.songs || detailBody?.data?.results || [];
+          if (Array.isArray(songs) && songs.length > 0) {
+            return songs.slice(0, limit);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`saavnGetEditorialPlaylistSongs fallback failed for "${query}":`, err);
+  }
+
   return [];
 }
 
@@ -422,9 +446,67 @@ function decryptDesEcb(ciphertextBase64) {
 
 function upgradeImageUrl(imgUrl) {
   if (!imgUrl) return '';
+  if (Array.isArray(imgUrl)) {
+    const best = imgUrl.find(i => i.quality === '500x500') || 
+                 imgUrl.find(i => i.quality === '150x150') || 
+                 imgUrl[imgUrl.length - 1];
+    imgUrl = best?.url || best?.link || '';
+  }
+  if (typeof imgUrl !== 'string') return '';
   let url = imgUrl.replace('http://', 'https://');
   url = url.replace('150x150', '500x500').replace('50x50', '500x500');
   return url;
+}
+
+function mapSongToRotty(s) {
+  if (!s) return null;
+  const title = s.name || s.title || s.song || '';
+  const id = s.id || s.songid || '';
+  
+  let artist = '';
+  if (s.artists) {
+    if (typeof s.artists === 'string') {
+      artist = s.artists;
+    } else if (Array.isArray(s.artists)) {
+      artist = s.artists.map(a => typeof a === 'string' ? a : (a.name || '')).filter(Boolean).join(', ');
+    } else if (typeof s.artists === 'object') {
+      const primary = s.artists.primary;
+      const all = s.artists.all;
+      if (Array.isArray(primary) && primary.length > 0) {
+        artist = primary.map(a => a.name || '').filter(Boolean).join(', ');
+      } else if (Array.isArray(all) && all.length > 0) {
+        artist = all.map(a => a.name || '').filter(Boolean).join(', ');
+      }
+    }
+  }
+  if (!artist) {
+    artist = s.subtitle || s.primary_artists || s.artist || '';
+  }
+  
+  let album = '';
+  if (s.album) {
+    if (typeof s.album === 'string') {
+      album = s.album;
+    } else if (typeof s.album === 'object') {
+      album = s.album.name || s.album.title || '';
+    }
+  }
+  
+  const image = upgradeImageUrl(s.image);
+  const duration = Number(s.duration || s.more_info?.duration || 0);
+  const language = s.language || '';
+  const url = extract320Url(s);
+  
+  return {
+    id,
+    title,
+    artist,
+    album,
+    image,
+    duration,
+    language,
+    url
+  };
 }
 
 function isGenericArtist(artist) {
@@ -442,6 +524,29 @@ function isGenericArtist(artist) {
     lower === 'multi-artist' ||
     lower === 'multi artist'
   );
+}
+
+function isOriginalSong(s) {
+  if (!s) return false;
+  const title = (s.title || '').toLowerCase();
+  const album = (s.album || '').toLowerCase();
+  if (title.includes('remix') || title.includes('re-mix') || title.includes('mashup') || title.includes('mash-up') ||
+      title.includes('lofi') || title.includes('lo-fi') || title.includes('slowed') ||
+      title.includes('reverb') || title.includes('sped up') || title.includes('cover') ||
+      title.includes('tribute') || title.includes('instrumental') || title.includes('karaoke') ||
+      title.includes('sad version') || title.includes('female version') || title.includes('male version') ||
+      title.includes('ringtone') || title.includes('bgm') || title.includes('acoustic') ||
+      title.includes('dj ') || title.includes(' dj') || title.includes('trap mix') ||
+      title.includes('non stop') || title.includes('non-stop') || title.includes('unplugged') ||
+      title.includes('lullaby') || title.includes('slow ') || title.includes('sped-up') ||
+      title.includes('reverbed') || title.includes('chillout') || title.includes('extended mix') ||
+      title.includes('radio edit') || title.includes('club mix') || title.includes('remixed') ||
+      title.includes('synthwave') || title.includes('piano version') || title.includes('violin version') ||
+      title.includes('re-created') || title.includes('recreated') ||
+      album.includes('remix') || album.includes('lofi') || album.includes('covers')) {
+    return false;
+  }
+  return true;
 }
 
 function deduplicateSongs(songs) {
@@ -623,16 +728,9 @@ app.post('/api/search', async (req, res) => {
     catch (__) { return res.status(502).json({ error: 'all_sources_failed' }); }
   }
 
-  const sanitized = songs.map(s => ({
-    id      : s.id || s.songid || '',
-    title   : s.title || s.song || '',
-    artist  : s.subtitle || s.primary_artists || s.artist || '',
-    album   : s.album || '',
-    image   : upgradeImageUrl(s.image),
-    duration: s.duration || s.more_info?.duration || 0,
-    language: s.language || '',
-    url     : extract320Url(s)
-  })).filter(s => s.id);
+  const sanitized = songs
+    .map(s => mapSongToRotty(s))
+    .filter(s => s && s.id);
 
   const deduplicated = deduplicateSongs(sanitized);
 
@@ -930,7 +1028,7 @@ app.post('/api/home', async (req, res) => {
     TopHits: qTopHits,
   };
 
-  for (const [key, q] of Object.entries(queries)) {
+  const promises = Object.entries(queries).map(async ([key, q]) => {
     try {
       let songs = await saavnGetEditorialPlaylistSongs(q, 35);
       if (!songs || songs.length === 0) {
@@ -943,18 +1041,18 @@ app.post('/api/home', async (req, res) => {
       // Shuffle the results
       const shuffled = songs.sort(() => 0.5 - Math.random());
       
-      const mapped = shuffled.slice(0, 12).map(s => ({
-        id: s.id || '', title: s.title || s.song || '',
-        artist: s.subtitle || s.primary_artists || '',
-        album: s.album || '', image: upgradeImageUrl(s.image),
-        duration: s.duration || s.more_info?.duration || 0,
-        language: s.language || '',
-        url: extract320Url(s)
-      })).filter(s => s.id);
+      const mapped = shuffled
+        .map(s => mapSongToRotty(s))
+        .filter(s => s && s.id && isOriginalSong(s));
       
-      sections[key] = deduplicateSongs(mapped);
-    } catch (_) { sections[key] = []; }
-  }
+      sections[key] = deduplicateSongs(mapped).slice(0, 12);
+    } catch (err) {
+      console.error(`Error building section ${key}:`, err);
+      sections[key] = [];
+    }
+  });
+
+  await Promise.all(promises);
   return res.json({ d: encryptPayload(JSON.stringify(sections)) });
 });
 
@@ -2210,16 +2308,7 @@ app.post('/api/details', async (req, res) => {
     }
 
     if (song) {
-      const sanitized = {
-        id: song.id || song.songid || '',
-        title: song.song || song.title || song.name || '',
-        artist: song.primary_artists || song.singers || song.subtitle || song.artist || 'Artist',
-        album: song.album || '',
-        image: upgradeImageUrl(song.image),
-        duration: Number(song.duration || song.more_info?.duration) || 0,
-        language: song.language || '',
-        url: extract320Url(song)
-      };
+      const sanitized = mapSongToRotty(song);
       return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
     }
   } catch (e) {
@@ -2274,16 +2363,9 @@ app.post('/api/genre', async (req, res) => {
   try {
     const songs = await saavnGetEditorialPlaylistSongs(q, 35);
     if (songs && songs.length > 0) {
-      const sanitized = songs.map(s => ({
-        id: s.id || '',
-        title: s.song || s.title || '',
-        artist: s.primary_artists || s.subtitle || '',
-        album: s.album || '',
-        image: upgradeImageUrl(s.image),
-        duration: Number(s.duration) || 0,
-        language: s.language || '',
-        url: extract320Url(s)
-      })).filter(s => s.id);
+      const sanitized = songs
+        .map(s => mapSongToRotty(s))
+        .filter(s => s && s.id && isOriginalSong(s));
       return res.json({ d: encryptPayload(JSON.stringify(deduplicateSongs(sanitized))) });
     }
   } catch (err) {
@@ -2292,17 +2374,13 @@ app.post('/api/genre', async (req, res) => {
   
   // Fallback to keyword search
   try {
-    const songs = await saavnSearch(q, 35);
-    const sanitized = songs.map(s => ({
-      id: s.id || '',
-      title: s.song || s.title || '',
-      artist: s.primary_artists || s.subtitle || '',
-      album: s.album || '',
-      image: upgradeImageUrl(s.image),
-      duration: Number(s.duration) || 0,
-      language: s.language || '',
-      url: extract320Url(s)
-    })).filter(s => s.id);
+    let songs = await saavnSearch(q, 35);
+    if (!songs || songs.length === 0) {
+      songs = await saavnFallbackSearch(q, 35);
+    }
+    const sanitized = songs
+      .map(s => mapSongToRotty(s))
+      .filter(s => s && s.id && isOriginalSong(s));
     return res.json({ d: encryptPayload(JSON.stringify(deduplicateSongs(sanitized))) });
   } catch (_) {
     return res.json({ d: encryptPayload(JSON.stringify([])) });
