@@ -1106,7 +1106,7 @@ async function getPlaylistSongs(playlistId, limit = 35) {
     });
     if (detailRes.status === 200) {
       const detailBody = JSON.parse(detailRes.body);
-      if (detailBody && detailBody.songs && Array.isArray(detailBody.songs)) {
+      if (detailBody && detailBody.songs && Array.isArray(detailBody.songs) && detailBody.songs.length >= 5) {
         return detailBody.songs.slice(0, limit);
       }
     }
@@ -1120,7 +1120,7 @@ async function getPlaylistSongs(playlistId, limit = 35) {
     if (r.status === 200) {
       const body = JSON.parse(r.body);
       const songs = body?.data?.songs || body?.data?.results || [];
-      if (Array.isArray(songs) && songs.length > 0) {
+      if (Array.isArray(songs) && songs.length >= 5) {
         return songs.slice(0, limit);
       }
     }
@@ -1198,12 +1198,12 @@ app.post('/api/home', async (req, res) => {
   const qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + 2) % editorsPicksPool.length];
 
   const queries = {
-    Trending: { q: qTrending, playlistId: '82974051' },
-    Bollywood: { q: qBollywood, playlistId: '49040' },
-    Punjabi: { q: qPunjabi, playlistId: '46624508' },
-    TopHits: { q: qTopHits, playlistId: '82974051' },
-    'Viral Songs': { q: qViral, playlistId: '110756784' },
-    'Editor\'s Picks': { q: qEditorsPicks, playlistId: '104618770' },
+    Trending: { q: qTrending, playlistId: '1265126272' }, // Chartbusters 2025 - Hindi
+    Bollywood: { q: qBollywood, playlistId: '1234731818' }, // Latest Hindi Hits
+    Punjabi: { q: qPunjabi, playlistId: '4144832' }, // Punjabi Hit Songs
+    TopHits: { q: qTopHits, playlistId: '1265126272' }, // Chartbusters 2025 - Hindi
+    'Viral Songs': { q: qViral, playlistId: '1223482895' }, // Trending Viral Mix
+    'Editor\'s Picks': { q: qEditorsPicks, playlistId: '1139074020' }, // Most Streamed Love Songs
   };
 
   const promises = Object.entries(queries).map(async ([key, info]) => {
