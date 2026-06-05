@@ -373,73 +373,73 @@ class ApiService {
     final dayIndex = DateTime.now().day % 7;
 
     const trendingPool = [
-      'trending hindi latest',
-      'viral songs hindi',
-      'latest trending bollywood',
-      'hindi chartbusters today',
-      'trending songs new release',
-      'trending hits india',
-      'top billboard hindi',
+      'latest hindi songs',
+      'trending bollywood hits',
+      'latest chartbusters hindi',
+      'top popular hindi',
+      'trending hits hindi',
+      'latest songs bollywood',
+      'new popular hindi hits',
     ];
     
     const bollywoodPool = [
-      'bollywood popular hits',
-      'new bollywood romantic',
-      'bollywood blockbusters',
-      'bollywood dance tracks',
-      'bollywood lofi beats',
-      'classic bollywood updates',
-      'bollywood romantic trending',
+      'bollywood hits new',
+      'latest romantic hindi',
+      'bollywood new romantic',
+      'new hindi songs popular',
+      'blockbuster hindi songs',
+      'classic melodies hindi',
+      'love songs hindi new',
     ];
 
     const punjabiPool = [
-      'punjabi hits new',
-      'latest punjabi tracks',
-      'punjabi dance chartbusters',
-      'punjabi romantic love',
-      'punjabi lofi beats',
-      'punjabi party anthems',
-      'trending punjabi hits',
+      'latest punjabi pop',
+      'punjabi hits dance',
+      'trending punjabi songs',
+      'punjabi new releases',
+      'punjabi pop hits',
+      'punjabi hit tracks',
+      'viral punjabi hits',
     ];
 
     const topHitsPool = [
-      'top hindi songs',
-      'latest english pop',
-      'top global billboard',
-      'international hit releases',
-      'global top 50 hits',
-      'billboard hot songs',
-      'spotify top songs',
+      'top popular hindi songs',
+      'latest international pop',
+      'trending hit songs',
+      'popular english hits',
+      'global chartbuster songs',
+      'spotify top hits hindi',
+      'billboard hot english',
     ];
 
     const viralPool = [
-      'viral songs list',
-      'india viral hit tracks',
-      'viral music hits',
-      'tiktok trending tracks',
-      'viral hits billboard',
-      'viral top song playlist',
-      'social media hits',
+      'trending viral hindi',
+      'latest popular songs',
+      'viral hit songs',
+      'tiktok trending hindi',
+      'viral hit list hindi',
+      'popular viral track',
+      'social media hit songs',
     ];
 
     const newReleasesPool = [
-      'new releases hindi',
-      'latest english singles',
-      'new bollywood music',
-      'new release pop songs',
-      'fresh tracks global',
-      'new releases album songs',
-      'latest music releases',
+      'new release songs',
+      'latest hindi tracks',
+      'latest romantic songs',
+      'fresh music global',
+      'new bollywood releases',
+      'latest pop singles',
+      'fresh releases hindi',
     ];
 
     const editorsPicksPool = [
-      'editors choice songs',
-      'editors pick bollywood',
-      'editors choice romantic',
-      'best new releases choice',
-      'editors picks international',
-      'editors pick melodies',
-      'curated music hits',
+      'best of bollywood romantic',
+      'top hits hindi melodies',
+      'latest romantic hindi',
+      'melody hits hindi',
+      'curated romantic songs',
+      'editors choice hindi',
+      'melodic hits bollywood',
     ];
 
     final Map<String, String> targetQueries = {};

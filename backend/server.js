@@ -1015,17 +1015,35 @@ app.post('/api/home', async (req, res) => {
     'Global Top Hits',
   ];
 
+  const viralPool = [
+    'Hindi Viral Hits',
+    'Trending Viral Mix',
+    'Viral Hits Hindi',
+    'Now Trending',
+  ];
+
+  const editorsPicksPool = [
+    'Romantic Hits 2025 - Hindi',
+    'Bollywood Love Songs',
+    '2000s Romantic Hits',
+    '90s Bollywood Romance',
+  ];
+
   // Pick queries dynamically
   const qTrending = trendingPool[(dayIndex + hourIndex) % trendingPool.length];
   const qBollywood = bollywoodPool[(dayIndex + hourIndex + 2) % bollywoodPool.length];
   const qPunjabi = punjabiPool[(dayIndex + hourIndex + 4) % punjabiPool.length];
   const qTopHits = topHitsPool[(dayIndex + hourIndex + 6) % topHitsPool.length];
+  const qViral = viralPool[(dayIndex + hourIndex) % viralPool.length];
+  const qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + 2) % editorsPicksPool.length];
 
   const queries = {
     Trending: qTrending,
     Bollywood: qBollywood,
     Punjabi: qPunjabi,
     TopHits: qTopHits,
+    'Viral Songs': qViral,
+    'Editor\'s Picks': qEditorsPicks,
   };
 
   const promises = Object.entries(queries).map(async ([key, q]) => {
