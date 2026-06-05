@@ -84,6 +84,10 @@ class AiDjProPanel extends ConsumerWidget {
           recent: ref.read(recentSongsProvider),
           favorites: ref.read(favoritesProvider),
           excludeIds: exclude,
+          excludeSongs: [
+            ...handler.songQueue,
+            ...handler.history,
+          ],
         );
         if (songs.isNotEmpty) {
           await handler.appendUpcoming(songs);

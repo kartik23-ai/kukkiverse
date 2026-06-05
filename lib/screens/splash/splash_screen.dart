@@ -9,6 +9,7 @@ import '../../core/constants/app_constants.dart';
 import '../../services/storage_service.dart';
 import '../../services/firebase_service.dart';
 import '../../widgets/elite_background.dart';
+import '../../widgets/rotty_shimmer_button.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -63,27 +64,53 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   Future<void> _checkAndNavigate() async {
-    final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    // 1. Define parallel operations
+    final Future<Map<String, dynamic>> statusFuture = () async {
+      try {
+        final result = await InternetAddress.lookup('firestore.googleapis.com')
+            .timeout(const Duration(milliseconds: 1000));
+        final online = result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+        if (online) {
+          return await FirebaseService.instance.checkKillSwitch().timeout(const Duration(milliseconds: 1500));
+        }
+      } catch (e) {
+        debugPrint('Splash screen network lookup/killswitch failed: $e');
+      }
+      return {'enabled': true};
+    }();
 
-    // Quick offline detection to prevent startup freeze/delay
-    bool online = true;
-    try {
-      final result = await InternetAddress.lookup('firestore.googleapis.com')
-          .timeout(const Duration(milliseconds: 1500));
-      online = result.isNotEmpty && result.first.rawAddress.isNotEmpty;
-    } catch (_) {
-      online = false;
-    }
+    final Future<void> userDataFuture = () async {
+      final storage = StorageService();
+      if (storage.authSessionDone) {
+        try {
+          await FirebaseService.instance.pullUserData().timeout(const Duration(milliseconds: 2000));
+        } catch (e) {
+          debugPrint('Splash screen pullUserData error: $e');
+        }
+      }
+    }();
 
+    final Future<void> minLogoDelay = Future.delayed(const Duration(milliseconds: 800));
+
+    // 2. Execute parallel tasks concurrently
     Map<String, dynamic> status = {'enabled': true};
-    if (online) {
-      status = await FirebaseService.instance.checkKillSwitch();
+    try {
+      final results = await Future.wait([
+        statusFuture,
+        userDataFuture,
+        minLogoDelay,
+      ]);
+      status = results[0] as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('Splash screen parallel init failed: $e');
     }
+
+    if (!mounted) return;
+
     final minVersion = status['minVersion'] as String?;
     final isOutdated = _isVersionOutdated(AppConstants.version, minVersion);
 
     if (status['enabled'] == false || isOutdated) {
-      if (!mounted) return;
       setState(() {
         _killed = true;
         _isUpdateRequired = isOutdated;
@@ -94,11 +121,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       return;
     }
 
-    // Wait for animation
-    await Future.delayed(const Duration(milliseconds: 2200));
-    if (!mounted) return;
-
     final storage = StorageService();
+    if (storage.lastSeenVersion != AppConstants.version) {
+      await storage.setHasSelectedFavorites(false);
+      await storage.setLastSeenVersion(AppConstants.version);
+    }
     final isGuest = !storage.authSessionDone;
     if (isGuest && storage.profileName.isEmpty) {
       setState(() {
@@ -108,6 +135,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       _goNext();
     }
   }
+
 
   void _goNext() {
     final storage = StorageService();
@@ -119,10 +147,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       context.go('/onboarding');
       return;
     }
+    if (!storage.hasSelectedFavorites) {
+      context.go('/taste-selection?onboarding=true');
+      return;
+    }
     context.go('/home');
   }
 
-  @override
+
   void dispose() {
     _logo.dispose();
     super.dispose();
@@ -233,37 +265,31 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               ),
             ),
             const SizedBox(height: 24),
-            SizedBox(
+            RottyShimmerButton(
               width: double.infinity,
               height: 48,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                onPressed: () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) return;
-                  final storage = StorageService();
-                  await storage.setProfileName(name);
-                  try {
-                    if (FirebaseService.instance.isReady && FirebaseService.instance.currentUser != null) {
-                      await FirebaseService.instance.currentUser?.updateDisplayName(name);
-                    }
-                  } catch (_) {}
-                  _goNext();
-                },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "LET'S GO",
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward_rounded, size: 16),
-                  ],
-                ),
+              onTap: () async {
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                final storage = StorageService();
+                await storage.setProfileName(name);
+                try {
+                  if (FirebaseService.instance.isReady && FirebaseService.instance.currentUser != null) {
+                    await FirebaseService.instance.currentUser?.updateDisplayName(name);
+                  }
+                } catch (_) {}
+                _goNext();
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "LET'S GO",
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1, color: Colors.white),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.white),
+                ],
               ),
             ),
           ],

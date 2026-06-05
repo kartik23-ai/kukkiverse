@@ -27,8 +27,9 @@ class _DesktopSongRowState extends ConsumerState<DesktopSongRow> {
 
   @override
   Widget build(BuildContext context) {
-    final downloadStates = ref.watch(downloadNotifierProvider);
-    final downloadState = downloadStates[widget.song.id] ?? const DownloadState.none();
+    final downloadState = ref.watch(
+      downloadNotifierProvider.select((states) => states[widget.song.id] ?? const DownloadState.none()),
+    );
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),

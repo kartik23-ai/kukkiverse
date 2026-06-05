@@ -16,11 +16,30 @@ import '../../widgets/party_disco_lights.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/elite_background.dart';
 
-class PartySyncScreen extends ConsumerWidget {
+class PartySyncScreen extends ConsumerStatefulWidget {
   const PartySyncScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PartySyncScreen> createState() => _PartySyncScreenState();
+}
+
+class _PartySyncScreenState extends ConsumerState<PartySyncScreen> {
+  late final TextEditingController _joinCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _joinCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _joinCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final party = ref.watch(partyRoomProvider);
     final playing = ref.watch(isPlayingProvider);
     final palette = ref.watch(dynamicPaletteProvider);
@@ -81,8 +100,8 @@ class PartySyncScreen extends ConsumerWidget {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     child: party.code == null
-                        ? _hostJoinView(context, ref, palette.primary)
-                        : _roomView(context, ref, party, palette.primary),
+                        ? _hostJoinView(context, palette.primary)
+                        : _roomView(context, party, palette.primary),
                   ),
                 ),
               ),
@@ -93,9 +112,7 @@ class PartySyncScreen extends ConsumerWidget {
     );
   }
 
-  Widget _hostJoinView(BuildContext context, WidgetRef ref, Color accent) {
-    final joinCtrl = TextEditingController();
-
+  Widget _hostJoinView(BuildContext context, Color accent) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       child: Column(
@@ -229,7 +246,7 @@ class PartySyncScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
                 TextField(
-                  controller: joinCtrl,
+                  controller: _joinCtrl,
                   style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                   textCapitalization: TextCapitalization.characters,
                   decoration: InputDecoration(
@@ -256,7 +273,7 @@ class PartySyncScreen extends ConsumerWidget {
                 LiquidGlassButton(
                   accentColor: Colors.cyan,
                   onTap: () async {
-                    final code = joinCtrl.text.trim().toUpperCase();
+                    final code = _joinCtrl.text.trim().toUpperCase();
                     if (code.isEmpty) return;
                     try {
                       await ref.read(partyRoomProvider.notifier).joinRoom(code);
@@ -294,205 +311,213 @@ class PartySyncScreen extends ConsumerWidget {
     );
   }
 
-  Widget _roomView(BuildContext context, WidgetRef ref, PartyRoomState party, Color accent) {
+  Widget _roomView(BuildContext context, PartyRoomState party, Color accent) {
     final isKeyboard = MediaQuery.of(context).viewInsets.bottom > 0;
+    final showStats = !isKeyboard && !ref.watch(partySearchActiveProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!isKeyboard && !ref.watch(partySearchActiveProvider)) ...[
-          // Connected Room Stats Card
-          LiquidGlass(
-            borderRadius: 22,
-            surfaceOpacity: 0.09,
-            borderOpacity: 0.18,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+        Visibility(
+          visible: showStats,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Connected Room Stats Card
+              LiquidGlass(
+                borderRadius: 22,
+                surfaceOpacity: 0.09,
+                borderOpacity: 0.18,
+                padding: const EdgeInsets.all(20),
+                child: Column(
                   children: [
-                    const Icon(Icons.wifi_tethering_rounded, color: Colors.greenAccent, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'CONNECTED & SYNCED',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.greenAccent,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SelectableText(
-                  party.code!,
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.5,
-                    shadows: [
-                      Shadow(color: accent.withValues(alpha: 0.4), blurRadius: 15),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: party.code!));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: AppColors.bgElevated,
-                            content: Text('Room code copied to clipboard', style: TextStyle(color: Colors.white)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.wifi_tethering_rounded, color: Colors.greenAccent, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'CONNECTED & SYNCED',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.greenAccent,
+                            letterSpacing: 1.5,
                           ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                         ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.copy_rounded, color: Colors.white70, size: 12),
-                            const SizedBox(width: 6),
-                            Text('Copy Code', style: GoogleFonts.inter(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SelectableText(
+                      party.code!,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                        shadows: [
+                          Shadow(color: accent.withValues(alpha: 0.4), blurRadius: 15),
+                        ],
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: party.code!));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                backgroundColor: AppColors.bgElevated,
+                                content: Text('Room code copied to clipboard', style: TextStyle(color: Colors.white)),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.copy_rounded, color: Colors.white70, size: 12),
+                                const SizedBox(width: 6),
+                                Text('Copy Code', style: GoogleFonts.inter(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 16),
 
-          // Live member list
-          StreamBuilder<List<FirebasePartyMember>>(
-            stream: SupabaseService.instance.watchPartyMembers(party.code!),
-            builder: (context, snapshot) {
-              final members = snapshot.data ?? [];
-              if (members.isEmpty) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: LiquidGlass(
-                  borderRadius: 18,
-                  surfaceOpacity: 0.06,
-                  borderOpacity: 0.12,
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+              // Live member list
+              StreamBuilder<List<FirebasePartyMember>>(
+                stream: SupabaseService.instance.watchPartyMembers(party.code!),
+                builder: (context, snapshot) {
+                  final members = snapshot.data ?? [];
+                  if (members.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: LiquidGlass(
+                      borderRadius: 18,
+                      surfaceOpacity: 0.06,
+                      borderOpacity: 0.12,
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.people_outline_rounded, color: Colors.greenAccent, size: 16),
-                          const SizedBox(width: 8),
-                          Text(
-                            'PARTY MEMBERS (${members.length})',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.greenAccent,
-                              letterSpacing: 1.2,
+                          Row(
+                            children: [
+                              const Icon(Icons.people_outline_rounded, color: Colors.greenAccent, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                'PARTY MEMBERS (${members.length})',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.greenAccent,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: members.map((member) {
+                                final isMemberHost = member.uid == party.hostId;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 7,
+                                          height: 7,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isMemberHost ? Colors.amber : Colors.greenAccent,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          member.name,
+                                          style: GoogleFonts.inter(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (isMemberHost) ...[
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '👑',
+                                            style: GoogleFonts.inter(fontSize: 10),
+                                          ),
+                                        ],
+                                        if (party.isHost && !isMemberHost) ...[
+                                          const SizedBox(width: 8),
+                                          InkWell(
+                                            onTap: () async {
+                                              final messenger = ScaffoldMessenger.of(context);
+                                              try {
+                                                await ref.read(partyRoomProvider.notifier).kickMember(member.uid);
+                                                messenger.showSnackBar(
+                                                  SnackBar(
+                                                    backgroundColor: AppColors.bgElevated,
+                                                    content: Text('Kicked ${member.name} 🥾', style: const TextStyle(color: Colors.white)),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                messenger.showSnackBar(
+                                                  SnackBar(
+                                                    backgroundColor: Colors.redAccent,
+                                                    content: Text('Failed to kick member: ${e.toString().replaceAll('Exception: ', '')}', style: const TextStyle(color: Colors.white)),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            child: const Icon(
+                                              Icons.close_rounded,
+                                              color: Colors.redAccent,
+                                              size: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          children: members.map((member) {
-                            final isMemberHost = member.uid == party.hostId;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 7,
-                                      height: 7,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: isMemberHost ? Colors.amber : Colors.greenAccent,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      member.name,
-                                      style: GoogleFonts.inter(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    if (isMemberHost) ...[
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '👑',
-                                        style: GoogleFonts.inter(fontSize: 10),
-                                      ),
-                                    ],
-                                    if (party.isHost && !isMemberHost) ...[
-                                      const SizedBox(width: 8),
-                                      InkWell(
-                                        onTap: () async {
-                                          final messenger = ScaffoldMessenger.of(context);
-                                          try {
-                                            await ref.read(partyRoomProvider.notifier).kickMember(member.uid);
-                                            messenger.showSnackBar(
-                                              SnackBar(
-                                                backgroundColor: AppColors.bgElevated,
-                                                content: Text('Kicked ${member.name} 🥾', style: const TextStyle(color: Colors.white)),
-                                              ),
-                                            );
-                                          } catch (e) {
-                                            messenger.showSnackBar(
-                                              SnackBar(
-                                                backgroundColor: Colors.redAccent,
-                                                content: Text('Failed to kick member: ${e.toString().replaceAll('Exception: ', '')}', style: const TextStyle(color: Colors.white)),
-                                              ),
-                                            );
-                                          }
-                                        },
-                                        child: const Icon(
-                                          Icons.close_rounded,
-                                          color: Colors.redAccent,
-                                          size: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-        ],
+        ),
+
 
         // Inline song search bar
         _PartySearchAndAddSection(
@@ -522,7 +547,7 @@ class PartySyncScreen extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   InkWell(
-                    onTap: () => _showPlaylistsSelectorSheet(context, ref, accent),
+                    onTap: () => _showPlaylistsSelectorSheet(context, accent),
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -586,7 +611,7 @@ class PartySyncScreen extends ConsumerWidget {
                       itemBuilder: (context, i) {
                         final s = party.queue[i];
                         final isNowPlaying = party.nowPlaying?.id == s.id;
-                        return _buildQueueItem(context, ref, s, i, isNowPlaying, accent, true);
+                        return _buildQueueItem(context, s, i, isNowPlaying, accent, true);
                       },
                     )
                   : ListView.builder(
@@ -595,7 +620,7 @@ class PartySyncScreen extends ConsumerWidget {
                       itemBuilder: (context, i) {
                         final s = party.queue[i];
                         final isNowPlaying = party.nowPlaying?.id == s.id;
-                        return _buildQueueItem(context, ref, s, i, isNowPlaying, accent, false);
+                        return _buildQueueItem(context, s, i, isNowPlaying, accent, false);
                       },
                     ),
         ),
@@ -607,7 +632,6 @@ class PartySyncScreen extends ConsumerWidget {
 
   Widget _buildQueueItem(
     BuildContext context,
-    WidgetRef ref,
     SongModel s,
     int index,
     bool isNowPlaying,
@@ -719,7 +743,7 @@ class PartySyncScreen extends ConsumerWidget {
     );
   }
 
-  void _showPlaylistsSelectorSheet(BuildContext context, WidgetRef ref, Color accent) {
+  void _showPlaylistsSelectorSheet(BuildContext context, Color accent) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0F0F1A),

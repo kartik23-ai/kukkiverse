@@ -1,24 +1,28 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:http/http.dart' as http;
 import '../models/song_model.dart';
 import 'api_service.dart';
 import 'audio_effects.dart';
 import 'ai_dj_service.dart';
 import 'storage_service.dart';
+import 'dart:math' as math;
 import 'local_audio_server.dart';
+import 'ghost_proxy_client.dart';
+import '../core/constants/api_constants.dart';
 
 class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
-  // Android-only equalizer — skip on desktop to avoid MissingPluginException
+  // Android-only equalizer — disabled to prevent native platform channel deadlocks on Android
   static bool get _isMobile => Platform.isAndroid || Platform.isIOS;
-  final AndroidEqualizer? _eq = _isMobile ? RottyAudioEffects.createEqualizer() : null;
-  late final AudioPlayer _player = _isMobile
-      ? AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [_eq!]))
-      : AudioPlayer();
+  final AndroidEqualizer? _eq = null;
+  late final AudioPlayer _player = AudioPlayer();
   final ApiService _api = ApiService();
   final StorageService _storage = StorageService();
   late final AiDjService _aiDj = AiDjService(_api);
@@ -36,10 +40,19 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   AudioServiceRepeatMode _repeatMode = AudioServiceRepeatMode.none;
   double _speed = 1.0;
   bool _isCrossfading = false;
+  bool _isMixFading = false;
+
+  final AndroidEqualizer? _eqAux = null;
+  late final AudioPlayer _auxPlayer = AudioPlayer();
+
   bool _isPreResolving = false;
   String? _preResolvedSongId;
   SongModel? _preResolvedSong;
   String? _lastPreResolvedForSongId;
+  String _lastFilterA = '';
+  String _lastFilterB = '';
+  List<dynamic> _vocalIntervalsA = [];
+  List<dynamic> _vocalIntervalsB = [];
 
   AudioPlayer get player => _player;
 
@@ -65,6 +78,9 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   List<SongModel> get originalContextQueue => List.unmodifiable(_originalContextQueue);
   List<SongModel> get history => List.unmodifiable(_history);
 
+  int get rawContextIndex => _currentIndex;
+  bool get isUserSongPlaying => _currentUserSong != null;
+
   int get currentIndex {
     if (songQueue.isEmpty) return -1;
     if (_currentUserSong != null) {
@@ -89,6 +105,15 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   Future<void> _init() async {
+    // Start local server to proxy streams
+    try {
+      final server = LocalAudioServer();
+      await server.start();
+      debugPrint('ROTTY LOCAL SERVER: Initialized on startup, port = ${server.port}');
+    } catch (e) {
+      debugPrint('ROTTY LOCAL SERVER: Failed to start on startup: $e');
+    }
+
     // AudioSession may not be supported on desktop
     if (_isMobile) {
       try {
@@ -138,27 +163,171 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
           triggerAutoplayIfNeeded();
         }
 
-        // 1. Pre-resolve the next song in the queue 15 seconds before the current song ends
+        // 1. Pre-resolve the next song in the queue dynamically based on blend length (blend length + 8s, clamped between 15s and 30s)
+        final int blendLengthSeconds = _storage.mixBlendLength;
+        final int preResolveTriggerSeconds = (blendLengthSeconds + 8).clamp(15, 30);
         if (currentId != null &&
-            remaining.inSeconds <= 15 &&
+            remaining.inSeconds <= preResolveTriggerSeconds &&
             _lastPreResolvedForSongId != currentId &&
             !_isPreResolving) {
           _lastPreResolvedForSongId = currentId;
           _preResolveNextSong();
         }
 
-        // 2. Trigger natural DJ crossfade at 2.2 seconds remaining
-        if (RottyAudioEffects.infiniteBlend && !_isCrossfading) {
-          if (remaining.inMilliseconds <= 2200 && remaining.inMilliseconds > 0) {
-            _isCrossfading = true;
-            _triggerNaturalCrossfade();
+        // 2. Trigger Mix Fade or natural DJ crossfade (only if not in Repeat One mode!)
+        if (_repeatMode != AudioServiceRepeatMode.one) {
+          if (_storage.mixFadeEnabled && !_isMixFading) {
+            final int triggerMs = blendLengthSeconds * 1000;
+            if (remaining.inMilliseconds <= triggerMs && remaining.inMilliseconds > 0) {
+              _triggerMixFade();
+            }
+          } else if (RottyAudioEffects.infiniteBlend && !_isCrossfading && !_isMixFading) {
+            if (remaining.inMilliseconds <= 2200 && remaining.inMilliseconds > 0) {
+              _isCrossfading = true;
+              _triggerNaturalCrossfade();
+            }
           }
         }
       }
     });
   }
 
+  Future<String?> _resolvePipedStream(String videoId) async {
+    final pipedInstances = [
+      'https://pipedapi.kavin.rocks',
+      'https://api.piped.projectsegfau.lt',
+      'https://piped-api.lunar.icu',
+      'https://pipedapi.colt.es',
+      'https://pipedapi.nosebs.ru',
+      'https://pipedapi.priv.au',
+      'https://pipedapi.leptons.xyz',
+      'https://pipedapi.drgns.space',
+    ];
+
+    for (final instance in pipedInstances) {
+      try {
+        debugPrint('ROTTY PLAYBACK: Trying Piped instance $instance for videoId: $videoId');
+        final response = await http.get(
+          Uri.parse('$instance/streams/$videoId'),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final audioStreams = data['audioStreams'];
+          if (audioStreams is List && audioStreams.isNotEmpty) {
+            var bestStream = audioStreams.first;
+            var maxBitrate = -1;
+            for (final stream in audioStreams) {
+              final bitrate = stream['bitrate'] ?? 0;
+              if (bitrate is num && bitrate > maxBitrate) {
+                maxBitrate = bitrate.toInt();
+                bestStream = stream;
+              }
+            }
+            final url = bestStream['url'] as String?;
+            if (url != null && url.isNotEmpty) {
+              debugPrint('ROTTY PLAYBACK: Resolved stream via Piped: $instance');
+              return url;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('ROTTY PLAYBACK: Piped instance $instance failed: $e');
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _resolveInvidiousStream(String videoId) async {
+    final invidiousInstances = [
+      'https://invidious.projectsegfau.lt',
+      'https://inv.tux.pizza',
+      'https://yewtu.be',
+      'https://invidious.no-logs.com',
+      'https://invidious.nerdvpn.de',
+      'https://iv.melmac.space',
+      'https://invidious.privacydev.net',
+    ];
+
+    for (final instance in invidiousInstances) {
+      try {
+        debugPrint('ROTTY PLAYBACK: Trying Invidious instance $instance for videoId: $videoId');
+        final response = await http.get(
+          Uri.parse('$instance/api/v1/videos/$videoId?local=true'),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final adaptiveFormats = data['adaptiveFormats'];
+          if (adaptiveFormats is List && adaptiveFormats.isNotEmpty) {
+            for (final format in adaptiveFormats) {
+              final type = format['type']?.toString() ?? '';
+              if (type.startsWith('audio/')) {
+                var url = format['url'] as String?;
+                if (url != null && url.isNotEmpty) {
+                  if (url.startsWith('/')) {
+                    url = '$instance$url';
+                  }
+                  debugPrint('ROTTY PLAYBACK: Resolved stream via Invidious: $instance');
+                  return url;
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('ROTTY PLAYBACK: Invidious instance $instance failed: $e');
+      }
+    }
+    return null;
+  }
+
   Future<SongModel> _resolveSongUrl(SongModel song) async {
+    if (song.id.startsWith('youtube_')) {
+      final videoId = song.id.replaceFirst('youtube_', '');
+      String? streamUrl;
+
+      // 1. Try youtube_explode_dart first
+      try {
+        final yt = YoutubeExplode();
+        final manifest = await yt.videos.streamsClient.getManifest(videoId).timeout(const Duration(seconds: 6));
+        final audioOnly = manifest.audioOnly;
+        if (audioOnly.isNotEmpty) {
+          final bestAudio = audioOnly.withHighestBitrate();
+          streamUrl = bestAudio.url.toString();
+          debugPrint('ROTTY PLAYBACK: Resolved YouTube stream URL via YoutubeExplode for ${song.title}');
+        }
+        yt.close();
+      } catch (e) {
+        debugPrint('ROTTY PLAYBACK: YoutubeExplode stream resolution failed/timed out: $e');
+      }
+
+      // 2. Try Piped API fallback if YoutubeExplode failed
+      if (streamUrl == null) {
+        debugPrint('ROTTY PLAYBACK: Falling back to Piped APIs for videoId: $videoId');
+        streamUrl = await _resolvePipedStream(videoId);
+      }
+
+      // 3. Try Invidious API fallback if Piped failed
+      if (streamUrl == null) {
+        debugPrint('ROTTY PLAYBACK: Falling back to Invidious APIs for videoId: $videoId');
+        streamUrl = await _resolveInvidiousStream(videoId);
+      }
+
+      if (streamUrl != null) {
+        debugPrint('ROTTY PLAYBACK: Resolved YouTube stream URL: $streamUrl');
+        final server = LocalAudioServer();
+        await server.start();
+        if (server.port != null) {
+          final proxyUrl = 'http://127.0.0.1:${server.port}/proxy?url=${Uri.encodeComponent(streamUrl)}';
+          debugPrint('ROTTY PLAYBACK: Routed YouTube stream URL via local proxy: $proxyUrl');
+          return song.copyWith(url: proxyUrl);
+        }
+        return song.copyWith(url: streamUrl);
+      }
+      return song;
+    }
+
     // 1. Check if the song has been downloaded offline
     if (_storage.isSongDownloaded(song.id)) {
       try {
@@ -202,24 +371,197 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     // If the song already has a playable URL, return it instantly to avoid pre-playback delay!
     if (song.hasPlayableUrl) {
       debugPrint('ROTTY PLAYBACK: Using existing playable URL for ${song.title} to minimize latency');
-      return song;
+      var playUrl = song.url;
+      final isYt = song.id.startsWith('youtube_') || playUrl.contains('googlevideo.com') || playUrl.contains('youtube.com') || playUrl.contains('youtu.be');
+      if (isYt && !playUrl.contains('127.0.0.1')) {
+        final server = LocalAudioServer();
+        await server.start();
+        if (server.port != null) {
+          playUrl = 'http://127.0.0.1:${server.port}/proxy?url=${Uri.encodeComponent(playUrl)}';
+          debugPrint('ROTTY PLAYBACK: Routed existing YouTube stream through local proxy: $playUrl');
+        }
+      } else if (!isYt && GhostProxyClient.isEnabled && playUrl.startsWith('http') && !playUrl.contains('/api/media') && !playUrl.contains('/renders/')) {
+        playUrl = '${ApiConstants.backendUrl}/api/media?url=${Uri.encodeComponent(playUrl)}';
+        debugPrint('ROTTY PLAYBACK: Routed existing playable stream through media proxy: $playUrl');
+      }
+      return song.copyWith(url: playUrl);
     }
 
     // 3. For any network song, always fetch a fresh, unexpired URL right before playback
+    SongModel? resolvedSong;
     try {
       debugPrint('ROTTY PLAYBACK: Fetching fresh unexpired URL for ${song.title} (${song.id})');
       final details = await _api.getSongDetails(song.id);
       if (details != null && details.hasPlayableUrl) {
-        return details;
+        var playUrl = details.url;
+        final isYt = details.id.startsWith('youtube_') || playUrl.contains('googlevideo.com') || playUrl.contains('youtube.com') || playUrl.contains('youtu.be');
+        if (isYt && !playUrl.contains('127.0.0.1')) {
+          final server = LocalAudioServer();
+          await server.start();
+          if (server.port != null) {
+            playUrl = 'http://127.0.0.1:${server.port}/proxy?url=${Uri.encodeComponent(playUrl)}';
+            debugPrint('ROTTY PLAYBACK: Routed fresh YouTube stream through local proxy: $playUrl');
+          }
+        } else if (!isYt && GhostProxyClient.isEnabled && playUrl.startsWith('http') && !playUrl.contains('/api/media') && !playUrl.contains('/renders/')) {
+          playUrl = '${ApiConstants.backendUrl}/api/media?url=${Uri.encodeComponent(playUrl)}';
+          debugPrint('ROTTY PLAYBACK: Routed fresh network stream through media proxy: $playUrl');
+        }
+        resolvedSong = details.copyWith(url: playUrl);
       }
     } catch (e) {
       debugPrint('ROTTY PLAYBACK: Failed to fetch fresh URL: $e');
     }
 
+    if (resolvedSong != null) {
+      return resolvedSong;
+    }
+
+    // Self-healing fallback: if JioSaavn loading fails or URL is empty, search YouTube and stream!
+    debugPrint('ROTTY PLAYBACK: JioSaavn URL is empty/unplayable. Triggering YouTube self-healing fallback for "${song.title} ${song.artist}"...');
+    try {
+      final query = '${song.title} ${song.artist}';
+      final yt = YoutubeExplode();
+      final searchList = await yt.search.search(query).timeout(const Duration(seconds: 5));
+      if (searchList.isNotEmpty) {
+        final video = searchList.first;
+        final videoId = video.id.value;
+        String? streamUrl;
+        
+        try {
+          final manifest = await yt.videos.streamsClient.getManifest(video.id).timeout(const Duration(seconds: 5));
+          final audioOnly = manifest.audioOnly;
+          if (audioOnly.isNotEmpty) {
+            streamUrl = audioOnly.withHighestBitrate().url.toString();
+          }
+        } catch (_) {}
+
+        if (streamUrl == null) {
+          streamUrl = await _resolvePipedStream(videoId);
+        }
+        if (streamUrl == null) {
+          streamUrl = await _resolveInvidiousStream(videoId);
+        }
+
+        if (streamUrl != null) {
+          yt.close();
+          final server = LocalAudioServer();
+          await server.start();
+          var playUrl = streamUrl;
+          if (server.port != null) {
+            playUrl = 'http://127.0.0.1:${server.port}/proxy?url=${Uri.encodeComponent(streamUrl)}';
+          }
+          debugPrint('ROTTY PLAYBACK: Self-healing resolved song via YouTube: $playUrl');
+          return song.copyWith(
+            id: 'youtube_$videoId',
+            url: playUrl,
+            album: 'YouTube Fallback',
+          );
+        }
+      }
+      yt.close();
+    } catch (e) {
+      debugPrint('ROTTY PLAYBACK: Self-healing YouTube fallback failed: $e');
+    }
+
     return song;
   }
 
+  Future<void> _applyFilterToEqualizer(AndroidEqualizer eq, String filterType) async {
+    try {
+      await eq.setEnabled(true);
+      final params = await eq.parameters;
+      final bands = params.bands;
+      if (bands.isEmpty) return;
+
+      final minDecibels = params.minDecibels;
+      final maxDecibels = params.maxDecibels;
+      const center = 0.0;
+
+      final bandCount = bands.length;
+      debugPrint('ROTTY EQ FILTER: Applying "$filterType" across $bandCount bands.');
+
+      for (int i = 0; i < bandCount; i++) {
+        final ratio = i / (bandCount - 1).clamp(1, 100);
+        double gain = center; // default to flat
+
+        switch (filterType.toLowerCase()) {
+          case 'low-pass (beat isolate)':
+          case 'low-pass':
+          case 'beat isolate':
+            if (ratio <= 0.3) {
+              gain = maxDecibels;
+            } else if (ratio <= 0.5) {
+              gain = minDecibels + 0.25 * (maxDecibels - minDecibels);
+            } else {
+              gain = minDecibels;
+            }
+            break;
+
+          case 'high-pass (vocal background)':
+          case 'high-pass':
+          case 'vocal extract':
+          case 'vocal background':
+            if (ratio <= 0.3) {
+              gain = minDecibels;
+            } else if (ratio > 0.3 && ratio <= 0.8) {
+              gain = maxDecibels;
+            } else {
+              gain = center;
+            }
+            break;
+
+          case 'bass boost':
+            if (ratio <= 0.3) {
+              gain = maxDecibels * 0.85;
+            } else {
+              gain = center;
+            }
+            break;
+
+          case 'treble cut':
+            if (ratio >= 0.75) {
+              gain = minDecibels;
+            } else {
+              gain = center;
+            }
+            break;
+
+          case 'mute':
+            gain = minDecibels;
+            break;
+
+          case 'none':
+          default:
+            gain = center;
+            break;
+        }
+
+        await bands[i].setGain(gain.clamp(minDecibels, maxDecibels));
+      }
+    } catch (e) {
+      debugPrint('ROTTY EQ FILTER ERROR: Failed to apply EQ filter: $e');
+    }
+  }
+
+  Future<void> _resetEqualizersToFlat() async {
+    if (_isMobile) {
+      debugPrint('ROTTY EQ RESET: Resetting equalizers to flat response.');
+      if (_eq != null) await _applyFilterToEqualizer(_eq!, 'none');
+      if (_eqAux != null) await _applyFilterToEqualizer(_eqAux!, 'none');
+    }
+  }
+
   Future<void> _playActiveSong(SongModel song) async {
+    _isCrossfading = false;
+    _isMixFading = false;
+    await _playActiveSongNormal(song);
+  }
+
+  Future<void> _playActiveSongNormal(SongModel song) async {
+    // Failsafe: stop auxiliary players immediately to prevent dual-playback leaks!
+    await _auxPlayer.stop();
+    await _resetEqualizersToFlat();
+
     try {
       SongModel activeSong;
       if (_preResolvedSong != null && _preResolvedSong!.id == song.id) {
@@ -275,17 +617,34 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
           return;
         }
       } else {
-        final Map<String, String>? httpHeaders = Platform.isWindows ? null : const {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
-          'Referer': 'https://www.jiosaavn.com/',
-        };
-
         try {
           var playUrl = activeSong.url;
-          if (Platform.isWindows && playUrl.startsWith('https://')) {
+          final bool isYt = activeSong.id.startsWith('youtube_') || playUrl.contains('googlevideo.com') || playUrl.contains('youtube.com') || playUrl.contains('youtu.be');
+          if (isYt && !playUrl.contains('127.0.0.1')) {
+            final server = LocalAudioServer();
+            await server.start();
+            if (server.port != null) {
+              playUrl = 'http://127.0.0.1:${server.port}/proxy?url=${Uri.encodeComponent(playUrl)}';
+              activeSong = activeSong.copyWith(url: playUrl);
+              debugPrint('ROTTY PLAYBACK: Playback URL routed through local proxy: $playUrl');
+            }
+          } else if (!isYt && GhostProxyClient.isEnabled && playUrl.startsWith('http') && !playUrl.contains('/api/media') && !playUrl.contains('/renders/')) {
+            playUrl = '${ApiConstants.backendUrl}/api/media?url=${Uri.encodeComponent(playUrl)}';
+            activeSong = activeSong.copyWith(url: playUrl);
+            debugPrint('ROTTY PLAYBACK: Routed through local media proxy: $playUrl');
+          } else if (!isYt && Platform.isWindows && playUrl.startsWith('https://')) {
             playUrl = playUrl.replaceFirst('https://', 'http://');
             debugPrint('ROTTY PLAYBACK: Forced HTTP stream URL for Windows: $playUrl');
           }
+
+          final Map<String, String>? httpHeaders = isYt
+              ? const {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                }
+              : (Platform.isWindows ? null : const {
+                  'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+                  'Referer': 'https://www.jiosaavn.com/',
+                });
 
           await _player.setAudioSource(
             AudioSource.uri(
@@ -311,15 +670,37 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
             }
  
             var retryUrl = activeSong.url;
-            if (Platform.isWindows && retryUrl.startsWith('https://')) {
+            final bool isYtRetry = activeSong.id.startsWith('youtube_') || retryUrl.contains('googlevideo.com') || retryUrl.contains('youtube.com') || retryUrl.contains('youtu.be');
+            if (isYtRetry && !retryUrl.contains('127.0.0.1')) {
+              final server = LocalAudioServer();
+              await server.start();
+              if (server.port != null) {
+                retryUrl = 'http://127.0.0.1:${server.port}/proxy?url=${Uri.encodeComponent(retryUrl)}';
+                activeSong = activeSong.copyWith(url: retryUrl);
+                debugPrint('ROTTY PLAYBACK: Retry routed through local proxy: $retryUrl');
+              }
+            } else if (!isYtRetry && GhostProxyClient.isEnabled && retryUrl.startsWith('http') && !retryUrl.contains('/api/media') && !retryUrl.contains('/renders/')) {
+              retryUrl = '${ApiConstants.backendUrl}/api/media?url=${Uri.encodeComponent(retryUrl)}';
+              activeSong = activeSong.copyWith(url: retryUrl);
+              debugPrint('ROTTY PLAYBACK: Retry routed through local media proxy: $retryUrl');
+            } else if (!isYtRetry && Platform.isWindows && retryUrl.startsWith('https://')) {
               retryUrl = retryUrl.replaceFirst('https://', 'http://');
               debugPrint('ROTTY PLAYBACK: Forced HTTP retry stream URL for Windows: $retryUrl');
             }
 
+            final Map<String, String>? retryHeaders = isYtRetry
+                ? const {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  }
+                : (Platform.isWindows ? null : const {
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+                    'Referer': 'https://www.jiosaavn.com/',
+                  });
+
             await _player.setAudioSource(
               AudioSource.uri(
                 Uri.parse(retryUrl),
-                headers: httpHeaders,
+                headers: retryHeaders,
                 tag: _songToMediaItem(activeSong),
               ),
               preload: !Platform.isWindows,
@@ -334,6 +715,7 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       }
 
       _isCrossfading = false;
+      await _player.setLoopMode(_repeatMode == AudioServiceRepeatMode.one ? LoopMode.one : LoopMode.off);
       await _player.setVolume(RottyAudioEffects.getTargetVolume());
       await _player.setSpeed(_speed);
 
@@ -379,6 +761,21 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       _isCrossfading = false;
       debugPrint('Playback Error: $e\n$st');
     }
+  }
+
+  @override
+  Future<void> playMediaItem(MediaItem item) async {
+    debugPrint('ROTTY PLAYBACK: playMediaItem called for "${item.title}" (${item.id})');
+    final song = SongModel(
+      id: item.id,
+      title: item.title,
+      artist: item.artist ?? 'ROTTY AI Studio',
+      album: item.album ?? '',
+      image: item.artUri?.toString() ?? '',
+      duration: item.duration ?? Duration.zero,
+      url: item.extras?['url']?.toString() ?? '',
+    );
+    await playSong(song);
   }
 
   Future<void> playSong(SongModel song, {List<SongModel>? playlist, int? index}) async {
@@ -506,95 +903,120 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   void removeFromQueue(int index) {
-    if (index < 0 || index >= songQueue.length) return;
-    
-    final loc = _locateIndex(index);
-    switch (loc.section) {
-      case QueueSection.pastContext:
-        final removedSong = _contextQueue.removeAt(loc.index);
-        _originalContextQueue.removeWhere((s) => s.id == removedSong.id);
-        _currentIndex--;
-        _bumpQueue();
-        break;
-        
-      case QueueSection.current:
-        if (_currentUserSong != null) {
-          _currentUserSong = null;
-          skipToNext();
-        } else {
-          final removedSong = _contextQueue.removeAt(_currentIndex);
-          _originalContextQueue.removeWhere((s) => s.id == removedSong.id);
-          if (_contextQueue.isEmpty) {
-            _currentIndex = -1;
-            _player.stop();
+    try {
+      if (index < 0 || index >= songQueue.length) return;
+      
+      final loc = _locateIndex(index);
+      switch (loc.section) {
+        case QueueSection.pastContext:
+          if (loc.index >= 0 && loc.index < _contextQueue.length) {
+            final removedSong = _contextQueue.removeAt(loc.index);
+            _originalContextQueue.removeWhere((s) => s.id == removedSong.id);
+            _currentIndex--;
             _bumpQueue();
-          } else {
-            _currentIndex = _currentIndex.clamp(0, _contextQueue.length - 1);
-            playSong(_contextQueue[_currentIndex]);
           }
-        }
-        break;
-        
-      case QueueSection.userQueue:
-        _userQueue.removeAt(loc.index);
-        _bumpQueue();
-        break;
-        
-      case QueueSection.upcomingContext:
-        final removedSong = _contextQueue.removeAt(loc.index);
-        _originalContextQueue.removeWhere((s) => s.id == removedSong.id);
-        _bumpQueue();
-        break;
+          break;
+          
+        case QueueSection.current:
+          if (_currentUserSong != null) {
+            _currentUserSong = null;
+            skipToNext();
+          } else {
+            if (_currentIndex >= 0 && _currentIndex < _contextQueue.length) {
+              final removedSong = _contextQueue.removeAt(_currentIndex);
+              _originalContextQueue.removeWhere((s) => s.id == removedSong.id);
+              if (_contextQueue.isEmpty) {
+                _currentIndex = -1;
+                _player.stop();
+                _bumpQueue();
+              } else {
+                _currentIndex = _currentIndex.clamp(0, _contextQueue.length - 1);
+                playSong(_contextQueue[_currentIndex]);
+              }
+            }
+          }
+          break;
+          
+        case QueueSection.userQueue:
+          if (loc.index >= 0 && loc.index < _userQueue.length) {
+            _userQueue.removeAt(loc.index);
+            _bumpQueue();
+          }
+          break;
+          
+        case QueueSection.upcomingContext:
+          if (loc.index >= 0 && loc.index < _contextQueue.length) {
+            final removedSong = _contextQueue.removeAt(loc.index);
+            _originalContextQueue.removeWhere((s) => s.id == removedSong.id);
+            _bumpQueue();
+          }
+          break;
+      }
+    } catch (e) {
+      print("Error in removeFromQueue: $e");
     }
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
-    if (oldIndex < 0 || oldIndex >= songQueue.length) return;
-    if (newIndex < 0 || newIndex > songQueue.length) return;
-    if (oldIndex == newIndex || oldIndex == newIndex - 1) return;
+    try {
+      if (oldIndex < 0 || oldIndex >= songQueue.length) return;
+      if (newIndex < 0 || newIndex > songQueue.length) return;
+      if (oldIndex == newIndex || oldIndex == newIndex - 1) return;
 
-    final int targetIndex = oldIndex < newIndex ? newIndex - 1 : newIndex;
-    final oldLoc = _locateIndex(oldIndex);
-    
-    final songToMove = songQueue[oldIndex];
+      final int targetIndex = oldIndex < newIndex ? newIndex - 1 : newIndex;
+      final oldLoc = _locateIndex(oldIndex);
+      
+      final songToMove = songQueue[oldIndex];
 
-    // Remove from original queue
-    if (oldLoc.section == QueueSection.pastContext || oldLoc.section == QueueSection.upcomingContext) {
-      _contextQueue.removeAt(oldLoc.index);
-      _originalContextQueue.removeWhere((s) => s.id == songToMove.id);
-      if (oldLoc.index <= _currentIndex) {
-        _currentIndex--;
+      // Remove from original queue
+      if (oldLoc.section == QueueSection.pastContext || oldLoc.section == QueueSection.upcomingContext) {
+        if (oldLoc.index >= 0 && oldLoc.index < _contextQueue.length) {
+          _contextQueue.removeAt(oldLoc.index);
+          _originalContextQueue.removeWhere((s) => s.id == songToMove.id);
+          if (oldLoc.index <= _currentIndex) {
+            _currentIndex--;
+          }
+        }
+      } else if (oldLoc.section == QueueSection.userQueue) {
+        if (oldLoc.index >= 0 && oldLoc.index < _userQueue.length) {
+          _userQueue.removeAt(oldLoc.index);
+        }
+      } else if (oldLoc.section == QueueSection.current) {
+        if (_currentUserSong != null) {
+          _currentUserSong = null;
+        } else {
+          if (_currentIndex >= 0 && _currentIndex < _contextQueue.length) {
+            _contextQueue.removeAt(_currentIndex);
+            _originalContextQueue.removeWhere((s) => s.id == songToMove.id);
+            _currentIndex = _currentIndex.clamp(0, _contextQueue.length - 1);
+          }
+        }
       }
-    } else if (oldLoc.section == QueueSection.userQueue) {
-      _userQueue.removeAt(oldLoc.index);
-    } else if (oldLoc.section == QueueSection.current) {
-      if (_currentUserSong != null) {
-        _currentUserSong = null;
+
+      // Recalculate target location in the modified queue structure
+      final newLoc = _locateIndex(targetIndex);
+
+      // Insert into target queue with safety clamping
+      if (newLoc.section == QueueSection.pastContext) {
+        final insertIndex = newLoc.index.clamp(0, _contextQueue.length);
+        _contextQueue.insert(insertIndex, songToMove);
+        _originalContextQueue.add(songToMove);
+        _currentIndex++;
+      } else if (newLoc.section == QueueSection.current) {
+        _userQueue.insert(0, songToMove);
+      } else if (newLoc.section == QueueSection.userQueue) {
+        final insertIndex = newLoc.index.clamp(0, _userQueue.length);
+        _userQueue.insert(insertIndex, songToMove);
       } else {
-        _contextQueue.removeAt(_currentIndex);
-        _originalContextQueue.removeWhere((s) => s.id == songToMove.id);
-        _currentIndex = _currentIndex.clamp(0, _contextQueue.length - 1);
+        final insertIndex = newLoc.index.clamp(0, _contextQueue.length);
+        _contextQueue.insert(insertIndex, songToMove);
+        _originalContextQueue.add(songToMove);
       }
+
+      _bumpQueue();
+    } catch (e) {
+      print("Error in reorderQueue: $e");
     }
-
-    // Recalculate target location in the modified queue structure
-    final newLoc = _locateIndex(targetIndex);
-
-    // Insert into target queue
-    if (newLoc.section == QueueSection.pastContext) {
-      _contextQueue.insert(newLoc.index, songToMove);
-      _originalContextQueue.add(songToMove);
-      _currentIndex++;
-    } else if (newLoc.section == QueueSection.current) {
-      _userQueue.insert(0, songToMove);
-    } else if (newLoc.section == QueueSection.userQueue) {
-      _userQueue.insert(newLoc.index, songToMove);
-    } else {
-      _contextQueue.insert(newLoc.index, songToMove);
-      _originalContextQueue.add(songToMove);
-    }
-
-    _bumpQueue();
   }
 
   @override
@@ -619,13 +1041,18 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) async {
+    await _player.seek(position);
+  }
 
   @override
   Future<void> stop() async {
     _isCrossfading = false;
+    _isMixFading = false;
     RottyAudioEffects.stopOrbit();
     await _player.stop();
+    await _auxPlayer.stop();
+    await _resetEqualizersToFlat();
     return super.stop();
   }
 
@@ -663,6 +1090,11 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
           recent: recent,
           favorites: favorites,
           excludeIds: excludeIds,
+          excludeSongs: [
+            ..._contextQueue,
+            ..._userQueue,
+            ..._history,
+          ],
           limit: 15,
         );
         
@@ -812,7 +1244,7 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   void _handleCompletion() {
-    if (_isCrossfading) {
+    if (_isCrossfading || _isMixFading) {
       debugPrint('ROTTY AUDIOPLAYER: Natural completion event ignored because we are already crossfading/skipping.');
       return;
     }
@@ -853,6 +1285,8 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
         MediaAction.seek,
         MediaAction.skipToNext,
         MediaAction.skipToPrevious,
+        MediaAction.play,
+        MediaAction.pause,
       },
       androidCompactActionIndices: const [0, 1, 2],
       processingState: const {
@@ -925,6 +1359,188 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       await skipToNext();
     } else {
       debugPrint('ROTTY CROSSFADER: Song changed during fade-out (likely due to manual skip). Aborting auto-skip.');
+    }
+  }
+
+  Future<void> _triggerMixFade() async {
+    final fadeFromSongId = currentSong?.id;
+    if (fadeFromSongId == null) return;
+    if (_isMixFading) return;
+    _isMixFading = true;
+
+    debugPrint('ROTTY MIX FADE: Starting beat-matched mix transition...');
+
+    // Find the next song
+    SongModel? nextSong;
+    if (_userQueue.isNotEmpty) {
+      nextSong = _userQueue.first;
+    } else {
+      int nextIndex = _currentIndex + 1;
+      if (nextIndex < _contextQueue.length) {
+        nextSong = _contextQueue[nextIndex];
+      } else if (_repeatMode == AudioServiceRepeatMode.all && _contextQueue.isNotEmpty) {
+        nextSong = _contextQueue.first;
+      }
+    }
+
+    if (nextSong == null) {
+      _isMixFading = false;
+      return;
+    }
+
+    // Stop 8D effects during transition
+    RottyAudioEffects.stopOrbit();
+
+    try {
+      // Resolve next song URL (fast-path: use pre-resolved song details if matching)
+      final SongModel resolvedNextSong = (_preResolvedSong != null && _preResolvedSong!.id == nextSong.id)
+          ? _preResolvedSong!
+          : await _resolveSongUrl(nextSong);
+
+      if (!resolvedNextSong.hasPlayableUrl) {
+        _isMixFading = false;
+        await skipToNext();
+        return;
+      }
+
+      // Load next song in auxiliary player (if not already pre-buffered!)
+      final bool alreadyBuffered = _preResolvedSong != null && _preResolvedSong!.id == nextSong.id && _auxPlayer.duration != null;
+      if (alreadyBuffered) {
+        debugPrint('ROTTY MIX FADE: Using pre-buffered track in aux player for instant transition!');
+      } else {
+        debugPrint('ROTTY MIX FADE: Track not pre-buffered. Loading now...');
+        final isLocal = resolvedNextSong.url.startsWith('file:') || resolvedNextSong.url.startsWith('file://');
+        if (isLocal) {
+          final filePath = Uri.parse(resolvedNextSong.url).toFilePath();
+          await _auxPlayer.setAudioSource(AudioSource.file(filePath));
+        } else {
+          final isYt = resolvedNextSong.id.startsWith('youtube_') ||
+              resolvedNextSong.url.contains('googlevideo.com') ||
+              resolvedNextSong.url.contains('youtube.com') ||
+              resolvedNextSong.url.contains('youtu.be');
+          final Map<String, String>? httpHeaders = isYt
+              ? const {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                }
+              : (Platform.isWindows ? null : const {
+                  'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+                  'Referer': 'https://www.jiosaavn.com/',
+                });
+          await _auxPlayer.setAudioSource(
+            AudioSource.uri(Uri.parse(resolvedNextSong.url), headers: httpHeaders),
+            preload: true,
+          );
+        }
+      }
+
+      // Simulate beat-matching tempo adjustment
+      final double bpmA = 90.0 + (songQueue.indexOf(currentSong!) % 5) * 8.0; 
+      final double bpmB = 90.0 + (songQueue.indexOf(resolvedNextSong) % 5) * 8.0;
+      double speedRatio = bpmA / bpmB;
+      speedRatio = speedRatio.clamp(0.92, 1.08); // Clamp to prevent cartoonish pitch shifts
+
+      // Always reset aux player position to start of the song for a perfect mix alignment
+      await _auxPlayer.seek(Duration.zero);
+      await _auxPlayer.setSpeed(speedRatio);
+      await _auxPlayer.setVolume(0.0);
+      
+      // Start playing aux player
+      await _auxPlayer.play();
+
+      debugPrint('ROTTY MIX FADE: Aux player started with speed $speedRatio (matching BPM $bpmB to $bpmA)');
+
+      // Dynamic Crossfade based on preferred blend style and duration
+      final int totalBlendDurationMs = _storage.mixBlendLength * 1000;
+      final int steps = 25;
+      final int stepDelayMs = totalBlendDurationMs ~/ steps;
+      final double targetVol = RottyAudioEffects.getTargetVolume();
+      const String style = 'Smooth'; // default blend style
+
+      debugPrint('ROTTY MIX FADE: Executing blend style "$style" over ${totalBlendDurationMs}ms');
+
+      for (int i = 0; i <= steps; i++) {
+        // Guard if song was changed manually during transition
+        if (currentSong?.id != fadeFromSongId || !_player.playing) {
+          break;
+        }
+        final double t = i / steps; // 0.0 to 1.0
+        
+        double volumeRatioA = math.pow(1.0 - t, 2.2).toDouble();
+        double volumeRatioB = math.pow(t, 2.2).toDouble();
+
+        await _player.setVolume(volumeRatioA * targetVol);
+        await _auxPlayer.setVolume(volumeRatioB * targetVol);
+
+        await Future.delayed(Duration(milliseconds: stepDelayMs.toInt()));
+      }
+
+      // Check if we didn't interrupt
+      if (currentSong?.id == fadeFromSongId) {
+        final Duration transitionPosition = _auxPlayer.position;
+        debugPrint('ROTTY MIX FADE: Seamless transition complete. Swapping aux position: $transitionPosition');
+
+        // Update active indices
+        if (_userQueue.isNotEmpty) {
+          _userQueue.removeAt(0);
+          _currentUserSong = resolvedNextSong;
+        } else {
+          _currentUserSong = null;
+          int nextIndex = _currentIndex + 1;
+          if (nextIndex >= _contextQueue.length && _repeatMode == AudioServiceRepeatMode.all) {
+            nextIndex = 0;
+          }
+          _currentIndex = nextIndex;
+        }
+
+        // Update media item
+        mediaItem.add(_songToMediaItem(resolvedNextSong));
+        _bumpQueue();
+
+        // Now load this song on primary player in background, and play BEFORE stopping aux player to ensure 100% gapless handoff!
+        final isLocal = resolvedNextSong.url.startsWith('file:') || resolvedNextSong.url.startsWith('file://');
+        if (isLocal) {
+          final filePath = Uri.parse(resolvedNextSong.url).toFilePath();
+          await _player.setAudioSource(AudioSource.file(filePath));
+        } else {
+          final isYt = resolvedNextSong.id.startsWith('youtube_') ||
+              resolvedNextSong.url.contains('googlevideo.com') ||
+              resolvedNextSong.url.contains('youtube.com') ||
+              resolvedNextSong.url.contains('youtu.be');
+          final Map<String, String>? httpHeaders = isYt
+              ? const {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                }
+              : (Platform.isWindows ? null : const {
+                  'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+                  'Referer': 'https://www.jiosaavn.com/',
+                });
+          await _player.setAudioSource(AudioSource.uri(Uri.parse(resolvedNextSong.url), headers: httpHeaders));
+        }
+
+        // Account for setAudioSource initialization latency by starting primary player slightly ahead of transitionPosition
+        final Duration takeOverPos = _auxPlayer.position + const Duration(milliseconds: 200);
+        await _player.setSpeed(1.0); // Reset primary player speed
+        await _player.seek(takeOverPos);
+        await _player.setVolume(targetVol);
+        await _player.play();
+
+        // Now safely stop auxiliary player!
+        await _auxPlayer.stop();
+
+        // Restart 8D effects on primary
+        RottyAudioEffects.startOrbit(_player);
+      } else {
+        // Safe guard: if interrupted (e.g. user skipped during mix fade), stop auxiliary immediately!
+        await _auxPlayer.stop();
+      }
+    } catch (e) {
+      debugPrint('ROTTY MIX FADE ERROR: $e. Falling back to normal skip.');
+      await _auxPlayer.stop();
+      if (currentSong?.id == fadeFromSongId) {
+        await skipToNext();
+      }
+    } finally {
+      _isMixFading = false;
     }
   }
 }

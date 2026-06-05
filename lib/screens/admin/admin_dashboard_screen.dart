@@ -111,29 +111,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final fetched = <Map<String, dynamic>>[];
     bool isOnline = false;
+    String? nextPageToken;
 
     try {
-      final res = await http.get(Uri.parse('$baseUrl/users?key=$apiKey')).timeout(const Duration(seconds: 10));
-      if (res.statusCode == 200) {
-        isOnline = true;
-        final body = json.decode(res.body);
-        final documents = body['documents'] as List?;
-        if (documents != null) {
-          for (final doc in documents) {
-            final docName = doc['name'] as String;
-            final uid = docName.split('/').last;
-            final fields = doc['fields'] as Map<String, dynamic>?;
+      do {
+        String url = '$baseUrl/users?key=$apiKey&pageSize=100';
+        if (nextPageToken != null) {
+          url += '&pageToken=$nextPageToken';
+        }
+        
+        final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+        if (res.statusCode == 200) {
+          isOnline = true;
+          final body = json.decode(res.body);
+          final documents = body['documents'] as List?;
+          if (documents != null) {
+            for (final doc in documents) {
+              final docName = doc['name'] as String;
+              final uid = docName.split('/').last;
+              final fields = doc['fields'] as Map<String, dynamic>?;
 
-            if (fields != null) {
-              final decoded = <String, dynamic>{'uid': uid};
-              fields.forEach((k, v) {
-                decoded[k] = _decodeValue(Map<String, dynamic>.from(v));
-              });
-              fetched.add(decoded);
+              if (fields != null) {
+                final decoded = <String, dynamic>{'uid': uid};
+                fields.forEach((k, v) {
+                  decoded[k] = _decodeValue(Map<String, dynamic>.from(v));
+                });
+                fetched.add(decoded);
+              }
             }
           }
+          nextPageToken = body['nextPageToken'] as String?;
+        } else {
+          nextPageToken = null;
+          throw Exception('HTTP status ${res.statusCode}');
         }
-      }
+      } while (nextPageToken != null);
     } catch (e) {
       isOnline = false;
       if (mounted) {
@@ -163,7 +175,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final query = _searchQuery.toLowerCase();
       _filteredUsers = _allUsers.where((u) {
         final email = (u['email'] ?? '').toString().toLowerCase();
-        final username = (u['username'] ?? '').toString().toLowerCase();
+        final displayName = (u['displayName'] ?? '').toString().toLowerCase();
+        final username = (u['username'] ?? displayName.isNotEmpty ? displayName : email.split('@').first).toString().toLowerCase();
         final uid = (u['uid'] ?? '').toString().toLowerCase();
         return email.contains(query) || username.contains(query) || uid.contains(query);
       }).toList();
@@ -443,8 +456,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
               if (isPending) ...[
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
                   children: [
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
@@ -455,7 +470,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       label: Text('Reject', style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                       onPressed: () => _handlePaymentApproval(utr, uid, false),
                     ),
-                    const SizedBox(width: 12),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.greenAccent,
@@ -725,21 +739,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Admin Control Panel',
-                            style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white),
-                          ),
-                          Text(
-                            'Rotty Music Live Database Tools',
-                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                          ),
-                        ],
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Admin Control Panel',
+                              style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              'Rotty Music Live Database Tools',
+                              style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(Icons.refresh_rounded, color: Colors.cyanAccent),
                         onPressed: _isLoading ? null : () {
@@ -758,43 +778,57 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     children: [
                       Expanded(
                         child: RottyGlass(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                           accentColor: Colors.cyanAccent,
                           glowIntensity: 0.08,
                           child: Column(
                             children: [
-                              Text(
-                                _isLoading ? '...' : '${_allUsers.length}',
-                                style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                              FittedBox(
+                                child: Text(
+                                  _isLoading ? '...' : '${_allUsers.length}',
+                                  style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white),
+                                ),
                               ),
                               const SizedBox(height: 2),
-                              Text('Total Users', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
+                              Text(
+                                'Total Users',
+                                style: GoogleFonts.inter(fontSize: 10, color: AppColors.textSecondary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: RottyGlass(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                           accentColor: Colors.pinkAccent,
                           glowIntensity: 0.08,
                           child: Column(
                             children: [
-                              Text(
-                                _isLoading ? '...' : '$totalSupporters',
-                                style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.pinkAccent),
+                              FittedBox(
+                                child: Text(
+                                  _isLoading ? '...' : '$totalSupporters',
+                                  style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.pinkAccent),
+                                ),
                               ),
                               const SizedBox(height: 2),
-                              Text('VIP Supporters', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
+                              Text(
+                                'VIP Supporters',
+                                style: GoogleFonts.inter(fontSize: 10, color: AppColors.textSecondary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: RottyGlass(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                           accentColor: _isDbOnline ? Colors.greenAccent : Colors.redAccent,
                           glowIntensity: 0.08,
                           child: Column(
@@ -802,12 +836,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               Icon(
                                 _isDbOnline ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
                                 color: _isDbOnline ? Colors.greenAccent : Colors.redAccent,
-                                size: 28,
+                                size: 24,
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 _isDbOnline ? 'DB Online' : 'Offline',
-                                style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                                style: GoogleFonts.inter(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
@@ -1063,7 +1099,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       itemBuilder: (context, idx) {
         final u = _filteredUsers[idx];
         final email = u['email'] ?? 'No Email';
-        final username = u['username'] ?? 'User';
+        final username = u['username'] ?? u['displayName'] ?? (email != 'No Email' ? email.split('@').first : 'User');
         final uid = u['uid'] ?? '';
         final isSupporter = u['is_supporter'] == true;
 
@@ -1155,8 +1191,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.end,
                       children: [
                         // Dispatch targeted message action
                         OutlinedButton.icon(
@@ -1172,7 +1210,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                           onPressed: () => _showNotificationDialog(targetUid: uid, targetEmail: email),
                         ),
-                        const SizedBox(width: 10),
                         // VIP badge quick control button
                         FilledButton.icon(
                           style: FilledButton.styleFrom(
@@ -1183,7 +1220,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                           icon: Icon(isSupporter ? Icons.no_accounts_rounded : Icons.workspace_premium_rounded, size: 14),
                           label: Text(
-                            isSupporter ? 'Revoke VIP Status' : 'Upgrade to VIP',
+                            isSupporter ? 'Revoke VIP' : 'Upgrade VIP',
                             style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                           onPressed: () => _toggleSupporterStatus(uid, isSupporter),

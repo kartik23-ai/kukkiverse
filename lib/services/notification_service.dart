@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'firebase_service.dart';
 import 'storage_service.dart';
 
@@ -15,6 +17,12 @@ class NotificationService {
   void initialize(BuildContext context, WidgetRef ref) {
     if (_initialized) return;
     _initialized = true;
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      Permission.notification.request().then((status) {
+        debugPrint('[Notifications] Permission requested: $status');
+      });
+    }
 
     if (!FirebaseService.instance.isReady) return;
 
@@ -49,14 +57,13 @@ class NotificationService {
     }
   }
 
-  String? _lastNotificationId;
-
   void _handleNotificationDocs(BuildContext context, List<Map<String, dynamic>> docs) {
     if (docs.isEmpty) return;
     final latest = docs.first;
     final id = latest['id'] ?? latest['createdAt']?.toString();
-    if (id == null || id == _lastNotificationId) return;
-    _lastNotificationId = id;
+    final lastSeenId = StorageService().lastNotificationId;
+    if (id == null || id == lastSeenId) return;
+    StorageService().setLastNotificationId(id);
 
     final title = latest['title'] as String? ?? 'Rotty Music';
     final body = latest['body'] as String? ?? 'Check out the new update!';

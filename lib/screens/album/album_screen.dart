@@ -15,6 +15,8 @@ import '../../widgets/song_options_sheet.dart';
 import '../../models/playlist_model.dart';
 import '../../providers/premium_providers.dart';
 import '../../services/storage_service.dart';
+import '../../services/ai_image_service.dart';
+import '../../widgets/rotty_glow_r_skeleton.dart';
 
 class AlbumScreen extends ConsumerStatefulWidget {
   const AlbumScreen({
@@ -85,7 +87,20 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
     final cached = widget.songs;
     final asyncSongs = ref.watch(albumSongsProvider(widget.albumId));
     final list = cached ?? asyncSongs.valueOrNull ?? [];
-    final img = widget.image ?? (list.isNotEmpty ? list.first.image : '');
+    final String img;
+    if (widget.albumId == 'daily_mix') {
+      img = widget.image ?? AiImageService.getCoverUrl(
+        prompt: 'cyberpunk daily music playlist cover art, futuristic glowing lines, premium dark neon soundwave concept',
+        seed: 'daily_mix_${DateTime.now().day}',
+      );
+    } else if (widget.albumId == 'weekly_top') {
+      img = widget.image ?? AiImageService.getCoverUrl(
+        prompt: 'weekly hitlist music chart album art, glowing synth vinyl disc, detailed neon party lights design',
+        seed: 'weekly_hitlist_${DateTime.now().year}_${DateTime.now().month}',
+      );
+    } else {
+      img = widget.image ?? (list.isNotEmpty ? list.first.image : '');
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -107,7 +122,12 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
                   if (img.isNotEmpty)
                     Hero(
                       tag: 'album_bg_hero_${widget.albumId}',
-                      child: CachedNetworkImage(imageUrl: img, fit: BoxFit.cover),
+                      child: CachedNetworkImage(
+                        imageUrl: img,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(color: Colors.black45),
+                        errorWidget: (context, url, error) => Container(color: Colors.black54),
+                      ),
                     ).animate().fadeIn(duration: 600.ms).scale(begin: const Offset(1.1, 1.1), end: const Offset(1, 1)),
                   Container(
                     decoration: BoxDecoration(
@@ -163,7 +183,18 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
             ),
           ),
           if (cached == null && asyncSongs.isLoading)
-            const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppColors.accent)))
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, idx) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: RottyGlowRSkeleton.list(height: 72),
+                  ),
+                  childCount: 5,
+                ),
+              ),
+            )
           else if (list.isEmpty)
             SliverFillRemaining(child: Center(child: Text('No songs found', style: GoogleFonts.inter(color: AppColors.textTertiary))))
           else

@@ -32,7 +32,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
   void initState() {
     super.initState();
     _tabs = TabController(length: 4, vsync: this);
-    _speech.initialize();
   }
 
   @override
@@ -50,8 +49,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
   }
 
   Future<void> _voiceSearch() async {
-    if (!_speech.isAvailable) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice not available on this device')));
+    bool available = _speech.isAvailable;
+    if (!available) {
+      try {
+        available = await _speech.initialize().timeout(const Duration(seconds: 4));
+      } catch (_) {
+        available = false;
+      }
+    }
+    if (!available) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Voice search not available or permission denied')),
+        );
+      }
       return;
     }
     setState(() => _listening = true);
@@ -140,7 +151,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
 
   Widget _discover(List<String> history) {
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 160),
       children: [
         Text('Try "arijit sad song" or tap mic', style: GoogleFonts.inter(color: AppColors.textTertiary, fontSize: 13)),
         const SizedBox(height: 16),
@@ -230,7 +241,7 @@ class _AlbumsTab extends ConsumerWidget {
     final results = ref.watch(searchAlbumsProvider(query));
     return results.when(
       data: (albums) => ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 160),
         itemCount: albums.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, i) {
@@ -238,7 +249,14 @@ class _AlbumsTab extends ConsumerWidget {
           return ListTile(
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: CachedNetworkImage(imageUrl: a.image, width: 52, height: 52, fit: BoxFit.cover),
+              child: CachedNetworkImage(
+                imageUrl: a.image,
+                width: 52,
+                height: 52,
+                fit: BoxFit.cover,
+                memCacheWidth: 104,
+                memCacheHeight: 104,
+              ),
             ),
             title: Text(a.name, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
             subtitle: Text('${a.year} • ${a.language}', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
@@ -261,7 +279,7 @@ class _ArtistsTab extends ConsumerWidget {
     final results = ref.watch(searchArtistsProvider(query));
     return results.when(
       data: (artists) => ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 160),
         itemCount: artists.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, i) {
@@ -285,19 +303,21 @@ Widget _songList(BuildContext context, WidgetRef ref, List<SongModel> songs) {
   }
   final currentSong = ref.watch(nowPlayingProvider);
   return ListView.separated(
-    padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 160),
     itemCount: songs.length,
     separatorBuilder: (_, __) => const Divider(color: AppColors.glassBorder, height: 1),
     itemBuilder: (context, i) {
       final s = songs[i];
-      return SongTile(
-        song: s,
-        isPlaying: currentSong?.id == s.id,
-        onTap: () async {
-          await playSongWithContext(ref, s);
-          if (context.mounted) context.push('/player');
-        },
-        onMore: () => showSongOptionsSheet(context, ref, s),
+      return RepaintBoundary(
+        child: SongTile(
+          song: s,
+          isPlaying: currentSong?.id == s.id,
+          onTap: () async {
+            await playSongWithContext(ref, s);
+            if (context.mounted) context.push('/player');
+          },
+          onMore: () => showSongOptionsSheet(context, ref, s),
+        ),
       );
     },
   );

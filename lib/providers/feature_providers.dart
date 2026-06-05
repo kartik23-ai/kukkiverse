@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../services/groq_ai_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/modes/app_mode.dart';
 import '../core/sound/sound_space.dart';
@@ -218,7 +220,7 @@ class PartyRoomNotifier extends StateNotifier<PartyRoomState> {
   }
 
   void _syncPlaybackLocally(SongModel remoteSong, bool remotePlaying) {
-    final nextSync = () async {
+    Future<void> nextSync() async {
       if (_lastLocalActionTime != null &&
           DateTime.now().difference(_lastLocalActionTime!) < const Duration(seconds: 5)) {
         debugPrint('Party Sync: Ignoring remote sync event within 5s of local action to prevent race condition');
@@ -407,6 +409,8 @@ final focusTimerMinutesProvider = StateProvider<int>((ref) => 25);
 final sleepFadeMinutesProvider = StateProvider<int>((ref) => 30);
 final lyricsTranslateEnabledProvider = StateProvider<bool>((ref) => true);
 final concertHeadphonesPresetProvider = StateProvider<bool>((ref) => false);
+final concertFlashlightEnabledProvider = StateProvider<bool>((ref) => true);
+final globalShakeToSkipProvider = StateProvider<bool>((ref) => false);
 
 /// Scene discovery presets
 enum DiscoverScene {
@@ -514,3 +518,211 @@ class AlbumArtRipplesNotifier extends StateNotifier<bool> {
     await _storage.setAlbumArtRipples(val);
   }
 }
+
+final eqMeshVisualizerEnabledProvider = StateNotifierProvider<EqMeshVisualizerEnabledNotifier, bool>((ref) {
+  return EqMeshVisualizerEnabledNotifier(ref.read(storageServiceProvider));
+});
+
+class EqMeshVisualizerEnabledNotifier extends StateNotifier<bool> {
+  EqMeshVisualizerEnabledNotifier(this._storage) : super(_storage.eqMeshVisualizer);
+  final StorageService _storage;
+
+  Future<void> toggle(bool val) async {
+    state = val;
+    await _storage.setEqMeshVisualizer(val);
+  }
+}
+
+class AiRadioState {
+  final String title;
+  final String description;
+  final List<SongModel> songs;
+  final bool isUnlocked;
+  final bool isLoading;
+
+  const AiRadioState({
+    required this.title,
+    required this.description,
+    required this.songs,
+    required this.isUnlocked,
+    required this.isLoading,
+  });
+
+  factory AiRadioState.locked() {
+    return const AiRadioState(
+      title: 'AI Taste Radio',
+      description: 'Play at least 10 songs to unlock your personalized AI Radio.',
+      songs: [],
+      isUnlocked: false,
+      isLoading: false,
+    );
+  }
+
+  factory AiRadioState.loading() {
+    return const AiRadioState(
+      title: 'AI Taste Radio',
+      description: 'Synthesizing your listening DNA...',
+      songs: [],
+      isUnlocked: true,
+      isLoading: true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'description': description,
+      'songs': songs.map((s) => s.toJson()).toList(),
+    };
+  }
+
+  factory AiRadioState.fromJson(Map<String, dynamic> json) {
+    final songsList = json['songs'] as List? ?? [];
+    return AiRadioState(
+      title: json['title']?.toString() ?? 'AI Taste Radio',
+      description: json['description']?.toString() ?? '',
+      songs: songsList.map((e) => SongModel.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+      isUnlocked: true,
+      isLoading: false,
+    );
+  }
+}
+
+class AiTasteRadioNotifier extends StateNotifier<AiRadioState> {
+  AiTasteRadioNotifier(this._ref) : super(AiRadioState.locked()) {
+    _init();
+  }
+
+  final Ref _ref;
+
+  void _init() {
+    final history = _ref.read(playHistoryProvider);
+    final storage = _ref.read(storageServiceProvider);
+
+    if (history.length < 10) {
+      state = AiRadioState.locked();
+      return;
+    }
+
+    final cache = storage.aiRadioCache;
+    if (cache.isNotEmpty) {
+      try {
+        final decoded = json.decode(cache);
+        state = AiRadioState.fromJson(decoded);
+        return;
+      } catch (_) {}
+    }
+
+    // Unlocked but not loaded yet
+    state = const AiRadioState(
+      title: 'AI Taste Radio',
+      description: 'Your personalized radio is ready to synthesize.',
+      songs: [],
+      isUnlocked: true,
+      isLoading: false,
+    );
+  }
+
+  void checkStatus() {
+    final history = _ref.read(playHistoryProvider);
+    if (history.length >= 10 && !state.isUnlocked) {
+      state = const AiRadioState(
+        title: 'AI Taste Radio',
+        description: 'Your personalized radio is ready to synthesize.',
+        songs: [],
+        isUnlocked: true,
+        isLoading: false,
+      );
+    } else if (history.length < 10 && state.isUnlocked) {
+      state = AiRadioState.locked();
+    }
+  }
+
+  Future<void> generateRadio() async {
+    final history = _ref.read(playHistoryProvider);
+    if (history.length < 10) return;
+
+    state = AiRadioState.loading();
+
+    try {
+      final storage = _ref.read(storageServiceProvider);
+      final groq = GroqAiService();
+      final favorites = _ref.read(favoritesProvider);
+
+      final listenedTitles = history.map((e) => e.song.title).toList();
+      final listenedArtists = history.map((e) => e.song.artist).toList();
+      final favoriteTitles = favorites.map((e) => e.title).toList();
+      final favoriteArtists = favorites.map((e) => e.artist).toList();
+
+      final res = await groq.generateAiRadio(
+        listenedTitles: listenedTitles,
+        listenedArtists: listenedArtists,
+        favoriteTitles: favoriteTitles,
+        favoriteArtists: favoriteArtists,
+      );
+
+      if (res != null) {
+        final title = res['radioTitle']?.toString() ?? 'AI Taste Radio';
+        final description = res['vibeDescription']?.toString() ?? 'A custom synthesized blend of your favorite frequencies.';
+        final recommendedQueries = (res['recommendedQueries'] as List? ?? []).cast<String>();
+
+        final songs = <SongModel>[];
+        final api = _ref.read(apiServiceProvider);
+
+        // Fetch recommendations in parallel
+        final searchFutures = recommendedQueries.take(8).map((query) async {
+          try {
+            final results = await api.searchSongs(query, limit: 1);
+            if (results.isNotEmpty) {
+              return results.first;
+            }
+          } catch (_) {}
+          return null;
+        });
+
+        final results = await Future.wait(searchFutures);
+        for (final song in results) {
+          if (song != null && !songs.any((s) => s.id == song.id)) {
+            songs.add(song);
+          }
+        }
+
+        final newState = AiRadioState(
+          title: title,
+          description: description,
+          songs: songs,
+          isUnlocked: true,
+          isLoading: false,
+        );
+
+        state = newState;
+        await storage.setAiRadioCache(json.encode(newState.toJson()));
+      } else {
+        state = const AiRadioState(
+          title: 'AI Taste Radio',
+          description: 'Failed to synthesize radio. Try again later.',
+          songs: [],
+          isUnlocked: true,
+          isLoading: false,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error generating AI Radio: $e');
+      state = const AiRadioState(
+        title: 'AI Taste Radio',
+        description: 'Failed to synthesize radio. Try again later.',
+        songs: [],
+        isUnlocked: true,
+        isLoading: false,
+      );
+    }
+  }
+}
+
+final aiTasteRadioProvider = StateNotifierProvider<AiTasteRadioNotifier, AiRadioState>((ref) {
+  final notifier = AiTasteRadioNotifier(ref);
+  ref.listen<List<PlayHistoryEntry>>(playHistoryProvider, (prev, next) {
+    notifier.checkStatus();
+  });
+  return notifier;
+});

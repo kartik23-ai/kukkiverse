@@ -8,6 +8,7 @@ import '../../providers/providers.dart';
 import '../../utils/play_song.dart';
 import '../../widgets/album_stage_3d.dart';
 import '../../widgets/rotty_glass.dart';
+import '../../widgets/rotty_glow_r_skeleton.dart';
 
 class ArtistScreen extends ConsumerWidget {
   const ArtistScreen({super.key, required this.artistId, this.name, this.image});
@@ -64,7 +65,10 @@ class ArtistScreen extends ConsumerWidget {
                                   const CircleAvatar(radius: 56, child: Icon(Icons.person, size: 48)),
                                 const SizedBox(height: 12),
                                 Text(title, style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
-                                Text('Artist Universe', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 12, letterSpacing: 1)),
+                                if (d.listeners != null)
+                                  Text('${d.listeners} Monthly Listeners', style: GoogleFonts.inter(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500))
+                                else
+                                  Text('Artist Universe', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 12, letterSpacing: 1)),
                               ],
                             ),
                           ),
@@ -88,6 +92,22 @@ class ArtistScreen extends ConsumerWidget {
                             label: const Text('Play like this artist'),
                           ),
                           const SizedBox(height: 12),
+                          if (d.bio != null && d.bio!.trim().isNotEmpty) ...[
+                            RottyGlass(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('AI BIOGRAPHY', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _shortenBio(d.bio!),
+                                    style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.85), fontSize: 12, height: 1.4),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           if (similar.isNotEmpty)
                             RottyGlass(
                               child: Column(
@@ -175,9 +195,45 @@ class ArtistScreen extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+        loading: () => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                const SizedBox(height: 48),
+                Center(
+                  child: RottyGlowRSkeleton(width: 140, height: 140),
+                ),
+                const SizedBox(height: 24),
+                RottyGlowRSkeleton.list(height: 52),
+                const SizedBox(height: 20),
+                RottyGlowRSkeleton.list(height: 72),
+                const SizedBox(height: 20),
+                RottyGlowRSkeleton.list(height: 72),
+                const SizedBox(height: 20),
+                RottyGlowRSkeleton.list(height: 72),
+              ],
+            ),
+          ),
+        ),
         error: (_, __) => Center(child: Text('Failed to load artist', style: GoogleFonts.inter(color: AppColors.textTertiary))),
       ),
     );
   }
+}
+
+String _shortenBio(String bio) {
+  var clean = bio.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+  clean = clean.replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#039;', "'");
+  if (clean.length <= 180) return clean;
+  final sentences = clean.split(RegExp(r'(?<=[.!?])\s+'));
+  if (sentences.length > 2) {
+    final shortBio = '${sentences[0]} ${sentences[1]}';
+    if (shortBio.length > 250) {
+      return '${shortBio.substring(0, 247).trim()}...';
+    }
+    return shortBio;
+  }
+  return clean.length > 250 ? '${clean.substring(0, 247).trim()}...' : clean;
 }

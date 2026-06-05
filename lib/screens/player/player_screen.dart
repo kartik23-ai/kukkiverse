@@ -22,6 +22,20 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Unfocus any active text field to prevent keyboard from popping up on return/pop
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -200,10 +214,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       label: Text(label, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
     );
   }
-
   Widget _buildPlayerDownloadButton(BuildContext context, WidgetRef ref, SongModel song) {
-    final downloadStates = ref.watch(downloadNotifierProvider);
-    final downloadState = downloadStates[song.id] ?? const DownloadState.none();
+    final downloadState = ref.watch(
+      downloadNotifierProvider.select((states) => states[song.id] ?? const DownloadState.none()),
+    );
 
     switch (downloadState.status) {
       case DownloadStatus.downloading:

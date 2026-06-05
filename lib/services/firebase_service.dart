@@ -46,16 +46,17 @@ class FirebaseService {
     }
     try {
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
+            .timeout(const Duration(seconds: 3));
       }
       _ready = true;
       debugPrint('Firebase: ready (project rotty-music)');
       return true;
     } catch (e, st) {
-      debugPrint('Firebase init failed: $e\n$st');
+      debugPrint('Firebase init failed or timed out: $e\n$st');
       _useRestFallback = true;
       _ready = true;
-      debugPrint('Firebase: REST Fallback enabled after native failure');
+      debugPrint('Firebase: REST Fallback enabled after native failure/timeout');
       return true;
     }
   }
@@ -155,6 +156,7 @@ class FirebaseService {
       await StorageService().setProfileEmail(email);
 
       await _ensureUserProfile(email: email.trim());
+      await pullUserData();
       await syncUserData();
       await syncAllLocalPlaylistsToCloud();
       await restoreCloudPlaylists();
@@ -168,6 +170,7 @@ class FirebaseService {
     );
     await StorageService().setProfileEmail(email);
     await _ensureUserProfile(email: email.trim());
+    await pullUserData();
     await syncUserData();
     await syncAllLocalPlaylistsToCloud();
     await restoreCloudPlaylists();
@@ -219,6 +222,7 @@ class FirebaseService {
         phone: phone?.trim(),
         displayName: displayName ?? email.split('@').first,
       );
+      await pullUserData();
       await syncUserData();
       await syncAllLocalPlaylistsToCloud();
       await restoreCloudPlaylists();
@@ -239,6 +243,7 @@ class FirebaseService {
       phone: phone?.trim(),
       displayName: displayName ?? email.split('@').first,
     );
+    await pullUserData();
     await syncUserData();
     await syncAllLocalPlaylistsToCloud();
     await restoreCloudPlaylists();
@@ -377,6 +382,91 @@ class FirebaseService {
         }
       }
     }
+
+    final favArtists = data['favoriteArtists'];
+    if (favArtists is List) {
+      await storage.setFavoriteArtists(favArtists.whereType<String>().toList());
+    }
+    final hasSelected = data['hasSelectedFavorites'] as bool? ?? false;
+    await storage.setHasSelectedFavorites(hasSelected);
+  }
+
+  Future<void> saveFavoriteArtists(List<String> artists) async {
+    await StorageService().setFavoriteArtists(artists);
+    await StorageService().setHasSelectedFavorites(true);
+
+    if (!_ready) return;
+    if (FirebaseAuth.instance.currentUser == null) return;
+
+    final data = {
+      'favoriteArtists': artists,
+      'hasSelectedFavorites': true,
+      'updatedAt': _useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
+    };
+    if (_useRestFallback) {
+      await FirestoreRestClient.setDoc('users/$_uid', data, merge: true);
+    } else {
+      try {
+        await db!.collection('users').doc(_uid).set(data, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Firestore native saveFavoriteArtists error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        final restData = Map<String, dynamic>.from(data)..['updatedAt'] = DateTime.now().toIso8601String();
+        await FirestoreRestClient.setDoc('users/$_uid', restData, merge: true);
+      }
+    }
+  }
+
+  Future<void> resetFavoriteArtists() async {
+    await StorageService().setFavoriteArtists([]);
+    await StorageService().setHasSelectedFavorites(false);
+
+    if (!_ready) return;
+    if (FirebaseAuth.instance.currentUser == null) return;
+
+    final data = {
+      'favoriteArtists': <String>[],
+      'hasSelectedFavorites': false,
+      'updatedAt': _useRestFallback ? DateTime.now().toIso8601String() : FieldValue.serverTimestamp(),
+    };
+    if (_useRestFallback) {
+      await FirestoreRestClient.setDoc('users/$_uid', data, merge: true);
+    } else {
+      try {
+        await db!.collection('users').doc(_uid).set(data, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Firestore native resetFavoriteArtists error: $e. Falling back to REST.');
+        _useRestFallback = true;
+        final restData = Map<String, dynamic>.from(data)..['updatedAt'] = DateTime.now().toIso8601String();
+        await FirestoreRestClient.setDoc('users/$_uid', restData, merge: true);
+      }
+    }
+  }
+
+  Future<bool> checkHasSelectedFavorites() async {
+    if (!_ready) return false;
+    final local = StorageService().hasSelectedFavorites;
+    if (local) return true;
+
+    try {
+      Map<String, dynamic>? data;
+      if (_useRestFallback) {
+        data = await FirestoreRestClient.getDoc('users/$_uid');
+      } else {
+        final snap = await db!.collection('users').doc(_uid).get();
+        if (snap.exists) data = snap.data();
+      }
+      if (data != null) {
+        final val = data['hasSelectedFavorites'] as bool? ?? false;
+        if (val) {
+          final favs = (data['favoriteArtists'] as List?)?.cast<String>() ?? [];
+          await StorageService().setFavoriteArtists(favs);
+          await StorageService().setHasSelectedFavorites(true);
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future<String> createPartyRoom() async {

@@ -64,6 +64,61 @@ class LocalAudioServer {
               request.response.statusCode = HttpStatus.notFound;
               request.response.write('File not found');
             }
+          } else if (path.startsWith('/proxy')) {
+            final targetUrl = request.uri.queryParameters['url'];
+            if (targetUrl == null || targetUrl.isEmpty) {
+              request.response.statusCode = HttpStatus.badRequest;
+              request.response.write('URL is required');
+              return;
+            }
+
+            final client = HttpClient();
+            client.connectionTimeout = const Duration(seconds: 10);
+            
+            try {
+              final uri = Uri.parse(targetUrl);
+              final targetRequest = await client.getUrl(uri);
+              
+              // Forward headers from ExoPlayer/just_audio
+              request.headers.forEach((name, values) {
+                if (name.toLowerCase() != 'host' && name.toLowerCase() != 'user-agent') {
+                  for (final val in values) {
+                    targetRequest.headers.add(name, val);
+                  }
+                }
+              });
+
+              // Set browser-like headers for YouTube streams
+              final isYt = targetUrl.contains('googlevideo.com') || targetUrl.contains('youtube.com') || targetUrl.contains('youtu.be');
+              if (isYt) {
+                targetRequest.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+                targetRequest.headers.set('Referer', 'https://www.youtube.com/');
+              } else {
+                final ua = request.headers.value('user-agent');
+                if (ua != null) {
+                  targetRequest.headers.set('User-Agent', ua);
+                }
+              }
+
+              final targetResponse = await targetRequest.close();
+              
+              // Set headers back to ExoPlayer
+              request.response.statusCode = targetResponse.statusCode;
+              targetResponse.headers.forEach((name, values) {
+                final lowerName = name.toLowerCase();
+                if (['content-type', 'content-length', 'accept-ranges', 'content-range'].contains(lowerName)) {
+                  for (final val in values) {
+                    request.response.headers.add(name, val);
+                  }
+                }
+              });
+
+              await request.response.addStream(targetResponse);
+            } catch (e) {
+              debugPrint('ROTTY LOCAL SERVER: Proxy streaming error/interruption: $e');
+            } finally {
+              client.close(force: true);
+            }
           } else {
             request.response.statusCode = HttpStatus.notFound;
             request.response.write('Not found');

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dart_des/dart_des.dart';
+import '../core/constants/api_constants.dart';
 
 class SongModel {
   final String id;
@@ -9,6 +10,7 @@ class SongModel {
   final String image;
   final Duration duration;
   final String url;
+  final String? lyrics;
 
   SongModel({
     required this.id,
@@ -18,6 +20,7 @@ class SongModel {
     required this.image,
     required this.duration,
     required this.url,
+    this.lyrics,
   });
 
   bool get hasPlayableUrl =>
@@ -40,15 +43,17 @@ class SongModel {
       image: img,
       duration: Duration(seconds: int.tryParse(json['duration']?.toString() ?? '0') ?? 0),
       url: downloadUrl,
+      lyrics: json['lyrics']?.toString(),
     );
   }
 
   static String hiResImage(String url) {
     if (url.isEmpty) return url;
-    return url
+    final cleanUrl = url
         .replaceAll('150x150', '500x500')
         .replaceAll('50x50', '500x500')
         .replaceAll('250x250', '500x500');
+    return cleanUrl;
   }
 
   factory SongModel.fromJson(
@@ -57,7 +62,7 @@ class SongModel {
   }) {
     final id = json['id']?.toString() ?? '';
 
-    final imageUrl = _bestImage(json['image']);
+    final imageUrl = hiResImage(_bestImage(json['image']));
 
     var downloadUrl = '';
     if (json['encrypted_media_url'] != null) {
@@ -66,6 +71,9 @@ class SongModel {
     if (downloadUrl.isEmpty && json['downloadUrl'] is List) {
       downloadUrl = _bestAudio(json['downloadUrl'], preferredQuality);
       if (downloadUrl.isNotEmpty) downloadUrl = downloadUrl.replaceFirst('http:', 'https:');
+    }
+    if (downloadUrl.isEmpty && json['url'] != null) {
+      downloadUrl = json['url'].toString();
     }
 
     final albumName = json['album'] is Map
@@ -82,6 +90,7 @@ class SongModel {
         seconds: int.tryParse(json['duration']?.toString() ?? '0') ?? 0,
       ),
       url: downloadUrl,
+      lyrics: json['lyrics']?.toString(),
     );
   }
 
@@ -94,6 +103,7 @@ class SongModel {
       image: json['image']?.toString() ?? '',
       duration: Duration(seconds: json['duration'] ?? 0),
       url: json['url']?.toString() ?? '',
+      lyrics: json['lyrics']?.toString(),
     );
   }
 
@@ -105,6 +115,7 @@ class SongModel {
         'image': image,
         'duration': duration.inSeconds,
         'url': url,
+        'lyrics': lyrics,
       };
 
   int get durationSeconds => duration.inSeconds;
@@ -122,6 +133,9 @@ class SongModel {
           .whereType<String>()
           .toList();
       if (names.isNotEmpty) return names.join(', ');
+    }
+    if (json['artist'] != null) {
+      return json['artist'].toString();
     }
     if (json['primaryArtists'] != null) {
       return json['primaryArtists'].toString();
@@ -244,6 +258,7 @@ class SongModel {
       image: img,
       duration: Duration(seconds: int.tryParse(moreInfo['duration']?.toString() ?? '0') ?? 0),
       url: downloadUrl,
+      lyrics: json['lyrics']?.toString(),
     );
   }
 
@@ -255,6 +270,7 @@ class SongModel {
     String? image,
     Duration? duration,
     String? url,
+    String? lyrics,
   }) {
     return SongModel(
       id: id ?? this.id,
@@ -264,6 +280,7 @@ class SongModel {
       image: image ?? this.image,
       duration: duration ?? this.duration,
       url: url ?? this.url,
+      lyrics: lyrics ?? this.lyrics,
     );
   }
 }

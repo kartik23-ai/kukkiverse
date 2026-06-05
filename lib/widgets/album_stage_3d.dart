@@ -118,6 +118,30 @@ class _AlbumStage3DState extends State<AlbumStage3D> {
                         imageUrl: widget.imageUrl,
                         fit: BoxFit.cover,
                         memCacheWidth: 800,
+                        placeholder: (context, url) => Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.purple.withValues(alpha: 0.2), Colors.blue.withValues(alpha: 0.2)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.album_rounded, color: Colors.white24, size: 48),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.purple.withValues(alpha: 0.4), Colors.blue.withValues(alpha: 0.4)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.album_rounded, color: Colors.white30, size: 48),
+                          ),
+                        ),
                       ),
                       // Depth blur vignette
                       DecoratedBox(
@@ -191,6 +215,14 @@ class MiniAlbumTile3D extends StatelessWidget {
             height: 64,
             fit: BoxFit.cover,
             memCacheWidth: 128,
+            placeholder: (context, url) => Container(
+              color: Colors.white10,
+              child: const Icon(Icons.album_rounded, color: Colors.white24, size: 24),
+            ),
+            errorWidget: (context, url, error) => Container(
+              color: Colors.white10,
+              child: const Icon(Icons.album_rounded, color: Colors.white30, size: 24),
+            ),
           ),
         ),
       ),

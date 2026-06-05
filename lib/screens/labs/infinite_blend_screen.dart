@@ -69,6 +69,22 @@ class InfiniteBlendScreen extends ConsumerWidget {
                       onChanged: (v) => ref.read(infiniteBlendProvider.notifier).set(v),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.white.withValues(alpha: 0.04),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: SwitchListTile(
+                      value: ref.watch(mixFadeEnabledProvider),
+                      activeColor: palette.primary,
+                      activeThumbColor: Colors.white,
+                      title: Text('AI Mix Fade (Beat-Sync)', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: Text('Beat-matches, phase-aligns, and cross-blends tracks smoothly over ~6s', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                      onChanged: (v) => ref.read(mixFadeEnabledProvider.notifier).toggle(v),
+                    ),
+                  ),
                 ],
               ),
             ),

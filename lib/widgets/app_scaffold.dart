@@ -10,14 +10,11 @@ class AppScaffold extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: bottomPadding),
-          child: body,
-        ),
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomPadding),
+        child: body,
       ),
     );
   }

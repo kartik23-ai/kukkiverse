@@ -26,6 +26,8 @@ class DesktopHome extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final homeData = ref.watch(homeDataProvider);
     final recent = ref.watch(recentSongsProvider);
+    final suggestedSongsAsync = ref.watch(suggestedSongsProvider);
+    final suggestedSongs = suggestedSongsAsync.value ?? <SongModel>[];
     final palette = ref.watch(dynamicPaletteProvider);
     final mode = ref.watch(appModeProvider);
     final mt = ModeTheme(mode);
@@ -126,6 +128,22 @@ class DesktopHome extends ConsumerWidget {
                   itemCount: recent.take(10).length,
                   separatorBuilder: (_, __) => const SizedBox(width: 16),
                   itemBuilder: (_, i) => _DesktopSongCard(song: recent[i], playlist: recent, mt: mt),
+                ),
+              ),
+              const SizedBox(height: 28),
+            ],
+
+            // ─── Recommended for You ───
+            if (suggestedSongs.isNotEmpty) ...[
+              _SectionHeader(title: 'Recommended for You'),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 220,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: suggestedSongs.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 16),
+                  itemBuilder: (_, i) => _DesktopSongCard(song: suggestedSongs[i], playlist: suggestedSongs, mt: mt),
                 ),
               ),
               const SizedBox(height: 28),

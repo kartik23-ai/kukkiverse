@@ -34,11 +34,14 @@ import '../screens/labs/mood_shake_screen.dart';
 import '../screens/labs/vibe_match_screen.dart';
 import '../screens/labs/reverse_discover_screen.dart';
 import '../screens/labs/focus_lock_screen.dart';
-import '../screens/labs/infinite_blend_screen.dart';
+import '../screens/labs/ai_mix_blend_setup_screen.dart';
+import '../screens/labs/ai_studio_screen.dart';
+import '../screens/playlist/studio_detail_screen.dart';
 import '../screens/lyrics/lyrics_cinema_screen.dart';
 import '../screens/drive/night_drive_screen.dart';
 import '../screens/focus/focus_screen.dart';
 import '../screens/sleep/sleep_screen.dart';
+import '../screens/onboarding/taste_selection_screen.dart';
 import '../providers/feature_providers.dart';
 import '../models/song_model.dart';
 
@@ -46,18 +49,24 @@ final appRouter = GoRouter(
   initialLocation: '/',
   routes: [
     GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
+    GoRoute(
+      path: '/taste-selection',
+      pageBuilder: (context, state) {
+        final isOnboarding = state.uri.queryParameters['onboarding'] == 'true';
+        return rottyPage(
+          child: TasteSelectionScreen(isOnboarding: isOnboarding),
+          from: AxisDirection.right,
+        );
+      },
+    ),
     GoRoute(path: '/auth', builder: (_, __) => const AuthScreen()),
     GoRoute(path: '/premium', pageBuilder: (_, __) => rottyPage(child: const PremiumScreen(), from: AxisDirection.up)),
     GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
     GoRoute(path: '/home', builder: (context, __) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          if (Theme.of(context).platform == TargetPlatform.windows || constraints.maxWidth > 900) {
-            return const DesktopShell();
-          }
-          return const MainScreen();
-        },
-      );
+      if (Theme.of(context).platform == TargetPlatform.windows) {
+        return const DesktopShell();
+      }
+      return const MainScreen();
     }),
     GoRoute(
       path: '/search',
@@ -139,7 +148,19 @@ final appRouter = GoRouter(
     GoRoute(path: '/labs/vibe', pageBuilder: (_, __) => rottyPage(child: const VibeMatchScreen(), from: AxisDirection.right)),
     GoRoute(path: '/labs/reverse', pageBuilder: (_, __) => rottyPage(child: const ReverseDiscoverScreen(), from: AxisDirection.right)),
     GoRoute(path: '/labs/focus', pageBuilder: (_, __) => rottyPage(child: const FocusLockScreen(), from: AxisDirection.right)),
-    GoRoute(path: '/labs/blend', pageBuilder: (_, __) => rottyPage(child: const InfiniteBlendScreen(), from: AxisDirection.right)),
+    GoRoute(path: '/labs/blend', pageBuilder: (_, __) => rottyPage(child: const AIMixBlendSetupScreen(), from: AxisDirection.right)),
+    GoRoute(
+      path: '/labs/ai-studio',
+      pageBuilder: (_, __) => rottyPage(child: const AIStudioScreen(), from: AxisDirection.right),
+      redirect: (context, state) => '/labs',
+    ),
+    GoRoute(
+      path: '/library/studio/:id',
+      pageBuilder: (context, state) => rottyPage(
+        child: StudioDetailScreen(studioId: state.pathParameters['id'] ?? ''),
+        from: AxisDirection.right,
+      ),
+    ),
     GoRoute(
       path: '/cinema/:id',
       pageBuilder: (context, state) => rottyPage(

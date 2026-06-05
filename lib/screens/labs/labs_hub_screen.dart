@@ -13,6 +13,7 @@ class LabsHubScreen extends ConsumerWidget {
   const LabsHubScreen({super.key});
 
   static const _items = [
+    _LabItem('ROTTY Studio', 'Compose original AI songs', Icons.music_note_rounded, '/labs/ai-studio', false),
     _LabItem('ROTTY Aura', 'Full-app live colors', Icons.palette_rounded, '/labs/aura', false),
     _LabItem('Studio Lab', 'EQ • 8D orbit • presets', Icons.tune_rounded, '/labs/studio', false),
     _LabItem('Lyrics Cinema', 'Cinematic lyrics + reel', Icons.movie_rounded, '/cinema', false),
@@ -105,7 +106,7 @@ class LabsHubScreen extends ConsumerWidget {
                         crossAxisCount: 2,
                         mainAxisSpacing: 12,
                         crossAxisSpacing: 12,
-                        childAspectRatio: 1.35,
+                        childAspectRatio: 1.18,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, i) {
@@ -114,6 +115,27 @@ class LabsHubScreen extends ConsumerWidget {
                             item: item,
                             premium: premium,
                             onTap: () {
+                              if (item.route == '/labs/ai-studio') {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: const Color(0xFF16162A),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                    margin: const EdgeInsets.all(16),
+                                    content: const Row(
+                                      children: [
+                                        Icon(Icons.construction_rounded, color: Colors.redAccent),
+                                        SizedBox(width: 12),
+                                        Text('Under Construction 🚧', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
                               // isPro check bypassed
                               if (item.route == '/labs/aura') {
                                 final next = !ref.read(auraFullAppProvider);
@@ -170,19 +192,22 @@ class _LabCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = ref.watch(dynamicPaletteProvider);
-    final accent = item.isPro ? palette.primary : const Color(0xFF00D4FF);
-    final locked = item.isPro && !premium;
+    final isStudio = item.route == '/labs/ai-studio';
+    final accent = isStudio
+        ? Colors.grey
+        : (item.isPro ? palette.primary : const Color(0xFF00D4FF));
 
     return LiquidGlassCard(
       accentColor: accent,
       borderRadius: 16,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
                 width: 38, height: 38,
@@ -190,16 +215,53 @@ class _LabCard extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(10),
                   color: accent.withValues(alpha: 0.15),
                 ),
-                child: Icon(item.icon, color: accent, size: 18),
+                child: Icon(isStudio ? Icons.lock_rounded : item.icon, color: accent, size: 18),
               ),
+              if (isStudio)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4), width: 1),
+                  ),
+                  child: Text(
+                    'LOCKED',
+                    style: GoogleFonts.inter(
+                      color: Colors.redAccent,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
             ],
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.title, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                item.title,
+                style: GoogleFonts.inter(
+                  color: isStudio ? Colors.white54 : Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  decoration: isStudio ? TextDecoration.lineThrough : null,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(height: 4),
-              Text(item.sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.45), fontSize: 10, height: 1.15)),
+              Text(
+                isStudio ? 'Under Construction' : item.sub,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 10,
+                  height: 1.15,
+                ),
+              ),
             ],
           ),
         ],

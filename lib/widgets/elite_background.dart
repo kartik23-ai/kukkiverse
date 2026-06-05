@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/feature_providers.dart';
+import '../providers/providers.dart';
 import '../core/theme/dynamic_palette.dart';
 
 /// ═══════════════════════════════════════════════════════════════
@@ -11,7 +12,7 @@ import '../core/theme/dynamic_palette.dart';
 /// • GPU-friendly radial gradients (no MaskFilter blur)
 /// • Mode-aware: reads DynamicPalette + ModeTheme
 /// ═══════════════════════════════════════════════════════════════
-class RottyAuroraBackground extends StatefulWidget {
+class RottyAuroraBackground extends ConsumerStatefulWidget {
   final Widget child;
   final double intensity;
   /// Optional override colors — if null, uses brand palette
@@ -25,48 +26,29 @@ class RottyAuroraBackground extends StatefulWidget {
   });
 
   @override
-  State<RottyAuroraBackground> createState() => _RottyAuroraBackgroundState();
+  ConsumerState<RottyAuroraBackground> createState() => _RottyAuroraBackgroundState();
 }
 
-class _RottyAuroraBackgroundState extends State<RottyAuroraBackground>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    // Slow 20s loop = smooth, organic breathing
-    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 20))
-      ..repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
+class _RottyAuroraBackgroundState extends ConsumerState<RottyAuroraBackground> {
   @override
   Widget build(BuildContext context) {
+    final ripplesEnabled = ref.watch(albumArtRipplesProvider);
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        Container(color: const Color(0xFF050508)),
-        RepaintBoundary(
-          child: AnimatedBuilder(
-            animation: _ctrl,
-            builder: (context, _) {
-              return CustomPaint(
-                painter: _BreathingAuroraPainter(
-                  phase: _ctrl.value,
-                  intensity: widget.intensity,
-                  colors: widget.paletteOverride,
-                ),
-                size: Size.infinite,
-              );
-            },
+        Container(color: const Color(0xFF040407)),
+        if (ripplesEnabled)
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: _BreathingAuroraPainter(
+                phase: 0.0,
+                intensity: widget.intensity * 0.45,
+                colors: widget.paletteOverride,
+              ),
+              size: Size.infinite,
+            ),
           ),
-        ),
         widget.child,
       ],
     );
@@ -147,8 +129,8 @@ class _BreathingAuroraPainter extends CustomPainter {
       final paint = Paint()
         ..shader = RadialGradient(
           colors: [
-            color.withValues(alpha: (0.12 + breathFactor * 0.06) * intensity),
-            color.withValues(alpha: (0.04 + breathFactor * 0.02) * intensity),
+            color.withValues(alpha: (0.08 + breathFactor * 0.04) * intensity),
+            color.withValues(alpha: (0.02 + breathFactor * 0.01) * intensity),
             color.withValues(alpha: 0.0),
           ],
           stops: const [0.0, 0.5, 1.0],
@@ -163,7 +145,7 @@ class _BreathingAuroraPainter extends CustomPainter {
     final corePaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          coreColor.withValues(alpha: (0.05 + coreBreathe * 0.03) * intensity),
+          coreColor.withValues(alpha: (0.03 + coreBreathe * 0.015) * intensity),
           Colors.transparent,
         ],
       ).createShader(Rect.fromCircle(

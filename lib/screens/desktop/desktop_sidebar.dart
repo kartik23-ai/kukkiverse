@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
@@ -117,6 +118,7 @@ class DesktopSidebar extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               itemCount: playlists.length,
               itemBuilder: (context, i) => _PlaylistTile(
+                id: playlists[i].id,
                 name: playlists[i].name,
                 count: playlists[i].songs.length,
                 accent: palette.primary,
@@ -321,7 +323,8 @@ class _NavItemState extends State<_NavItem> {
 }
 
 class _PlaylistTile extends StatefulWidget {
-  const _PlaylistTile({required this.name, required this.count, required this.accent});
+  const _PlaylistTile({required this.id, required this.name, required this.count, required this.accent});
+  final String id;
   final String name;
   final int count;
   final Color accent;
@@ -339,29 +342,34 @@ class _PlaylistTileState extends State<_PlaylistTile> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.symmetric(vertical: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: _hovered ? Colors.white.withValues(alpha: 0.06) : Colors.transparent,
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.queue_music_rounded, size: 16,
-                color: _hovered ? widget.accent.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.3)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                widget.name,
-                style: GoogleFonts.inter(fontSize: 13,
-                    color: _hovered ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.5)),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
+      child: GestureDetector(
+        onTap: () {
+          context.push('/album/${widget.id}');
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: _hovered ? Colors.white.withValues(alpha: 0.06) : Colors.transparent,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.queue_music_rounded, size: 16,
+                  color: _hovered ? widget.accent.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.3)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.name,
+                  style: GoogleFonts.inter(fontSize: 13,
+                      color: _hovered ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.5)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            Text('${widget.count}', style: GoogleFonts.inter(fontSize: 11, color: Colors.white.withValues(alpha: 0.25))),
-          ],
+              Text('${widget.count}', style: GoogleFonts.inter(fontSize: 11, color: Colors.white.withValues(alpha: 0.25))),
+            ],
+          ),
         ),
       ),
     );

@@ -54,3 +54,12 @@ secrets.local.dart
 google-services.json
 google-services*.json
 test_api.json
+
+# Backend dependencies
+backend/node_modules/
+backend/renders/
+backend/temp/
+backend/temp_test_*
+
+# Scratch files
+scratch/

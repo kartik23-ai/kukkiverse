@@ -13,11 +13,9 @@ import 'services/firebase_service.dart';
 import 'services/rotty_connect_service.dart';
 import 'providers/providers.dart';
 import 'providers/premium_providers.dart';
-import 'providers/feature_providers.dart';
 import 'services/update_service.dart';
 import 'screens/main/update_lock_screen.dart';
 import 'core/theme/app_theme.dart';
-import 'core/theme/dynamic_palette.dart';
 import 'core/theme/time_theme.dart';
 import 'router/app_router.dart';
 
@@ -25,10 +23,92 @@ final updateLockProvider = ChangeNotifierProvider<UpdateService>((ref) {
   return UpdateService.instance;
 });
 
+class RottyErrorWidget extends StatelessWidget {
+  final FlutterErrorDetails details;
+  const RottyErrorWidget({super.key, required this.details});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF050508),
+      child: SafeArea(
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF16162A),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.25), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.redAccent.withValues(alpha: 0.1),
+                  blurRadius: 32,
+                  spreadRadius: -4,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.redAccent.withValues(alpha: 0.15),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 30),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Rendering Halt',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'A visual rendering exception occurred. We have isolated this error to keep the rest of the application running.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    details.exceptionAsString(),
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white60, fontSize: 10, fontFamily: 'monospace'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 late RottyAudioHandler _audioHandler;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Global Error UI instead of Red Screen of Death
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return RottyErrorWidget(details: details);
+  };
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('GLOBAL FLUTTER ERROR: ${details.exceptionAsString()}');
+  };
 
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
@@ -60,35 +140,69 @@ void main() async {
   final storage = StorageService();
   await storage.init();
 
-  try {
-    await Supabase.initialize(
-      url: AppSecrets.supabaseUrl,
-      anonKey: AppSecrets.supabaseAnonKey,
-    );
-    debugPrint('[Supabase] Initialized successfully');
-  } catch (e) {
-    debugPrint('[Supabase] Init error: $e');
-  }
-
   if (AppSecrets.hasGroq && storage.groqApiKey.isEmpty) {
     await storage.setGroqApiKey(AppSecrets.groqApiKey);
   }
 
-  await FirebaseService.instance.init().timeout(const Duration(seconds: 4), onTimeout: () => true);
-  if (FirebaseService.instance.isReady) {
-    // Run network integrations asynchronously in the background to prevent blocking UI startup when offline
-    RottyConnectService.instance.init(FirebaseService.instance.userId).catchError((e) {
-      debugPrint('[RottyConnect] Init failed in background: $e');
-    });
-    if (FirebaseService.instance.currentUser != null) {
-      FirebaseService.instance.pullUserData().catchError((e) {
-        debugPrint('pullUserData failed in background: $e');
-      });
-      FirebaseService.instance.syncUserData().catchError((e) {
-        debugPrint('syncUserData failed in background: $e');
-      });
-    }
-  }
+  // Optimize startup time by running non-dependent initializations concurrently
+  await Future.wait([
+    (() async {
+      try {
+        await Supabase.initialize(
+          url: AppSecrets.supabaseUrl,
+          anonKey: AppSecrets.supabaseAnonKey,
+        );
+        debugPrint('[Supabase] Initialized successfully');
+      } catch (e) {
+        debugPrint('[Supabase] Init error: $e');
+      }
+    })(),
+    (() async {
+      try {
+        await FirebaseService.instance.init().timeout(const Duration(seconds: 4), onTimeout: () => true);
+        if (FirebaseService.instance.isReady) {
+          // Run network integrations asynchronously in the background to prevent blocking UI startup when offline
+          RottyConnectService.instance.init(FirebaseService.instance.userId).catchError((e) {
+            debugPrint('[RottyConnect] Init failed in background: $e');
+          });
+          if (FirebaseService.instance.currentUser != null) {
+            FirebaseService.instance.pullUserData().catchError((e) {
+              debugPrint('pullUserData failed in background: $e');
+            });
+            FirebaseService.instance.syncUserData().catchError((e) {
+              debugPrint('syncUserData failed in background: $e');
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('[Firebase] Concurrent init error: $e');
+      }
+    })(),
+    (() async {
+      try {
+        // AudioService.init with notification on mobile and Windows
+        if (Platform.isAndroid || Platform.isIOS || Platform.isWindows) {
+          _audioHandler = await AudioService.init(
+            builder: () => RottyAudioHandler(),
+            config: AudioServiceConfig(
+              androidNotificationChannelId: 'com.rottymusic.rotty_music.audio',
+              androidNotificationChannelName: 'ROTTY MUSIC',
+              androidNotificationOngoing: false,
+              androidStopForegroundOnPause: false,
+              androidNotificationIcon: 'mipmap/ic_launcher',
+            ),
+          );
+        } else {
+          // Other Desktop: raw handler
+          _audioHandler = RottyAudioHandler();
+        }
+      } catch (e) {
+        debugPrint('[AudioService] Concurrent init error: $e');
+        // Fallback: create raw handler directly if AudioService.init crashes
+        _audioHandler = RottyAudioHandler();
+      }
+    })(),
+  ]);
 
   // Trigger background version OTA and Firestore configuration checking
   UpdateService.instance.checkForUpdates();
@@ -101,23 +215,6 @@ void main() async {
   RottyAudioEffects.orbit8d = eq.orbit8d;
   RottyAudioEffects.infiniteBlend = StorageService().getBoolFlag('infinite_blend');
   RottyAudioEffects.applySoundSpace(storage.soundSpace);
-
-  // AudioService.init with notification on mobile and Windows
-  if (Platform.isAndroid || Platform.isIOS || Platform.isWindows) {
-    _audioHandler = await AudioService.init(
-      builder: () => RottyAudioHandler(),
-      config: AudioServiceConfig(
-        androidNotificationChannelId: 'com.rottymusic.rotty_music.audio',
-        androidNotificationChannelName: 'ROTTY MUSIC',
-        androidNotificationOngoing: false, // Changed to false to satisfy assertion when stopForegroundOnPause is false
-        androidStopForegroundOnPause: false, // Prevent foreground service from stopping on pause, stabilizing background execution
-        androidNotificationIcon: 'mipmap/ic_launcher',
-      ),
-    );
-  } else {
-    // Other Desktop: raw handler
-    _audioHandler = RottyAudioHandler();
-  }
 
   runApp(ProviderScope(
     overrides: [

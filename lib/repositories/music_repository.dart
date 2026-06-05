@@ -29,6 +29,10 @@ class MusicRepository {
   Future<List<AlbumItem>> searchAlbums(String q) => _api.searchAlbums(q);
   Future<List<ArtistItem>> searchArtists(String q) => _api.searchArtists(q);
   Future<List<SongModel>> getAlbumSongs(String id) => _api.getAlbumSongs(id);
+  Future<List<SongModel>> getGenreSongs(String genre) {
+    UpdateService.instance.checkForUpdates();
+    return _api.getGenreSongs(genre);
+  }
   Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String id) => _api.getArtist(id);
 
   Future<SongModel> resolveSong(SongModel song) async {
@@ -86,6 +90,28 @@ class MusicRepository {
     final details = await _api.getSongDetails(song.id);
     if (details != null && details.hasPlayableUrl) return details;
     if (song.hasPlayableUrl) return song;
+
+    // Self-healing: if JioSaavn loading fails or URL is empty, search YouTube and stream!
+    try {
+      final query = '${song.title} ${song.artist}';
+      final yt = YoutubeExplode();
+      final searchList = await yt.search.search(query).timeout(const Duration(seconds: 5));
+      if (searchList.isNotEmpty) {
+        final video = searchList.first;
+        final manifest = await yt.videos.streamsClient.getManifest(video.id).timeout(const Duration(seconds: 5));
+        final audioOnly = manifest.audioOnly;
+        if (audioOnly.isNotEmpty) {
+          final bestAudio = audioOnly.withHighestBitrate();
+          final streamUrl = bestAudio.url.toString();
+          yt.close();
+          return song.copyWith(url: streamUrl);
+        }
+      }
+      yt.close();
+    } catch (e) {
+      print('Self-healing YouTube fallback failed: $e');
+    }
+
     return details ?? song;
   }
   Future<String?> getLyrics(String id, {String? title, String? artist, int? durationSec}) =>

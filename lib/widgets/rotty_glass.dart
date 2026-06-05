@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
+import '../services/storage_service.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// RottyGlass 3.0 — REAL Glassmorphism
@@ -18,7 +19,7 @@ class RottyGlass extends StatelessWidget {
     this.tint,
     this.accentColor,
     this.glowIntensity = 0.15,
-    this.blurAmount = 20,
+    this.blurAmount = 10,
     this.enableBlur = true,
   });
 
@@ -39,6 +40,36 @@ class RottyGlass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final glow = accentColor ?? AppColors.accent;
+    final performanceMode = StorageService().albumArtRipples;
+    final finalEnableBlur = enableBlur && performanceMode;
+
+    final container = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        // Semi-transparent tinted surface
+        color: (tint ?? AppColors.bgCard).withValues(alpha: finalEnableBlur ? 0.40 : 0.85),
+        borderRadius: BorderRadius.circular(borderRadius),
+        // ✨ 1px inner glass edge-light
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        // Subtle inner highlight for depth
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.06),
+            Colors.transparent,
+            Colors.transparent,
+            Colors.white.withValues(alpha: 0.02),
+          ],
+          stops: const [0.0, 0.3, 0.7, 1.0],
+        ),
+      ),
+      child: child,
+    );
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -59,37 +90,12 @@ class RottyGlass extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(borderRadius),
-            child: BackdropFilter(
-              filter: enableBlur
-                  ? ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount)
-                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-              child: Container(
-                padding: padding,
-                decoration: BoxDecoration(
-                  // Semi-transparent tinted surface
-                  color: (tint ?? AppColors.bgCard).withValues(alpha: 0.40),
-                  borderRadius: BorderRadius.circular(borderRadius),
-                  // ✨ 1px inner glass edge-light
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    width: 1,
-                  ),
-                  // Subtle inner highlight for depth
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.06),
-                      Colors.transparent,
-                      Colors.transparent,
-                      Colors.white.withValues(alpha: 0.02),
-                    ],
-                    stops: const [0.0, 0.3, 0.7, 1.0],
-                  ),
-                ),
-                child: child,
-              ),
-            ),
+            child: finalEnableBlur
+                ? BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+                    child: container,
+                  )
+                : container,
           ),
         ),
       ),

@@ -67,8 +67,9 @@ class DesktopPlayerBar extends ConsumerWidget {
                   // Download
                   Consumer(
                     builder: (context, ref, _) {
-                      final downloadStates = ref.watch(downloadNotifierProvider);
-                      final downloadState = downloadStates[song.id] ?? const DownloadState.none();
+                      final downloadState = ref.watch(
+                        downloadNotifierProvider.select((states) => states[song.id] ?? const DownloadState.none()),
+                      );
                       
                       Color iconColor = Colors.white.withValues(alpha: 0.35);
                       IconData iconData = Icons.download_for_offline_outlined;

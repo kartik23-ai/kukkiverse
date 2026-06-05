@@ -2,3 +2,4 @@
 const String kGroqApiKey = '';
 const String kSpotifyClientId = '';
 const String kSpotifyClientSecret = '';
+const String kOpenaiApiKey = '';

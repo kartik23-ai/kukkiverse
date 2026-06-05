@@ -64,8 +64,10 @@ class _ConcertScreenState extends ConsumerState<ConcertScreen>
       if (!playing) return;
       // Heavy impact for the beat
       HapticFeedback.heavyImpact();
-      // Flash the physical LED on each beat
-      FlashlightStrobe.flashOnce(durationMs: 40);
+      // Flash the physical LED on each beat if enabled
+      if (ref.read(concertFlashlightEnabledProvider)) {
+        FlashlightStrobe.flashOnce(durationMs: 40);
+      }
     });
 
     // Initialize flashlight
@@ -120,6 +122,7 @@ class _ConcertScreenState extends ConsumerState<ConcertScreen>
     final playing = ref.watch(isPlayingProvider);
     final palette = ref.watch(dynamicPaletteProvider);
     final headphones = ref.watch(concertHeadphonesPresetProvider);
+    final flashlight = ref.watch(concertFlashlightEnabledProvider);
     final lyrics = ref.watch(lyricsProvider(song?.id ?? ''));
     final handler = ref.read(audioHandlerProvider);
 
@@ -297,6 +300,25 @@ class _ConcertScreenState extends ConsumerState<ConcertScreen>
                             ]),
                           ),
                           const Spacer(),
+                          // Flashlight toggle
+                          Container(
+                            decoration: BoxDecoration(
+                              color: flashlight
+                                  ? palette.primary.withValues(alpha: 0.2)
+                                  : Colors.white.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: IconButton(
+                              icon: Icon(
+                                flashlight ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                                color: flashlight ? palette.primary : Colors.white54,
+                              ),
+                              onPressed: () => ref
+                                  .read(concertFlashlightEnabledProvider.notifier)
+                                  .state = !flashlight,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           // Headphones toggle
                           Container(
                             decoration: BoxDecoration(

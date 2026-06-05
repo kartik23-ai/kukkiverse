@@ -22,6 +22,7 @@ class QueueScreen extends ConsumerWidget {
         final queue = handler.songQueue;
         final history = handler.history;
         final currentIndex = handler.currentIndex;
+        final upcoming = queue.skip(currentIndex + 1).toList();
 
         return Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -103,62 +104,28 @@ class QueueScreen extends ConsumerWidget {
                             ),
                     ),
 
-                    // Next In Queue (User-added)
-                    if (handler.userQueue.isNotEmpty) ...[
+                    // Next Up (Unified Queue)
+                    if (upcoming.isNotEmpty) ...[
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 24, 20, 4),
-                          child: Text('Next In Queue', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700)),
+                          child: Text('Next Up', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700)),
                         ),
                       ),
                       SliverReorderableList(
-                        itemCount: handler.userQueue.length,
+                        itemCount: upcoming.length,
                         onReorder: (oldIdx, newIdx) {
                           final absOld = currentIndex + 1 + oldIdx;
                           final absNew = currentIndex + 1 + newIdx;
                           handler.reorderQueue(absOld, absNew);
                         },
                         itemBuilder: (context, index) {
-                          final song = handler.userQueue[index];
+                          final song = upcoming[index];
                           final absoluteIndex = currentIndex + 1 + index;
                           return _QueueTimelineRow(
-                            key: ValueKey('user_${song.id}_$index'),
+                            key: ValueKey('upcoming_${song.id}'),
                             song: song,
-                            index: absoluteIndex,
-                            isNow: false,
-                            onTap: () {
-                              handler.playSong(song, index: absoluteIndex);
-                            },
-                            onPlayNext: () => handler.addToQueueNext(song),
-                            onRemove: () => handler.removeFromQueue(absoluteIndex),
-                          );
-                        },
-                      ),
-                    ],
-
-                    // Next From Context (Album/Playlist)
-                    if (currentIndex + 1 < handler.contextQueue.length) ...[
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 4),
-                          child: Text('Next From Context', style: GoogleFonts.inter(color: AppColors.textTertiary, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                      SliverReorderableList(
-                        itemCount: handler.contextQueue.length - (handler.currentIndex + 1),
-                        onReorder: (oldIdx, newIdx) {
-                          final absOld = currentIndex + 1 + handler.userQueue.length + oldIdx;
-                          final absNew = currentIndex + 1 + handler.userQueue.length + newIdx;
-                          handler.reorderQueue(absOld, absNew);
-                        },
-                        itemBuilder: (context, index) {
-                          final upcomingIndex = handler.currentIndex + 1 + index;
-                          final song = handler.contextQueue[upcomingIndex];
-                          final absoluteIndex = currentIndex + 1 + handler.userQueue.length + index;
-                          return _QueueTimelineRow(
-                            key: ValueKey('context_${song.id}_$index'),
-                            song: song,
-                            index: absoluteIndex,
+                            index: index,
                             isNow: false,
                             onTap: () {
                               handler.playSong(song, index: absoluteIndex);
@@ -217,57 +184,56 @@ class _QueueTimelineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReorderableDelayedDragStartListener(
       index: index,
-      child: InkWell(
+      child: RottyGlassLite(
         onTap: onTap,
-        child: RottyGlass(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            children: [
-              Column(
-                children: [
-                  Container(width: 2, height: 12, color: isNow ? AppColors.accent : AppColors.glassBorder),
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isNow ? AppColors.accent : AppColors.bgCard,
-                      border: Border.all(color: isNow ? AppColors.accent : AppColors.glassBorder),
-                    ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        accentColor: isNow ? AppColors.accent : null,
+        child: Row(
+          children: [
+            Column(
+              children: [
+                Container(width: 2, height: 12, color: isNow ? AppColors.accent : AppColors.glassBorder),
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isNow ? AppColors.accent : AppColors.bgCard,
+                    border: Border.all(color: isNow ? AppColors.accent : AppColors.glassBorder),
                   ),
-                  Container(width: 2, height: 12, color: AppColors.glassBorder),
+                ),
+                Container(width: 2, height: 12, color: AppColors.glassBorder),
+              ],
+            ),
+            const SizedBox(width: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(imageUrl: song.image, width: 48, height: 48, fit: BoxFit.cover, memCacheWidth: 96),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(song.title, style: GoogleFonts.inter(color: isNow ? AppColors.accent : Colors.white, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(song.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
                 ],
               ),
-              const SizedBox(width: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(imageUrl: song.image, width: 48, height: 48, fit: BoxFit.cover, memCacheWidth: 96),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(song.title, style: GoogleFonts.inter(color: isNow ? AppColors.accent : Colors.white, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(song.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-                  ],
+            ),
+            if (isNow)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Text('NOW', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1)),
               ),
-              if (isNow)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text('NOW', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1)),
-                ),
-              if (!isNow) ...[
-                IconButton(icon: const Icon(Icons.playlist_add_rounded, color: Colors.white54, size: 20), onPressed: onPlayNext),
-                IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20), onPressed: onRemove),
-              ],
+            if (!isNow) ...[
+              IconButton(icon: const Icon(Icons.playlist_add_rounded, color: Colors.white54, size: 20), onPressed: onPlayNext),
+              IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20), onPressed: onRemove),
             ],
-          ),
+          ],
         ),
       ),
     );

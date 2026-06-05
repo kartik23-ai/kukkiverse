@@ -17,6 +17,7 @@ class EqMeshVisualizer extends StatefulWidget {
     this.width = 0.5,
     this.is8d = false,
     this.height = 200,
+    this.isPlaying = true,
   });
 
   final double bass;
@@ -25,6 +26,7 @@ class EqMeshVisualizer extends StatefulWidget {
   final double width;
   final bool is8d;
   final double height;
+  final bool isPlaying;
 
   @override
   State<EqMeshVisualizer> createState() => _EqMeshVisualizerState();
@@ -40,7 +42,22 @@ class _EqMeshVisualizerState extends State<EqMeshVisualizer>
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
-    )..repeat();
+    );
+    if (widget.isPlaying) {
+      _ctrl.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant EqMeshVisualizer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isPlaying != oldWidget.isPlaying) {
+      if (widget.isPlaying) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override

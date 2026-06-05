@@ -1,11 +1,15 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'storage_service.dart';
 import '../models/song_model.dart';
 import 'api_service.dart';
+import '../core/constants/api_constants.dart';
+import 'ghost_proxy_client.dart';
 
 enum DownloadStatus { none, downloading, downloaded, failed }
 
@@ -117,22 +121,45 @@ class DownloadService {
     }
 
     var songUrl = '';
-    try {
-      debugPrint('ROTTY DOWNLOAD: Resolving fresh song details from api for id: ${song.id}...');
-      final details = await _api.getSongDetails(song.id);
-      if (details != null && details.hasPlayableUrl) {
-        songUrl = details.url;
-        debugPrint('ROTTY DOWNLOAD: Resolved fresh song details URL = "$songUrl"');
-      } else {
-        debugPrint('ROTTY DOWNLOAD: Resolved details details is null or has no playable URL');
+    if (song.id.startsWith('youtube_')) {
+      final videoId = song.id.replaceFirst('youtube_', '');
+      debugPrint('ROTTY DOWNLOAD: Resolving YouTube stream URL for download (videoId: $videoId)');
+      try {
+        final yt = YoutubeExplode();
+        final manifest = await yt.videos.streamsClient.getManifest(videoId).timeout(const Duration(seconds: 8));
+        final audioOnly = manifest.audioOnly;
+        if (audioOnly.isNotEmpty) {
+          final bestAudio = audioOnly.withHighestBitrate();
+          songUrl = bestAudio.url.toString();
+          debugPrint('ROTTY DOWNLOAD: Resolved YouTube stream URL via YoutubeExplode: $songUrl');
+        }
+        yt.close();
+      } catch (e) {
+        debugPrint('ROTTY DOWNLOAD: YoutubeExplode resolution failed/timed out: $e');
       }
-    } catch (e) {
-      debugPrint('ROTTY DOWNLOAD: Error resolving fresh song details: $e');
-    }
 
-    if (songUrl.isEmpty) {
-      songUrl = song.url;
-      debugPrint('ROTTY DOWNLOAD: Fresh resolution failed. Falling back to song.url = "$songUrl"');
+      if (songUrl.isEmpty) {
+        debugPrint('ROTTY DOWNLOAD: Falling back to Piped APIs to resolve stream URL for $videoId');
+        songUrl = await _resolvePipedStream(videoId) ?? '';
+      }
+    } else {
+      try {
+        debugPrint('ROTTY DOWNLOAD: Resolving fresh song details from api for id: ${song.id}...');
+        final details = await _api.getSongDetails(song.id);
+        if (details != null && details.hasPlayableUrl) {
+          songUrl = details.url;
+          debugPrint('ROTTY DOWNLOAD: Resolved fresh song details URL = "$songUrl"');
+        } else {
+          debugPrint('ROTTY DOWNLOAD: Resolved details details is null or has no playable URL');
+        }
+      } catch (e) {
+        debugPrint('ROTTY DOWNLOAD: Error resolving fresh song details: $e');
+      }
+
+      if (songUrl.isEmpty) {
+        songUrl = song.url;
+        debugPrint('ROTTY DOWNLOAD: Fresh resolution failed. Falling back to song.url = "$songUrl"');
+      }
     }
 
     if (songUrl.isEmpty) {
@@ -164,11 +191,25 @@ class DownloadService {
         await file.delete();
       }
 
-      final request = http.Request('GET', Uri.parse(songUrl));
-      request.headers.addAll({
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
-        'Referer': 'https://www.jiosaavn.com/',
-      });
+      var targetUrl = songUrl;
+      final bool isYt = song.id.startsWith('youtube_') || targetUrl.contains('googlevideo.com') || targetUrl.contains('youtube.com') || targetUrl.contains('youtu.be');
+      if (!isYt && GhostProxyClient.isEnabled && targetUrl.startsWith('http') && !targetUrl.contains('/api/media') && !targetUrl.contains('/renders/')) {
+        targetUrl = '${ApiConstants.backendUrl}/api/media?url=${Uri.encodeComponent(targetUrl)}';
+      }
+
+      final request = http.Request('GET', Uri.parse(targetUrl));
+      
+      final headers = <String, String>{
+        'User-Agent': isYt
+            ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            : 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+      };
+      if (songUrl.contains('suno.ai') || songUrl.contains('suno.com')) {
+        headers['Referer'] = 'https://suno.com/';
+      } else if (!isYt) {
+        headers['Referer'] = 'https://www.jiosaavn.com/';
+      }
+      request.headers.addAll(headers);
 
       debugPrint('ROTTY DOWNLOAD: Sending HTTP GET request to: $songUrl');
       final response = await client.send(request);
@@ -190,8 +231,16 @@ class DownloadService {
         if (contentLength > 0) {
           final progress = (downloadedBytes / contentLength).clamp(0.0, 1.0);
           _notifier.updateProgress(song.id, progress);
+        } else {
+          // Chunked transfer fallback: mock/estimate size as 8MB and clamp progress at 99% until complete
+          final estimatedTotal = 8 * 1024 * 1024;
+          final progress = (downloadedBytes / estimatedTotal).clamp(0.0, 0.99);
+          _notifier.updateProgress(song.id, progress);
         }
       }
+      
+      // Ensure the progress indicator hits 1.0 on completion
+      _notifier.updateProgress(song.id, 1.0);
       
       debugPrint('ROTTY DOWNLOAD: Stream finished for ${song.id}. Received $downloadedBytes bytes.');
       await sink.flush();
@@ -235,5 +284,46 @@ class DownloadService {
     } catch (e) {
       debugPrint('ROTTY DOWNLOAD: Delete error for song $songId: $e');
     }
+  }
+
+  Future<String?> _resolvePipedStream(String videoId) async {
+    final instances = [
+      'https://pipedapi.kavin.rocks',
+      'https://api.piped.projectsegfau.lt',
+      'https://pipedapi.us.to',
+      'https://piped-api.garudalinux.org',
+      'https://pipedapi.ox.gy',
+    ];
+    for (final instance in instances) {
+      try {
+        final response = await http.get(
+          Uri.parse('$instance/streams/$videoId'),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final audioStreams = data['audioStreams'];
+          if (audioStreams is List && audioStreams.isNotEmpty) {
+            var bestStream = audioStreams.first;
+            var maxBitrate = -1;
+            for (final stream in audioStreams) {
+              final bitrate = stream['bitrate'] ?? 0;
+              if (bitrate is num && bitrate > maxBitrate) {
+                maxBitrate = bitrate.toInt();
+                bestStream = stream;
+              }
+            }
+            final url = bestStream['url'] as String?;
+            if (url != null && url.isNotEmpty) {
+              debugPrint('ROTTY DOWNLOAD: Resolved stream via Piped: $instance');
+              return url;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('ROTTY DOWNLOAD: Piped instance $instance failed: $e');
+      }
+    }
+    return null;
   }
 }

@@ -1,8 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_service.dart';
+import '../router/app_router.dart';
+import 'notification_service.dart';
 
 class UpdateInfo {
   final String latestVersion;
@@ -38,6 +40,9 @@ class UpdateService extends ChangeNotifier {
   UpdateInfo? get latestUpdate => _latestUpdate;
 
   bool _isChecking = false;
+
+  bool _notifiedUpdate = false;
+  bool _notifiedBlock = false;
 
   /// Check version status from GitHub Pages JSON & Firestore
   Future<void> checkForUpdates({bool force = false}) async {
@@ -90,12 +95,15 @@ class UpdateService extends ChangeNotifier {
           if (isBlocked) {
             _isLockActive = true;
             notifyListeners();
+            _triggerUpdateNotificationIfNeeded();
             return;
           }
         }
       } catch (e) {
         debugPrint('ROTTY UPDATE SERVICE: Firestore dynamic lock check failed: $e');
       }
+
+      _triggerUpdateNotificationIfNeeded();
     } finally {
       _isChecking = false;
     }
@@ -108,6 +116,7 @@ class UpdateService extends ChangeNotifier {
       _isLockActive = block;
       notifyListeners();
     }
+    _triggerUpdateNotificationIfNeeded();
   }
 
   /// Helper to compare semantic versions: returns true if current < minRequired
@@ -125,5 +134,61 @@ class UpdateService extends ChangeNotifier {
       }
     } catch (_) {}
     return false;
+  }
+
+  bool _isNewer(String current, String latest) {
+    try {
+      final currentParts = current.split('.').map(int.parse).toList();
+      final latestParts = latest.split('.').map(int.parse).toList();
+
+      for (var i = 0; i < 3; i++) {
+        final curr = i < currentParts.length ? currentParts[i] : 0;
+        final lat = i < latestParts.length ? latestParts[i] : 0;
+
+        if (lat > curr) return true;
+        if (lat < curr) return false;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  void _triggerUpdateNotificationIfNeeded() {
+    if (_latestUpdate == null) return;
+
+    // 1. Check for OTA update
+    if (_isNewer(currentVersion, _latestUpdate!.latestVersion)) {
+      if (!_notifiedUpdate) {
+        _notifiedUpdate = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = appRouter.routerDelegate.navigatorKey.currentContext;
+          if (context != null) {
+            NotificationService.instance.showForegroundNotification(
+              context,
+              'New Update Available! 🚀',
+              'Version ${_latestUpdate!.latestVersion} is now available. Tap to download!',
+              route: '',
+            );
+          }
+        });
+      }
+    }
+
+    // 2. Check for Lock/Block status
+    if (_isLockActive) {
+      if (!_notifiedBlock) {
+        _notifiedBlock = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = appRouter.routerDelegate.navigatorKey.currentContext;
+          if (context != null) {
+            NotificationService.instance.showForegroundNotification(
+              context,
+              'App Version Blocked! ⚠️',
+              'This version is no longer supported. Please update to continue.',
+              route: '',
+            );
+          }
+        });
+      }
+    }
   }
 }

@@ -26,8 +26,9 @@ class SongTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final downloadStates = ref.watch(downloadNotifierProvider);
-    final downloadState = downloadStates[song.id] ?? const DownloadState.none();
+    final downloadState = ref.watch(
+      downloadNotifierProvider.select((states) => states[song.id] ?? const DownloadState.none()),
+    );
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -75,6 +76,8 @@ class SongTile extends ConsumerWidget {
                       ? CachedNetworkImage(
                           imageUrl: song.image,
                           fit: BoxFit.cover,
+                          memCacheWidth: 104,
+                          memCacheHeight: 104,
                           placeholder: (_, __) => Container(
                             color: AppColors.bgElevated,
                             child: const Icon(Icons.music_note_rounded, color: AppColors.textTertiary, size: 24),
@@ -129,7 +132,7 @@ class SongTile extends ConsumerWidget {
                         ),
                         Flexible(
                           child: Text(
-                            ' • ${song.album}',
+                            song.album.startsWith('collage_ids:') ? ' • AI Mashup Lab' : ' • ${song.album}',
                             style: TextStyle(
                               color: isPlaying ? AppColors.accent.withValues(alpha: 0.5) : AppColors.textTertiary,
                               fontSize: 12,
@@ -152,6 +155,18 @@ class SongTile extends ConsumerWidget {
                     style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                   ),
                 ),
+              const SizedBox(width: 4),
+              // Play/Pause button
+              IconButton(
+                icon: Icon(
+                  isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+                  color: isPlaying ? AppColors.accent : Colors.white.withValues(alpha: 0.65),
+                  size: 24,
+                ),
+                onPressed: onTap,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
               const SizedBox(width: 4),
               // Download status / button
               _buildDownloadButton(context, ref, downloadState),

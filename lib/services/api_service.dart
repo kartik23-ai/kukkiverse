@@ -1,10 +1,13 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../core/constants/api_constants.dart';
+import '../core/config/app_secrets.dart';
 import '../models/media_item.dart';
 import '../models/song_model.dart';
+import 'ghost_proxy_client.dart';
+import 'storage_service.dart';
+import 'dart:math' as math;
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -44,6 +47,17 @@ class ApiService {
 
   Future<List<SongModel>> searchSongs(String query, {int limit = 25, int page = 1}) async {
     if (query.trim().isEmpty) return [];
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final results = await proxyClient.search(query.trim(), limit: limit);
+        if (results != null) {
+          return results.map((e) => SongModel.fromJson(e, preferredQuality: _quality)).toList();
+        }
+      } catch (e) {
+        print("ApiService: Search through proxy failed: $e");
+      }
+    }
     final r = await _get(_web('search.getResults', {
       'q': query.trim(),
       'p': '$page',
@@ -56,6 +70,23 @@ class ApiService {
 
   Future<List<AlbumItem>> searchAlbums(String query, {int limit = 20}) async {
     if (query.trim().isEmpty) return [];
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final results = await proxyClient.searchAlbums(query.trim(), limit: limit);
+        if (results != null) {
+          return results.map((e) => AlbumItem(
+            id: e['id']?.toString() ?? '',
+            name: e['name']?.toString() ?? 'Album',
+            image: SongModel.hiResImage(e['image']?.toString() ?? ''),
+            year: e['year']?.toString() ?? '',
+            language: e['language']?.toString() ?? '',
+          )).where((a) => a.id.isNotEmpty).toList();
+        }
+      } catch (e) {
+        print("ApiService: searchAlbums through proxy failed: $e");
+      }
+    }
     final r = await _get(_web('search.getResults', {
       'q': query.trim(),
       'p': '1',
@@ -85,6 +116,17 @@ class ApiService {
 
   Future<List<ArtistItem>> searchArtists(String query, {int limit = 20}) async {
     if (query.trim().isEmpty) return [];
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final results = await proxyClient.searchArtists(query.trim(), limit: limit);
+        if (results != null) {
+          return results.map((e) => ArtistItem.fromJson(e)).toList();
+        }
+      } catch (e) {
+        print("ApiService: Search artists through proxy failed: $e");
+      }
+    }
     final r = await _get(_web('search.getArtistResults', {
       'q': query.trim(),
       'p': '1',
@@ -111,6 +153,36 @@ class ApiService {
 
   Future<List<SongModel>> getAlbumSongs(String albumId) async {
     if (albumId.isEmpty) return [];
+    
+    if (albumId.startsWith('name_')) {
+      final albumName = albumId.replaceFirst('name_', '').trim();
+      try {
+        final results = await searchAlbums(albumName, limit: 1);
+        if (results.isNotEmpty) {
+          final realId = results.first.id;
+          final songs = await getAlbumSongs(realId);
+          if (songs.isNotEmpty) return songs;
+        }
+      } catch (_) {}
+      try {
+        final songs = await searchSongs(albumName, limit: 30);
+        if (songs.isNotEmpty) return songs;
+      } catch (_) {}
+      return [];
+    }
+
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final results = await proxyClient.getAlbumDetails(albumId);
+        if (results != null) {
+          return results.map((e) => SongModel.fromJson(e, preferredQuality: _quality)).toList();
+        }
+      } catch (e) {
+        print("ApiService: getAlbumSongs through proxy failed: $e");
+      }
+    }
+
     final r = await _get(_web('content.getAlbumDetails', {'albumid': albumId}));
     if (r != null) {
       try {
@@ -126,10 +198,74 @@ class ApiService {
   Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String artistId) async {
     if (artistId.isEmpty) return (artist: null, songs: <SongModel>[], albums: <AlbumItem>[]);
     
-    final bool isAlphanumeric = RegExp(r'[a-zA-Z]').hasMatch(artistId);
+    // Auto-resolve search queries/names to numeric artist IDs (e.g. "Arijit Singh" or "Pritam" -> "459320")
+    final bool isSearchQuery = !RegExp(r'^\d+$').hasMatch(artistId.trim());
+    String resolvedId = artistId.trim();
+    if (isSearchQuery) {
+      try {
+        final searchResults = await searchArtists(resolvedId);
+        if (searchResults.isNotEmpty) {
+          resolvedId = searchResults.first.id;
+        }
+      } catch (_) {}
+    }
+
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final result = await proxyClient.getArtistDetails(resolvedId);
+        if (result != null) {
+          final artMap = result['artist'] as Map<String, dynamic>?;
+          final songsList = result['songs'] as List?;
+          final albumsList = result['albums'] as List?;
+          
+          String? listenersText = artMap?['follower_count']?.toString() ?? artMap?['listeners']?.toString();
+          if (listenersText != null) {
+            final numFollowers = int.tryParse(listenersText.replaceAll(RegExp(r'[^\d]'), ''));
+            if (numFollowers != null) {
+              if (numFollowers >= 1000000) {
+                listenersText = '${(numFollowers / 1000000).toStringAsFixed(1)}M';
+              } else if (numFollowers >= 1000) {
+                listenersText = '${(numFollowers / 1000).toStringAsFixed(1)}K';
+              } else {
+                listenersText = '$numFollowers';
+              }
+            }
+          }
+
+          final artist = artMap != null ? ArtistItem(
+            id: artMap['id']?.toString() ?? resolvedId,
+            name: artMap['name']?.toString() ?? 'Artist',
+            image: SongModel.hiResImage(artMap['image']?.toString() ?? ''),
+            bio: artMap['bio']?.toString(),
+            listeners: listenersText,
+          ) : null;
+
+          final songs = songsList != null
+              ? songsList.map((e) => SongModel.fromJson(Map<String, dynamic>.from(e), preferredQuality: _quality)).toList()
+              : <SongModel>[];
+              
+          final albums = albumsList != null
+              ? albumsList.map((e) => AlbumItem(
+                  id: e['id']?.toString() ?? '',
+                  name: e['name']?.toString() ?? '',
+                  image: SongModel.hiResImage(e['image']?.toString() ?? ''),
+                )).toList()
+              : <AlbumItem>[];
+          
+          if (songs.isNotEmpty || albums.isNotEmpty) {
+            return (artist: artist, songs: songs, albums: albums);
+          }
+        }
+      } catch (e) {
+        print("ApiService: getArtist through proxy failed: $e");
+      }
+    }
+
+    final bool isAlphanumeric = RegExp(r'[a-zA-Z]').hasMatch(resolvedId);
     if (!isAlphanumeric) {
       final r = await _get(_web('artist.getArtistPageDetails', {
-        'artistId': artistId,
+        'artistId': resolvedId,
         'page': '1',
       }));
       if (r != null) {
@@ -138,7 +274,40 @@ class ApiService {
           if (body is Map) {
             final name = body['name']?.toString() ?? body['title']?.toString() ?? 'Artist';
             final image = SongModel.hiResImage(body['image']?.toString() ?? '');
-            final artist = ArtistItem(id: artistId, name: name, image: image);
+            
+            String? bioText;
+            if (body['bio'] != null) {
+              if (body['bio'] is List) {
+                bioText = (body['bio'] as List).join(' ');
+              } else {
+                bioText = body['bio'].toString();
+              }
+            }
+            
+            String? followersText;
+            final rawFollowers = body['follower_count'] ?? body['fan_count'] ?? body['followerCount'] ?? body['fanCount'];
+            if (rawFollowers != null) {
+              final numFollowers = int.tryParse(rawFollowers.toString());
+              if (numFollowers != null) {
+                if (numFollowers >= 1000000) {
+                  followersText = '${(numFollowers / 1000000).toStringAsFixed(1)}M';
+                } else if (numFollowers >= 1000) {
+                  followersText = '${(numFollowers / 1000).toStringAsFixed(1)}K';
+                } else {
+                  followersText = '$numFollowers';
+                }
+              } else {
+                followersText = rawFollowers.toString();
+              }
+            }
+
+            final artist = ArtistItem(
+              id: resolvedId,
+              name: name,
+              image: image,
+              bio: bioText,
+              listeners: followersText,
+            );
             final songs = body['topSongs'] is List
                 ? _mapsToSongs(body['topSongs'] as List)
                 : body['songs'] is List
@@ -159,25 +328,242 @@ class ApiService {
         } catch (_) {}
       }
     }
-    return _fallbackSumitArtist(artistId);
+    return _fallbackSumitArtist(resolvedId);
   }
 
   Future<Map<String, List<SongModel>>> getHomeData() async {
+    final favArtists = StorageService().favoriteArtists;
+    final Map<String, List<SongModel>> favoriteSections = {};
+
+    if (favArtists.isNotEmpty) {
+      try {
+        for (final artist in favArtists.take(3)) {
+          final songs = await searchSongs('$artist top hits', limit: 12);
+          if (songs.isNotEmpty) {
+            favoriteSections['Best of $artist'] = songs;
+          }
+        }
+      } catch (e) {
+        print("ApiService: Error fetching favorite artists for homepage: $e");
+      }
+    }
+
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final homeJson = await proxyClient.getHome();
+        if (homeJson != null) {
+          final sections = <String, List<SongModel>>{};
+          sections.addAll(favoriteSections);
+          homeJson.forEach((key, value) {
+            if (value is List) {
+              final parsed = value
+                  .map((e) => SongModel.fromJson(Map<String, dynamic>.from(e as Map), preferredQuality: _quality))
+                  .toList();
+              sections[key] = _deduplicate(parsed);
+            }
+          });
+          if (sections.isNotEmpty) return sections;
+        }
+      } catch (e) {
+        print("ApiService: getHomeData through proxy failed: $e");
+      }
+    }
+
+    final dayIndex = DateTime.now().day % 7;
+
+    const trendingPool = [
+      'trending hindi latest',
+      'viral songs hindi',
+      'latest trending bollywood',
+      'hindi chartbusters today',
+      'trending songs new release',
+      'trending hits india',
+      'top billboard hindi',
+    ];
+    
+    const bollywoodPool = [
+      'bollywood popular hits',
+      'new bollywood romantic',
+      'bollywood blockbusters',
+      'bollywood dance tracks',
+      'bollywood lofi beats',
+      'classic bollywood updates',
+      'bollywood romantic trending',
+    ];
+
+    const punjabiPool = [
+      'punjabi hits new',
+      'latest punjabi tracks',
+      'punjabi dance chartbusters',
+      'punjabi romantic love',
+      'punjabi lofi beats',
+      'punjabi party anthems',
+      'trending punjabi hits',
+    ];
+
+    const topHitsPool = [
+      'top hindi songs',
+      'latest english pop',
+      'top global billboard',
+      'international hit releases',
+      'global top 50 hits',
+      'billboard hot songs',
+      'spotify top songs',
+    ];
+
+    const viralPool = [
+      'viral songs list',
+      'india viral hit tracks',
+      'viral music hits',
+      'tiktok trending tracks',
+      'viral hits billboard',
+      'viral top song playlist',
+      'social media hits',
+    ];
+
+    const newReleasesPool = [
+      'new releases hindi',
+      'latest english singles',
+      'new bollywood music',
+      'new release pop songs',
+      'fresh tracks global',
+      'new releases album songs',
+      'latest music releases',
+    ];
+
+    const editorsPicksPool = [
+      'editors choice songs',
+      'editors pick bollywood',
+      'editors choice romantic',
+      'best new releases choice',
+      'editors picks international',
+      'editors pick melodies',
+      'curated music hits',
+    ];
+
+    final Map<String, String> targetQueries = {};
+
+    if (favArtists.isNotEmpty) {
+      for (final artist in favArtists.take(3)) {
+        targetQueries['Best of $artist'] = '$artist top hits';
+      }
+    }
+
+    targetQueries.addAll({
+      'Trending': trendingPool[dayIndex],
+      'Top Hits': topHitsPool[dayIndex],
+      'Bollywood': bollywoodPool[dayIndex],
+      'Punjabi': punjabiPool[dayIndex],
+      'Viral Songs': viralPool[dayIndex],
+      'New Releases': newReleasesPool[dayIndex],
+      'Editor\'s Picks': editorsPicksPool[dayIndex],
+      'Weekly Top Songs': topHitsPool[(dayIndex + 3) % 7], // Offset slightly for variety
+    });
+
+    final keys = targetQueries.keys.toList();
+    final futures = keys.map((key) => searchSongs(targetQueries[key]!, limit: 12));
+    final resultsList = await Future.wait(futures);
+
     final sections = <String, List<SongModel>>{};
-    final entries = ApiConstants.homeQueries.entries.take(4).toList();
-    for (final e in entries) {
-      final songs = await searchSongs(e.value, limit: 12);
-      if (songs.isNotEmpty) sections[e.key] = songs;
+    for (int i = 0; i < keys.length; i++) {
+      final songs = resultsList[i];
+      if (songs.isNotEmpty) {
+        // Slightly shuffle to give fresh placement order
+        final temp = List<SongModel>.from(songs);
+        if (temp.length > 3) {
+          final rng = math.Random();
+          // Shuffle sublist elements to keep top elements relevant but dynamic
+          for (int j = temp.length - 1; j > 0; j--) {
+            final idx = rng.nextInt(j + 1);
+            final val = temp[j];
+            temp[j] = temp[idx];
+            temp[idx] = val;
+          }
+        }
+        sections[keys[i]] = temp;
+      }
     }
-    if (sections.isEmpty) {
-      final trending = await searchSongs('hindi trending', limit: 15);
-      if (trending.isNotEmpty) sections['Trending'] = trending;
-    }
+
     return sections;
+  }
+
+  Future<List<SongModel>> getGenreSongs(String genre) async {
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final results = await proxyClient.getGenreSongs(genre);
+        if (results != null) {
+          return results.map((e) => SongModel.fromJson(e, preferredQuality: _quality)).toList();
+        }
+      } catch (e) {
+        print("ApiService: getGenreSongs through proxy failed: $e");
+      }
+    }
+    // Fallback: search using fallback queries
+    final query = _getGenreQueryFallback(genre);
+    return searchSongs(query, limit: 30);
+  }
+
+  String _getGenreQueryFallback(String genre) {
+    final dayOfWeek = DateTime.now().weekday;
+    return switch (genre.toLowerCase()) {
+      'love' || 'romantic' => switch (dayOfWeek % 3) {
+          0 => 'Latest Hindi Romance',
+          1 => 'Hindi Love Songs',
+          _ => 'Hindi Romantic Hits',
+        },
+      'devotional' => switch (dayOfWeek % 3) {
+          0 => 'Hindi Bhakti Bhajans',
+          1 => 'Aarti Bhakti Sangrah',
+          _ => 'Krishna Bhajans popular',
+        },
+      'party' => switch (dayOfWeek % 3) {
+          0 => 'Latest Bollywood Dance',
+          1 => 'Hindi Party Hits',
+          _ => 'Punjabi Dance Club',
+        },
+      'workout' => switch (dayOfWeek % 2) {
+          0 => 'Gym Workout Beats',
+          _ => 'High Energy Workout EDM',
+        },
+      'chill' => switch (dayOfWeek % 3) {
+          0 => 'Hindi Lofi Chill',
+          1 => 'Lofi Acoustic Hindi',
+          _ => 'Late Night Hindi Chill',
+        },
+      'sad' => switch (dayOfWeek % 3) {
+          0 => 'Sad Hindi Dard',
+          1 => 'Breakup Sad Hindi',
+          _ => 'Mellow Sad Hindi',
+        },
+      'punjabi' => switch (dayOfWeek % 3) {
+          0 => 'Punjabi Hits 2026',
+          1 => 'Latest Punjabi Pop',
+          _ => 'Punjabi Hits dance',
+        },
+      'english' => switch (dayOfWeek % 3) {
+          0 => 'English Pop Hits',
+          1 => 'Billboard Hot 100 English',
+          _ => 'Trending English Pop',
+        },
+      _ => '$genre Hits',
+    };
   }
 
   Future<SongModel?> getSongDetails(String id) async {
     if (id.isEmpty) return null;
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final detailsJson = await proxyClient.getSongDetails(id);
+        if (detailsJson != null) {
+          return SongModel.fromJson(detailsJson, preferredQuality: _quality);
+        }
+      } catch (e) {
+        print("ApiService: getSongDetails through proxy failed: $e");
+      }
+    }
     final r = await _get(_web('song.getDetails', {'pids': id}));
     if (r != null) {
       try {
@@ -377,7 +763,7 @@ class ApiService {
           'duration': durationSec,
           'raw': true,
         }),
-      ).timeout(const Duration(seconds: 12));
+      ).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -392,27 +778,183 @@ class ApiService {
     return null;
   }
 
+
+
+  /// Generates dynamic AI lyrics using the backend server.
+  Future<String?> generateLyrics({
+    required String prompt,
+    required String genre,
+  }) async {
+    final proxyClient = GhostProxyClient();
+    if (GhostProxyClient.isEnabled) {
+      final res = await proxyClient.generateLyrics(
+        prompt: prompt,
+        genre: genre,
+      );
+      if (res != null) return res;
+    }
+
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiConstants.backendUrl}/api/generate-lyrics'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'prompt': prompt,
+          'genre': genre,
+          'groq_api_key': AppSecrets.groqApiKey,
+        }),
+      ).timeout(const Duration(seconds: 45));
+
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body) as Map<String, dynamic>;
+        return body['lyrics']?.toString();
+      }
+    } catch (e) {
+      print('Standard AI lyrics request failed: $e');
+    }
+    return null;
+  }
+
+  /// Generates a premium AI song on the server side securely.
+  Future<Map<String, dynamic>?> generateSong({
+    required String prompt,
+    required String genre,
+    required String vocalGender,
+    required String vocalExpression,
+    required bool isInstrumental,
+    required String customLyrics,
+    bool forceBackup = false,
+  }) async {
+    // Attempt secure GhostProxyClient execution first
+    final proxyClient = GhostProxyClient();
+    if (GhostProxyClient.isEnabled) {
+      final res = await proxyClient.generateSong(
+        prompt: prompt,
+        genre: genre,
+        vocalGender: vocalGender,
+        vocalExpression: vocalExpression,
+        isInstrumental: isInstrumental,
+        customLyrics: customLyrics,
+        forceBackup: forceBackup,
+      );
+      if (res != null) return res;
+    }
+
+    // Standard raw JSON fallback for dev ease
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiConstants.backendUrl}/api/generate-song'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'prompt': prompt,
+          'genre': genre,
+          'vocal_gender': vocalGender,
+          'vocal_expression': vocalExpression,
+          'is_instrumental': isInstrumental,
+          'custom_lyrics': customLyrics,
+          'force_backup': forceBackup,
+        }),
+      ).timeout(const Duration(seconds: 120));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Standard AI song generation request failed: $e');
+    }
+    return null;
+  }
+
+  /// Secure status polling method for asynchronous music composition
+  Future<Map<String, dynamic>?> getGenerationStatus(String taskId) async {
+    final proxyClient = GhostProxyClient();
+    if (GhostProxyClient.isEnabled) {
+      final res = await proxyClient.getGenerationStatus(taskId);
+      if (res != null) return res;
+    }
+
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiConstants.backendUrl}/api/generation-status'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'taskId': taskId}),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Standard generation status polling failed: $e');
+    }
+    return null;
+  }
+
   /// Search YouTube Music/YouTube for songs
   Future<List<SongModel>> searchYouTube(String query) async {
     if (query.trim().isEmpty) return [];
     try {
       final yt = YoutubeExplode();
-      final searchList = await yt.search.search(query).timeout(const Duration(seconds: 8));
+      
+      // Refine query to bias search results towards music/song
+      String targetQuery = query.trim();
+      final lowerQ = targetQuery.toLowerCase();
+      if (!lowerQ.contains('song') && 
+          !lowerQ.contains('music') && 
+          !lowerQ.contains('audio') && 
+          !lowerQ.contains('video') && 
+          !lowerQ.contains('lyrics') && 
+          !lowerQ.contains('lyric') && 
+          !lowerQ.contains('lofi') && 
+          !lowerQ.contains('remix')) {
+        targetQuery = '$targetQuery song';
+      }
+
+      final searchList = await yt.search.search(targetQuery).timeout(const Duration(seconds: 8));
       final List<SongModel> songs = [];
       
       for (final video in searchList) {
+        // Filter out short clips (like shorts) and very long compilation/playlist videos
+        final duration = video.duration;
+        if (duration != null) {
+          if (duration.inSeconds < 60 || duration.inSeconds > 600) {
+            continue;
+          }
+        }
+
+        // Filter out non-music video titles
+        final lowerTitle = video.title.toLowerCase();
+        final ignoreKeywords = [
+          'vlog', 'reaction', 'review', 'interview', 'gaming', 'unboxing', 
+          'full episode', 'promo', 'tutorial', 'how to', 'compilation', 
+          'season', 'podcast', 'gameplay', 'talk show', 'reaction video', 'blog'
+        ];
+        bool shouldIgnore = false;
+        for (final kw in ignoreKeywords) {
+          if (lowerTitle.contains(kw)) {
+            shouldIgnore = true;
+            break;
+          }
+        }
+        if (shouldIgnore) continue;
+
         songs.add(SongModel(
           id: 'youtube_${video.id.value}',
           title: video.title,
           artist: video.author,
           album: 'YouTube',
           image: video.thumbnails.highResUrl,
-          duration: video.duration ?? const Duration(minutes: 3),
+          duration: duration ?? const Duration(minutes: 3),
           url: '',
         ));
       }
       yt.close();
-      return songs;
+      return _deduplicate(songs);
     } catch (e) {
       print('YouTube search error: $e');
       return [];
@@ -471,11 +1013,14 @@ class ApiService {
     }
   }
 
-  List<SongModel> _mapsToSongs(List list) => list
-      .whereType<Map>()
-      .map((s) => SongModel.fromSaavnWeb(Map<String, dynamic>.from(s), quality: _quality))
-      .where((s) => s.id.isNotEmpty)
-      .toList();
+  List<SongModel> _mapsToSongs(List list) {
+    final parsed = list
+        .whereType<Map>()
+        .map((s) => SongModel.fromSaavnWeb(Map<String, dynamic>.from(s), quality: _quality))
+        .where((s) => s.id.isNotEmpty)
+        .toList();
+    return _deduplicate(parsed);
+  }
 
   Future<List<SongModel>> _fallbackSumitSearch(String query, int limit) async {
     try {
@@ -605,11 +1150,12 @@ class ApiService {
       final data = body is Map ? body['data'] : null;
       final results = data is Map ? data['results'] : (body is List ? body : null);
       if (results is! List) return [];
-      return results
+      final parsed = results
           .whereType<Map>()
           .map((s) => SongModel.fromJson(Map<String, dynamic>.from(s), preferredQuality: _quality))
           .where((s) => s.id.isNotEmpty)
           .toList();
+      return _deduplicate(parsed);
     } catch (_) {
       return [];
     }
@@ -617,20 +1163,71 @@ class ApiService {
 
   Future<List<SongModel>> getRecommendations(String songId) async {
     if (songId.isEmpty) return [];
+    if (GhostProxyClient.isEnabled) {
+      try {
+        final proxyClient = GhostProxyClient();
+        final list = await proxyClient.getRecommendations(songId);
+        if (list != null) {
+          final parsed = list
+              .map((e) => SongModel.fromJson(e, preferredQuality: _quality))
+              .toList();
+          return _deduplicate(parsed);
+        }
+      } catch (e) {
+        print("ApiService: getRecommendations through proxy failed: $e");
+      }
+    }
     try {
       final uri = Uri.parse('https://www.jiosaavn.com/api.php?__call=reco.getreco&pid=$songId&_format=json&ctx=android&api_version=4');
       final r = await _get(uri);
       if (r != null) {
         final data = json.decode(r.body);
         if (data is Map && data[songId] is List) {
-          return (data[songId] as List)
+          final parsed = (data[songId] as List)
               .whereType<Map>()
               .map((e) => SongModel.fromSaavnReco(Map<String, dynamic>.from(e), quality: _quality))
               .where((s) => s.id.isNotEmpty)
               .toList();
+          return _deduplicate(parsed);
         }
       }
     } catch (_) {}
     return [];
+  }
+
+  bool _isGenericArtist(String artist) {
+    final lower = artist.trim().toLowerCase();
+    return lower.isEmpty ||
+        lower == 'various artists' ||
+        lower == 'various' ||
+        lower == 'unknown' ||
+        lower == 'artist' ||
+        lower == 'singers' ||
+        lower == 'unknown artist' ||
+        lower == 'various artist' ||
+        lower == 'multi-artist' ||
+        lower == 'multi artist';
+  }
+
+  List<SongModel> _deduplicate(List<SongModel> songs) {
+    final seen = <String>{};
+    final List<SongModel> result = [];
+    for (final s in songs) {
+      if (s.id.isEmpty) continue;
+      final title = s.title.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+      final primaryArtist = s.artist.split(RegExp(r'[,&]')).first.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+      
+      if (_isGenericArtist(primaryArtist)) {
+        result.add(s);
+        continue;
+      }
+
+      final key = '$title|$primaryArtist';
+      if (!seen.contains(key)) {
+        seen.add(key);
+        result.add(s);
+      }
+    }
+    return result;
   }
 }

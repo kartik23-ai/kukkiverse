@@ -1,4 +1,5 @@
 
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,17 +25,41 @@ class StorageService {
   late Box _historyBox;
   late Box _partyBox;
   late Box _downloadedBox;
+  late Box _mashupsBox;
+  late Box _lyricsBox;
 
   Future<void> init() async {
-    await Hive.initFlutter();
+    try {
+      await Hive.initFlutter();
+    } catch (e) {
+      debugPrint('Hive initFlutter error: $e');
+    }
     _prefs = await SharedPreferences.getInstance();
-    _recentBox = await Hive.openBox(AppConstants.recentBox);
-    _favoritesBox = await Hive.openBox(AppConstants.favoritesBox);
-    _playlistBox = await Hive.openBox(AppConstants.playlistBox);
-    _searchBox = await Hive.openBox(AppConstants.searchHistoryBox);
-    _historyBox = await Hive.openBox(AppConstants.playHistoryBox);
-    _partyBox = await Hive.openBox(AppConstants.partyRoomBox);
-    _downloadedBox = await Hive.openBox(AppConstants.downloadedSongsBox);
+
+    Future<Box> openBoxSafely(String name) async {
+      try {
+        return await Hive.openBox(name);
+      } catch (e) {
+        debugPrint('Failed to open hive box $name: $e. Re-creating box...');
+        try {
+          await Hive.deleteBoxFromDisk(name);
+          return await Hive.openBox(name);
+        } catch (ex) {
+          debugPrint('Fatal error opening box $name: $ex');
+          rethrow;
+        }
+      }
+    }
+
+    _recentBox = await openBoxSafely(AppConstants.recentBox);
+    _favoritesBox = await openBoxSafely(AppConstants.favoritesBox);
+    _playlistBox = await openBoxSafely(AppConstants.playlistBox);
+    _searchBox = await openBoxSafely(AppConstants.searchHistoryBox);
+    _historyBox = await openBoxSafely(AppConstants.playHistoryBox);
+    _partyBox = await openBoxSafely(AppConstants.partyRoomBox);
+    _downloadedBox = await openBoxSafely(AppConstants.downloadedSongsBox);
+    _mashupsBox = await openBoxSafely('mashup_songs');
+    _lyricsBox = await openBoxSafely('cached_lyrics');
   }
 
   Box get recentBox => _recentBox;
@@ -361,6 +386,9 @@ class StorageService {
   String get groqApiKey => _prefs.getString('groq_api_key') ?? '';
   Future<void> setGroqApiKey(String key) => _prefs.setString('groq_api_key', key.trim());
 
+  String get openaiApiKey => _prefs.getString('openai_api_key') ?? '';
+  Future<void> setOpenaiApiKey(String key) => _prefs.setString('openai_api_key', key.trim());
+
   String get spotifyClientId => _prefs.getString('spotify_client_id') ?? '';
   Future<void> setSpotifyClientId(String val) => _prefs.setString('spotify_client_id', val.trim());
 
@@ -431,6 +459,12 @@ class StorageService {
   bool get isSupporter => _prefs.getBool('is_supporter_local') ?? false;
   Future<void> setIsSupporter(bool v) => _prefs.setBool('is_supporter_local', v);
 
+  List<String> get favoriteArtists => _prefs.getStringList('favorite_artists') ?? [];
+  Future<void> setFavoriteArtists(List<String> artists) => _prefs.setStringList('favorite_artists', artists);
+
+  bool get hasSelectedFavorites => _prefs.getBool('has_selected_favorites') ?? false;
+  Future<void> setHasSelectedFavorites(bool val) => _prefs.setBool('has_selected_favorites', val);
+
   String get profileName => _prefs.getString('profile_name') ?? '';
   Future<void> setProfileName(String name) => _prefs.setString('profile_name', name.trim());
 
@@ -439,4 +473,67 @@ class StorageService {
 
   bool get albumArtRipples => _prefs.getBool('album_art_ripples') ?? true;
   Future<void> setAlbumArtRipples(bool v) => _prefs.setBool('album_art_ripples', v);
+
+  bool get eqMeshVisualizer => _prefs.getBool('eq_mesh_visualizer') ?? true;
+  Future<void> setEqMeshVisualizer(bool v) => _prefs.setBool('eq_mesh_visualizer', v);
+
+  String get customBackendIp => _prefs.getString('custom_backend_ip') ?? '';
+  Future<void> setCustomBackendIp(String ip) => _prefs.setString('custom_backend_ip', ip.trim());
+
+  // ─── Private AI Studio Creations ───
+  List<SongModel> getStudioCreations() {
+    return _mashupsBox.values
+        .map<SongModel>((e) => SongModel.fromHive(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<void> saveStudioCreation(SongModel song) async {
+    await _mashupsBox.put(song.id, song.toJson());
+  }
+
+  Future<void> deleteStudioCreation(String id) async {
+    final songData = _mashupsBox.get(id);
+    if (songData != null) {
+      final url = songData['url']?.toString() ?? '';
+      if (url.isNotEmpty) {
+        try {
+          String path = url;
+          if (path.startsWith('file://')) {
+            path = Uri.parse(url).toFilePath();
+          }
+          final file = File(path);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (e) {
+          debugPrint('Error deleting local creation file: $e');
+        }
+      }
+    }
+    await _mashupsBox.delete(id);
+  }
+
+  bool get mixFadeEnabled => _prefs.getBool('mix_fade_enabled') ?? false;
+  Future<void> setMixFadeEnabled(bool value) => _prefs.setBool('mix_fade_enabled', value);
+
+  String get mixBlendStyle => _prefs.getString('mix_blend_style') ?? 'Smooth';
+  Future<void> setMixBlendStyle(String value) => _prefs.setString('mix_blend_style', value);
+
+  int get mixBlendLength => _prefs.getInt('mix_blend_length') ?? 6;
+  Future<void> setMixBlendLength(int value) => _prefs.setInt('mix_blend_length', value);
+
+  String get aiRadioCache => _prefs.getString('ai_radio_cache') ?? '';
+  Future<void> setAiRadioCache(String value) => _prefs.setString('ai_radio_cache', value);
+
+  String get lastNotificationId => _prefs.getString('last_notification_id') ?? '';
+  Future<void> setLastNotificationId(String id) => _prefs.setString('last_notification_id', id);
+
+  // ─── Lyrics Cache ───
+  String? getCachedLyrics(String songId) {
+    return _lyricsBox.get(songId) as String?;
+  }
+
+  Future<void> saveCachedLyrics(String songId, String lyrics) async {
+    await _lyricsBox.put(songId, lyrics);
+  }
 }

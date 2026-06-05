@@ -29,6 +29,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     final favorites = ref.watch(favoritesProvider);
     final recent = ref.watch(recentSongsProvider);
     final downloaded = ref.watch(downloadedSongsProvider);
+    final studioCreations = ref.watch(studioCreationsProvider);
 
     final body = CustomScrollView(
         slivers: [
@@ -56,6 +57,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                   children: [
                     _chip('Playlists', 0),
                     const SizedBox(width: 8),
+                    _chip('My Creations', 4),
+                    const SizedBox(width: 8),
                     _chip('Liked', 1),
                     const SizedBox(width: 8),
                     _chip('Recent', 2),
@@ -67,6 +70,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
             ),
           ),
           if (_tab == 0) ...[
+            SliverToBoxAdapter(child: _row(Icons.auto_awesome_rounded, Colors.purple, 'My Creations', '${studioCreations.length} tracks', () => setState(() => _tab = 4))),
             SliverToBoxAdapter(child: _row(Icons.favorite_rounded, AppColors.accent, 'Liked Songs', '${favorites.length} songs', () => setState(() => _tab = 1))),
             SliverToBoxAdapter(child: _row(Icons.history_rounded, AppColors.accentAlt, 'Recently Played', '${recent.length} songs', () => setState(() => _tab = 2))),
             SliverToBoxAdapter(child: _row(Icons.download_done_rounded, Colors.green, 'Downloaded Songs', '${downloaded.length} songs', () => setState(() => _tab = 3))),
@@ -83,12 +87,13 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           if (_tab == 1) _songs(favorites),
           if (_tab == 2) _songs(recent),
           if (_tab == 3) _songs(downloaded),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          if (_tab == 4) _songs(studioCreations),
+          const SliverToBoxAdapter(child: SizedBox(height: 160)),
         ],
     );
 
     if (widget.embedded) return body;
-    return AppScaffold(body: body);
+    return AppScaffold(bottomPadding: 150, body: body);
   }
 
   Widget _chip(String label, int i) {

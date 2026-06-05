@@ -12,6 +12,15 @@ class AppSecrets {
 
   static bool get hasGroq => groqApiKey.isNotEmpty;
 
+  static String get openaiApiKey {
+    const fromEnv = String.fromEnvironment('OPENAI_API_KEY');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (kOpenaiApiKey.trim().isNotEmpty) return kOpenaiApiKey.trim();
+    return StorageService().openaiApiKey;
+  }
+
+  static bool get hasOpenai => openaiApiKey.isNotEmpty;
+
   static String get spotifyClientId {
     const fromEnv = String.fromEnvironment('SPOTIFY_CLIENT_ID');
     if (fromEnv.isNotEmpty) return fromEnv;

@@ -35,313 +35,504 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final aiOn = ref.watch(aiDjEnabledProvider);
-    final mode = ref.watch(appModeProvider);
-    final sound = ref.watch(soundSpaceProvider);
-    final premium = ref.watch(rottyPremiumProvider);
-
     final content = ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 160),
         children: [
           Text('Settings', style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)),
           const SizedBox(height: 20),
-          _buildUserProfileCard(context),
+          RepaintBoundary(child: _buildUserProfileCard(context)),
           const SizedBox(height: 24),
-          if (FirebaseService.instance.isAdmin) ...[
-            _header('Admin Tools'),
-            ListTile(
-              leading: const Icon(Icons.admin_panel_settings_rounded, color: Colors.cyanAccent),
-              title: Text('Admin Control Panel', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: Text('Manage users, verified badges, broadcast alerts', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-              onTap: () => context.push('/admin'),
-            ),
-            const Divider(color: AppColors.glassBorder),
-          ],
-          _header('Account & Support'),
-          ListTile(
-            leading: const Icon(Icons.volunteer_activism_rounded, color: Colors.pinkAccent),
-            title: Text('Support Kartik & Gift ₹99', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text('Keep Rotty alive, fast & 100% ad-free forever', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (StorageService().isSupporter)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.pink.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.3)),
-                    ),
-                    child: Text('SUPPORTER 💖', style: GoogleFonts.inter(color: Colors.pinkAccent, fontSize: 9, fontWeight: FontWeight.w800)),
+          
+          if (FirebaseService.instance.isAdmin)
+            RepaintBoundary(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _header('Admin Tools'),
+                  ListTile(
+                    leading: const Icon(Icons.admin_panel_settings_rounded, color: Colors.cyanAccent),
+                    title: Text('Admin Control Panel', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+                    subtitle: Text('Manage users, verified badges, broadcast alerts', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                    onTap: () => context.push('/admin'),
                   ),
-                const SizedBox(width: 8),
-                const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-              ],
+                  const Divider(color: AppColors.glassBorder),
+                ],
+              ),
             ),
-            onTap: () => context.push('/support'), // Open direct to Support/Gift Developer screen
-          ),
-          ListTile(
-            leading: const Icon(Icons.person_outline_rounded, color: Colors.cyanAccent),
-            title: Text('Edit Profile Name', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text(
-              StorageService().profileName.isEmpty ? 'Set your display name' : StorageService().profileName,
-              style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12),
-            ),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-            onTap: _showEditProfileDialog,
-          ),
-          ListTile(
-            leading: const Icon(Icons.sync_rounded, color: Colors.greenAccent),
-            title: Text('Cloud Sync Settings', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Builder(
-              builder: (context) {
-                final customId = StorageService().customSyncId;
-                if (customId.isNotEmpty) {
-                  return Text('Linked Sync ID: $customId', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12));
-                }
-                return Text('Local Device (Unlinked)', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12));
-              },
-            ),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-            onTap: _showCloudSyncDialog,
-          ),
-          const Divider(color: AppColors.glassBorder),
-          _header('Ambient Mode'),
-          Builder(builder: (context) {
-            final tt = ref.watch(timeThemeProvider);
-            return Container(
-              padding: const EdgeInsets.all(16),
-              margin: const EdgeInsets.only(bottom: 16),
+
+          // Prominent Support tile (kept outside)
+          RepaintBoundary(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  colors: [tt.bgSurface, tt.bgDeep],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.15), width: 1.0),
+                color: Colors.pink.withValues(alpha: 0.05),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.volunteer_activism_rounded, color: Colors.pinkAccent),
+                title: Text('Support Kartik & Gift ₹99', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+                subtitle: Text('Keep Rotty alive, fast & 100% ad-free forever', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (StorageService().isSupporter)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.pink.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.3)),
+                        ),
+                        child: Text('SUPPORTER 💖', style: GoogleFonts.inter(color: Colors.pinkAccent, fontSize: 9, fontWeight: FontWeight.w800)),
+                      ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                  ],
                 ),
-                border: Border.all(color: tt.glassEdge, width: 1),
-                boxShadow: [
-                  BoxShadow(color: tt.accentGlow.withValues(alpha: 0.15), blurRadius: 20, spreadRadius: -4),
-                ],
+                onTap: () => context.push('/support'),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(colors: tt.auroraColors),
-                    ),
-                    child: Icon(
-                      switch (tt.phase) {
-                        DayPhase.morning => Icons.wb_sunny_rounded,
-                        DayPhase.noon => Icons.light_mode_rounded,
-                        DayPhase.evening => Icons.wb_twilight_rounded,
-                        DayPhase.night => Icons.nightlight_round,
-                      },
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(tt.label.toUpperCase(), style: GoogleFonts.inter(
-                          color: tt.textPrimary, fontWeight: FontWeight.w700, fontSize: 14, letterSpacing: 1.2,
-                        )),
-                        const SizedBox(height: 2),
-                        Text('Auto-synced to your local time', style: GoogleFonts.inter(
-                          color: tt.textSecondary, fontSize: 11,
-                        )),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: tt.accentGlow.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text('LIVE', style: GoogleFonts.inter(
-                      color: tt.accentGlow, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1,
-                    )),
-                  ),
-                ],
-              ),
-            );
-          }),
-          _header('Experience Modes'),
-          _modeCard(
-            context, ref,
-            mode: RottyAppMode.normal,
-            currentMode: mode,
-            icon: Icons.music_note_rounded,
-            color: AppColors.accent,
-            desc: 'Full ROTTY experience — all features enabled',
-          ),
-          const SizedBox(height: 10),
-          _modeCard(
-            context, ref,
-            mode: RottyAppMode.drive,
-            currentMode: mode,
-            icon: Icons.speed_rounded,
-            color: const Color(0xFFFF6B4A),
-            desc: 'Landscape HUD • Gesture-only controls • Speedometer ring',
-            route: '/drive',
-          ),
-          const SizedBox(height: 10),
-          _modeCard(
-            context, ref,
-            mode: RottyAppMode.focus,
-            currentMode: mode,
-            icon: Icons.self_improvement_rounded,
-            color: const Color(0xFFE0E0E0),
-            desc: 'Monochrome brutalist UI • Pomodoro timer • No distractions',
-            route: '/focus',
-          ),
-          const SizedBox(height: 10),
-          _modeCard(
-            context, ref,
-            mode: RottyAppMode.sleep,
-            currentMode: mode,
-            icon: Icons.bedtime_rounded,
-            color: const Color(0xFF7B61FF),
-            desc: 'Pitch black dreamscape • Smart volume fade • Nebula cloud',
-            route: '/sleep',
-          ),
-          const Divider(color: AppColors.glassBorder),
-          _header('Sound Spaces'),
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: SoundSpace.values.map((s) {
-                final selected = sound == s;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(s.label, style: GoogleFonts.inter(color: selected ? Colors.white : AppColors.textSecondary, fontSize: 12)),
-                    selected: selected,
-                    selectedColor: AppColors.accent,
-                    onSelected: (_) => ref.read(soundSpaceProvider.notifier).set(s),
-                  ),
-                );
-              }).toList(),
             ),
           ),
-          // ─── 3D EQ Mesh Visualizer ───
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+
+          // Experience Modes (kept outside)
+          RepaintBoundary(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _header('Experience Modes'),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final mode = ref.watch(appModeProvider);
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _modeCard(
+                          context, ref,
+                          mode: RottyAppMode.normal,
+                          currentMode: mode,
+                          icon: Icons.music_note_rounded,
+                          color: AppColors.accent,
+                          desc: 'Full ROTTY experience — all features enabled',
+                        ),
+                        const SizedBox(height: 10),
+                        _modeCard(
+                          context, ref,
+                          mode: RottyAppMode.drive,
+                          currentMode: mode,
+                          icon: Icons.speed_rounded,
+                          color: const Color(0xFFFF6B4A),
+                          desc: 'Landscape HUD • Gesture-only controls • Speedometer ring',
+                          route: '/drive',
+                        ),
+                        const SizedBox(height: 10),
+                        _modeCard(
+                          context, ref,
+                          mode: RottyAppMode.focus,
+                          currentMode: mode,
+                          icon: Icons.self_improvement_rounded,
+                          color: const Color(0xFFE0E0E0),
+                          desc: 'Monochrome brutalist UI • Pomodoro timer • No distractions',
+                          route: '/focus',
+                        ),
+                        const SizedBox(height: 10),
+                        _modeCard(
+                          context, ref,
+                          mode: RottyAppMode.sleep,
+                          currentMode: mode,
+                          icon: Icons.bedtime_rounded,
+                          color: const Color(0xFF7B61FF),
+                          desc: 'Pitch black dreamscape • Smart volume fade • Nebula cloud',
+                          route: '/sleep',
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+
+          // Grouped Collapsible Categories
+          
+          // Category 1: Audio & Playback
+          RepaintBoundary(
             child: Container(
-              margin: const EdgeInsets.only(top: 12),
+              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                color: Colors.black.withValues(alpha: 0.3),
+                color: Colors.white.withValues(alpha: 0.02),
               ),
-              child: Builder(
-                builder: (context) {
-                  final eq = ref.watch(studioEqProvider);
-                  return EqMeshVisualizer(
-                    bass: eq.bass,
-                    treble: eq.treble,
-                    vocal: eq.vocal,
-                    width: eq.width,
-                    is8d: eq.orbit8d,
-                    height: 160,
-                  );
-                },
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  leading: const Icon(Icons.music_note_rounded, color: AppColors.accent),
+                  title: Text('Audio & Playback', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  collapsedIconColor: Colors.white54,
+                  iconColor: AppColors.accent,
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  children: [
+                    // Sound Spaces
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 6),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('SOUND SPACES', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                      ),
+                    ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final sound = ref.watch(soundSpaceProvider);
+                        return SizedBox(
+                          height: 44,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: SoundSpace.values.map((s) {
+                              final selected = sound == s;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(s.label, style: GoogleFonts.inter(color: selected ? Colors.white : AppColors.textSecondary, fontSize: 12)),
+                                  selected: selected,
+                                  selectedColor: AppColors.accent,
+                                  onSelected: (_) => ref.read(soundSpaceProvider.notifier).set(s),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // 3D EQ Mesh visualizer & preview
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 6),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('3D EQ MESH VISUALIZER', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                      ),
+                    ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                          color: Colors.black.withValues(alpha: 0.3),
+                        ),
+                        child: Builder(
+                          builder: (context) {
+                            final eq = ref.watch(studioEqProvider);
+                            final isPlaying = ref.watch(isPlayingProvider);
+                            final ripplesEnabled = ref.watch(albumArtRipplesProvider);
+                            final visualizerEnabled = ref.watch(eqMeshVisualizerEnabledProvider);
+                            
+                            if (!visualizerEnabled) {
+                              return SizedBox(
+                                height: 120,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.insights_rounded, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 30),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        '3D Visualizer Disabled',
+                                        style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+                            
+                            return EqMeshVisualizer(
+                              bass: eq.bass,
+                              treble: eq.treble,
+                              vocal: eq.vocal,
+                              width: eq.width,
+                              is8d: eq.orbit8d,
+                              height: 120,
+                              isPlaying: isPlaying && ripplesEnabled,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    RottyGlass(
+                      padding: const EdgeInsets.all(10),
+                      child: Text('Bass Boost & 8D apply live to playback via hardware EQ', style: GoogleFonts.inter(color: AppColors.textTertiary, fontSize: 10.5)),
+                    ),
+                    const SizedBox(height: 12),
+                    // Playback switches
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final aiOn = ref.watch(aiDjEnabledProvider);
+                        final ripples = ref.watch(albumArtRipplesProvider);
+                        final shake = ref.watch(globalShakeToSkipProvider);
+                        final premium = ref.watch(rottyPremiumProvider);
+
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SwitchListTile(
+                              value: aiOn,
+                              activeThumbColor: AppColors.accent,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('Smart Queue Autoplay', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                              subtitle: Text(
+                                'Automatically refill queue with similar songs matching taste & mood.',
+                                style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                              onChanged: (v) => ref.read(aiDjEnabledProvider.notifier).state = v,
+                            ),
+                            SwitchListTile(
+                              value: ripples,
+                              activeThumbColor: AppColors.accent,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('Album Art Ripples', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                              subtitle: Text(
+                                'Hardware-accelerated fluid canvas waves',
+                                style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                              onChanged: (v) => ref.read(albumArtRipplesProvider.notifier).toggle(v),
+                            ),
+                            SwitchListTile(
+                              value: ref.watch(eqMeshVisualizerEnabledProvider),
+                              activeThumbColor: AppColors.accent,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('3D EQ Mesh Visualizer', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                              subtitle: Text(
+                                'Continuous 3D wireframe mesh animation in Equalizer.',
+                                style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                              onChanged: (v) => ref.read(eqMeshVisualizerEnabledProvider.notifier).toggle(v),
+                            ),
+                            SwitchListTile(
+                              value: shake,
+                              activeThumbColor: AppColors.accent,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('Shake to Skip', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                              subtitle: Text(
+                                'Shake your phone anywhere in the app to skip tracks.',
+                                style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                              onChanged: (v) => ref.read(globalShakeToSkipProvider.notifier).state = v,
+                            ),
+                            if (premium)
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text('Refresh AI queue now', style: GoogleFonts.inter(color: Colors.white, fontSize: 13.5)),
+                                subtitle: Text('Adds new songs after current track', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11)),
+                                onTap: () async {
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  await refreshAiQueue(ref);
+                                  messenger.showSnackBar(const SnackBar(content: Text('AI queue updated')));
+                                },
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Audio quality', style: GoogleFonts.inter(color: Colors.white, fontSize: 13.5)),
+                      subtitle: Text(_quality, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11)),
+                      onTap: _pickQuality,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          RottyGlass(
-            padding: const EdgeInsets.all(12),
-            child: Text('Bass Boost & 8D apply live to playback via hardware EQ', style: GoogleFonts.inter(color: AppColors.textTertiary, fontSize: 11)),
-          ),
-          const Divider(color: AppColors.glassBorder),
-          _header('Playback'),
-          SwitchListTile(
-            value: aiOn,
-            activeThumbColor: AppColors.accent,
-            title: Text('Smart Queue Autoplay', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text(
-              'Automatically refill queue with similar songs matching your active taste & session mood when queue ends.',
-              style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11),
-            ),
-            onChanged: (v) => ref.read(aiDjEnabledProvider.notifier).state = v,
-          ),
-          SwitchListTile(
-            value: ref.watch(albumArtRipplesProvider),
-            activeThumbColor: AppColors.accent,
-            title: Text('Album Art Ripples', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text(
-              'Hardware-accelerated fluid canvas waves',
-              style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12),
-            ),
-            onChanged: (v) => ref.read(albumArtRipplesProvider.notifier).toggle(v),
-          ),
-          if (premium)
-            ListTile(
-              title: Text('Refresh AI queue now', style: GoogleFonts.inter(color: Colors.white)),
-              subtitle: Text('Adds new songs after current track', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-              onTap: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                await refreshAiQueue(ref);
-                messenger.showSnackBar(const SnackBar(content: Text('AI queue updated')));
-              },
-            ),
-          ListTile(
-            title: Text('Audio quality', style: GoogleFonts.inter(color: Colors.white)),
-            subtitle: Text(_quality, style: GoogleFonts.inter(color: AppColors.textSecondary)),
-            onTap: _pickQuality,
-          ),
-          const Divider(color: AppColors.glassBorder),
-          ListTile(
-            leading: const Icon(Icons.science_rounded, color: AppColors.accent),
-            title: Text('ROTTY Labs', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text('Experimental playback tools & secret vault', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-            onTap: () => context.push('/labs'),
-          ),
-          const Divider(color: AppColors.glassBorder),
-          _header('Discover'),
-          ListTile(
-            title: Text('Weekly Wrapped', style: GoogleFonts.inter(color: Colors.white)),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-            onTap: () => context.push('/wrapped'),
-          ),
-          ListTile(
-            title: Text('Party Sync', style: GoogleFonts.inter(color: Colors.white)),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-            onTap: () => context.push('/party'),
-          ),
-          ListTile(
-            title: Text('Dual Deck DJ', style: GoogleFonts.inter(color: Colors.white)),
-            onTap: () => context.push('/dj'),
-          ),
-          const Divider(color: AppColors.glassBorder),
-          _header('About Rotty'),
-          ListTile(
-            leading: const Icon(Icons.info_outline_rounded, color: Colors.white),
-            title: Text('About Rotty', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: Text('Our story, legal safe-harbor disclaimer & open licenses', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-            onTap: () => context.push('/about'), // Open direct to About Rotty screen
           ),
 
-          ListTile(
-            leading: const Icon(Icons.logout_rounded, color: AppColors.accent),
-            title: Text('Sign out', style: GoogleFonts.inter(color: AppColors.accent, fontWeight: FontWeight.w600)),
-            onTap: () async {
-              await FirebaseService.instance.signOut();
-              await StorageService().clearAuthSession();
-              if (context.mounted) context.go('/auth');
-            },
+          // Category 2: Account & Cloud
+          RepaintBoundary(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                color: Colors.white.withValues(alpha: 0.02),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  leading: const Icon(Icons.person_rounded, color: Colors.cyanAccent),
+                  title: Text('Account & Sync', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  collapsedIconColor: Colors.white54,
+                  iconColor: Colors.cyanAccent,
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person_outline_rounded, color: Colors.cyanAccent),
+                      title: Text('Edit Profile Name', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      subtitle: Text(
+                        StorageService().profileName.isEmpty ? 'Set your display name' : StorageService().profileName,
+                        style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11),
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                      onTap: _showEditProfileDialog,
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.sync_rounded, color: Colors.greenAccent),
+                      title: Text('Cloud Sync Settings', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      subtitle: Builder(
+                        builder: (context) {
+                          final customId = StorageService().customSyncId;
+                          if (customId.isNotEmpty) {
+                            return Text('Linked Sync ID: $customId', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11));
+                          }
+                          return Text('Local Device (Unlinked)', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11));
+                        },
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                      onTap: _showCloudSyncDialog,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Category 3: Features & Tools
+          RepaintBoundary(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                color: Colors.white.withValues(alpha: 0.02),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  leading: const Icon(Icons.dashboard_customize_rounded, color: Colors.amberAccent),
+                  title: Text('Features & Tools', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  collapsedIconColor: Colors.white54,
+                  iconColor: Colors.amberAccent,
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.science_rounded, color: AppColors.accent),
+                      title: Text('ROTTY Labs', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      subtitle: Text('Experimental playback tools & secret vault', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11)),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                      onTap: () => context.push('/labs'),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Weekly Wrapped', style: GoogleFonts.inter(color: Colors.white, fontSize: 13.5)),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                      onTap: () => context.push('/wrapped'),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Party Sync', style: GoogleFonts.inter(color: Colors.white, fontSize: 13.5)),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                      onTap: () => context.push('/party'),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Dual Deck DJ', style: GoogleFonts.inter(color: Colors.white, fontSize: 13.5)),
+                      onTap: () => context.push('/dj'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Category 4: About & System
+          RepaintBoundary(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                color: Colors.white.withValues(alpha: 0.02),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  leading: const Icon(Icons.info_outline_rounded, color: Colors.purpleAccent),
+                  title: Text('About & System', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  collapsedIconColor: Colors.white54,
+                  iconColor: Colors.purpleAccent,
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.info_outline_rounded, color: Colors.white),
+                      title: Text('About Rotty', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      subtitle: Text('Story, legal safe-harbor, licenses', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11)),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                      onTap: () => context.push('/about'),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.restart_alt_rounded, color: Colors.white),
+                      title: Text('Reset Taste Preferences', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      subtitle: Text('Re-select your favorite artists', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11)),
+                      onTap: () async {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: AppColors.bgElevated,
+                            title: const Text('Reset Taste Preferences?', style: TextStyle(color: Colors.white)),
+                            content: const Text('This will clear your selected favorite artists and redirect you to the onboarding taste selection screen. Proceed?', style: TextStyle(color: Colors.white70)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                  try {
+                                    await FirebaseService.instance.resetFavoriteArtists();
+                                    if (context.mounted) {
+                                      context.go('/taste-selection?onboarding=true');
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Failed to reset: $e')),
+                                      );
+                                    }
+                                  }
+                                },
+                                child: const Text('Reset', style: TextStyle(color: AppColors.accent)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.logout_rounded, color: AppColors.accent),
+                      title: Text('Sign out', style: GoogleFonts.inter(color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      onTap: () async {
+                        try {
+                          await ref.read(audioHandlerProvider).stop();
+                        } catch (_) {}
+                        await FirebaseService.instance.signOut();
+                        await StorageService().clearAuthSession();
+                        if (context.mounted) context.go('/auth');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
     );
@@ -663,6 +854,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
+
 
   Widget _buildUserProfileCard(BuildContext context) {
     final isSupporter = StorageService().isSupporter;

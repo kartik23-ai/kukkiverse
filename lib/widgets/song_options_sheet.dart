@@ -7,6 +7,7 @@ import '../models/song_model.dart';
 import '../providers/providers.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:go_router/go_router.dart';
 
 /// Shows a premium bottom sheet with queue management options.
 void showSongOptionsSheet(BuildContext context, WidgetRef ref, SongModel song) {
@@ -116,6 +117,18 @@ class _SongOptionsSheet extends ConsumerWidget {
               ),
             ),
             const Divider(color: AppColors.glassBorder, height: 1),
+            // View Studio Details for creations
+            if (song.album.startsWith('prompt:'))
+              _OptionTile(
+                icon: Icons.info_outline_rounded,
+                label: 'View Studio Details',
+                subtitle: 'AI prompt, vocals & parameters',
+                color: const Color(0xFF00D4FF),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/library/studio/${song.id}');
+                },
+              ),
             // Play Next
             _OptionTile(
               icon: Icons.playlist_play_rounded,
@@ -470,6 +483,18 @@ class _SongOptionsDialog extends ConsumerWidget {
             ),
           ),
           const Divider(color: Colors.white10, height: 1),
+          // View Studio Details for creations
+          if (song.album.startsWith('prompt:'))
+            _OptionTile(
+              icon: Icons.info_outline_rounded,
+              label: 'View Studio Details',
+              subtitle: 'AI prompt, vocals & parameters',
+              color: const Color(0xFF00D4FF),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/library/studio/${song.id}');
+              },
+            ),
           // Options
           _OptionTile(
             icon: Icons.playlist_play_rounded,
