@@ -92,7 +92,8 @@ class UpdateService extends ChangeNotifier {
             downloadUrl: downloadUrlStr ?? 'https://kartik23-ai.github.io/kukkiverse/',
           );
           
-          final isBlocked = _shouldBlock(currentVersion, minVersionStr);
+          // Lock screen only on Android — desktop exe builds handled separately
+          final isBlocked = Platform.isAndroid && _shouldBlock(currentVersion, minVersionStr);
           if (isBlocked) {
             _isLockActive = true;
             notifyListeners();
@@ -112,7 +113,8 @@ class UpdateService extends ChangeNotifier {
 
   void _checkLockCondition() {
     if (_latestUpdate == null) return;
-    final block = _shouldBlock(currentVersion, _latestUpdate!.minVersion);
+    // Lock screen only on Android — desktop exe builds handled separately
+    final block = Platform.isAndroid && _shouldBlock(currentVersion, _latestUpdate!.minVersion);
     if (block != _isLockActive) {
       _isLockActive = block;
       notifyListeners();
