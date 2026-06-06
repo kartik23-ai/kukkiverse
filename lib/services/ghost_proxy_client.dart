@@ -170,8 +170,18 @@ class GhostProxyClient {
   }
 
   /// Get song recommendations through proxy
-  Future<List<Map<String, dynamic>>?> getRecommendations(String songId, {int limit = 15}) async {
-    final resp = await _post('/api/recommendations', {'id': songId, 'limit': limit});
+  Future<List<Map<String, dynamic>>?> getRecommendations(
+    String songId, {
+    int limit = 15,
+    String? title,
+    String? artist,
+  }) async {
+    final resp = await _post('/api/recommendations', {
+      'id': songId,
+      'limit': limit,
+      if (title != null) 'title': title,
+      if (artist != null) 'artist': artist,
+    });
     if (resp == null || resp['d'] == null) return null;
     try {
       final decrypted = _decrypt(resp['d'] as String);

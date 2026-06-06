@@ -37,14 +37,14 @@ class _FirstLaunchSupportOverlayState extends State<FirstLaunchSupportOverlay> w
   Future<void> _claimFree() async {
     final storage = StorageService();
     await storage.setHasSeenSupportOverlay(true);
-    await storage.setLastSeenVersion('1.1.0');
+    await storage.setLastSeenVersion('1.2.0');
     widget.onDismissed();
   }
 
   Future<void> _goToSupport() async {
     final storage = StorageService();
     await storage.setHasSeenSupportOverlay(true);
-    await storage.setLastSeenVersion('1.1.0');
+    await storage.setLastSeenVersion('1.2.0');
     widget.onDismissed();
     // Redirect directly to settings support screen
     // Delay slightly to allow modal closing animation to complete smoothly

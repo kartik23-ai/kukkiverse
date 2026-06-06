@@ -1,9 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../models/song_model.dart';
 import 'api_service.dart';
-import 'groq_ai_service.dart';
 
 enum AiMood {
   energetic('Energetic', 'workout party hindi english hits'),
@@ -32,9 +30,8 @@ class AiDjInsight {
 }
 
 class AiDjService {
-  AiDjService(this._api, [GroqAiService? groq]) : _groq = groq ?? GroqAiService();
+  AiDjService(this._api);
   final ApiService _api;
-  final GroqAiService _groq;
   final _rng = Random();
 
   String _cleanTitle(String title) {
@@ -75,29 +72,6 @@ class AiDjService {
     });
   }
 
-  bool _isArtistMatch(String resultArtist, String expectedArtist) {
-    final rArtist = resultArtist.toLowerCase();
-    final eArtist = expectedArtist.toLowerCase();
-    
-    if (rArtist.contains('cover') || 
-        rArtist.contains('tribute') || 
-        rArtist.contains('karaoke') || 
-        rArtist.contains('instrumental')) {
-      return false;
-    }
-    
-    final rArtistSimp = rArtist.replaceAll(RegExp(r'[^a-z0-9]'), '');
-    final eArtistSimp = eArtist.replaceAll(RegExp(r'[^a-z0-9]'), '');
-    
-    if (rArtistSimp.contains(eArtistSimp) || eArtistSimp.contains(rArtistSimp)) {
-      return true;
-    }
-    
-    final rWords = rArtist.split(RegExp(r'[^a-z0-9]')).where((w) => w.length >= 3).toSet();
-    final eWords = eArtist.split(RegExp(r'[^a-z0-9]')).where((w) => w.length >= 3).toSet();
-    
-    return rWords.intersection(eWords).isNotEmpty;
-  }
 
   bool _isNearDuplicate(SongModel s, List<SongModel> currentList) {
     final titleSimp = _cleanTitle(s.title);
@@ -181,25 +155,6 @@ class AiDjService {
     return null;
   }
 
-  bool _isVibeCompatible(SongModel s, AiMood activeMood) {
-    final sMood = _detectVibe(s);
-    if (activeMood == AiMood.devotional) {
-      return sMood == AiMood.devotional;
-    }
-    if (sMood == AiMood.devotional) {
-      return activeMood == AiMood.devotional;
-    }
-    if (activeMood == AiMood.night) {
-      return sMood != AiMood.party && sMood != AiMood.focus;
-    }
-    if (activeMood == AiMood.romantic) {
-      return sMood != AiMood.party && sMood != AiMood.night && sMood != AiMood.focus;
-    }
-    if (activeMood == AiMood.party) {
-      return sMood != AiMood.night && sMood != AiMood.focus && sMood != AiMood.chill;
-    }
-    return true;
-  }
 
   AiDjInsight analyze({
     required SongModel? nowPlaying,
@@ -313,6 +268,46 @@ class AiDjService {
     return false;
   }
 
+  String _getSongFingerprint(SongModel s) {
+    if (s.title.isEmpty) return '';
+    var title = s.title.toLowerCase();
+    title = title.replaceAll(RegExp(r'\([^)]*\)'), '').replaceAll(RegExp(r'\[[^\]]*\]'), '');
+    title = title.replaceAll(RegExp(r'\b(lofi|remix|acoustic|reprise|cover|radio|edit|slowed|reverb|version|mix|original)\b'), '');
+    final cleanTitle = title.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    var artist = s.artist.toLowerCase()
+      .split(',')[0]
+      .trim()
+      .replaceAll(RegExp(r'\b(feat|ft|featuring)\b.*'), '')
+      .replaceAll(RegExp(r'[^a-z0-9]'), '');
+    return '$cleanTitle|$artist';
+  }
+
+  String _getLanguageFallbackQuery(SongModel seed, {bool isSecondary = false}) {
+    final isIndian = _isIndianVibe(seed);
+    final artist = seed.artist.split(RegExp(r'[,&]')).first.trim();
+
+    if (isSecondary) {
+      if (!isIndian) return 'trending english';
+      final artistLower = seed.artist.toLowerCase();
+      if (artistLower.contains('diljit') || artistLower.contains('dhillon') || artistLower.contains('aujla') || artistLower.contains('moose wala')) {
+        return 'trending punjabi';
+      }
+      return 'trending hindi';
+    }
+
+    if (artist.isNotEmpty && artist != 'Artist') {
+      return '$artist songs';
+    }
+
+    if (!isIndian) return 'trending english';
+    final artistLower = seed.artist.toLowerCase();
+    if (artistLower.contains('diljit') || artistLower.contains('dhillon') || artistLower.contains('aujla') || artistLower.contains('moose wala')) {
+      return 'trending punjabi';
+    }
+    return 'trending hindi';
+  }
+
   Future<List<SongModel>> buildSmartQueue({
     required SongModel? nowPlaying,
     required List<SongModel> recent,
@@ -321,335 +316,105 @@ class AiDjService {
     List<SongModel> excludeSongs = const [],
     int limit = 25,
   }) async {
-    final hour = DateTime.now().hour;
-    
-    final activeVibeMood = analyze(
-      nowPlaying: nowPlaying,
-      recent: recent,
-      favorites: favorites,
-      hour: hour,
-    ).mood;
+    final songToMatch = nowPlaying ?? (recent.isNotEmpty ? recent.first : (favorites.isNotEmpty ? favorites.first : null));
+    if (songToMatch == null) return [];
 
-    final excludeIdSet = Set<String>.from(excludeIds);
-    final excludeFingerprints = <String>{};
-    final bool seedIsCopy = nowPlaying != null && _isCopyOrRemix(nowPlaying);
-    final bool excludeCopies = !seedIsCopy;
+    try {
+      debugPrint('[AiDjService] Building smart queue based on vibe seed: ${songToMatch.title}');
 
-    for (final s in recent) {
-      excludeIdSet.add(s.id);
-      excludeFingerprints.add(_fingerprint(s));
-    }
-    for (final s in favorites) {
-      excludeFingerprints.add(_fingerprint(s));
-    }
-    for (final s in excludeSongs) {
-      excludeIdSet.add(s.id);
-      excludeFingerprints.add(_fingerprint(s));
-    }
+      // Fetch primary recommendations for seed song
+      final primaryRecs = await _api.getRecommendations(
+        songToMatch.id,
+        title: songToMatch.title,
+        artist: songToMatch.artist,
+        limit: 12,
+      );
 
-    final result = <SongModel>[];
-    final isIndian = nowPlaying != null ? _isIndianVibe(nowPlaying) : true;
-
-    final List<SongModel> seenSongs = [];
-    if (nowPlaying != null) seenSongs.add(nowPlaying);
-    seenSongs.addAll(recent);
-    seenSongs.addAll(favorites);
-    seenSongs.addAll(excludeSongs);
-
-    // A. YouTube Related Videos Recommendations (Primary Source for YouTube tracks)
-    if (nowPlaying != null && nowPlaying.id.startsWith('youtube_')) {
-      try {
-        final videoId = nowPlaying.id.replaceFirst('youtube_', '');
-        debugPrint('ROTTY SMART RECO ENGINE: Pulling YouTube related videos for seed $videoId...');
-        final yt = YoutubeExplode();
-        final video = await yt.videos.get(videoId).timeout(const Duration(seconds: 4));
-        final relatedList = await yt.videos.getRelatedVideos(video).timeout(const Duration(seconds: 4));
-        yt.close();
-
-        if (relatedList != null && relatedList.isNotEmpty) {
-          final List<SongModel> ytRecommended = [];
-          for (final v in relatedList) {
-            final durationSec = v.duration?.inSeconds ?? 0;
-            if (durationSec > 600 || durationSec < 30) continue; // Skip non-song videos
-            
-            ytRecommended.add(SongModel(
-              id: 'youtube_${v.id.value}',
-              title: v.title,
-              artist: v.author,
-              album: 'YouTube Music',
-              image: v.thumbnails.mediumResUrl,
-              duration: Duration(seconds: durationSec),
-              url: '',
-            ));
-          }
-
-          for (final s in ytRecommended) {
-            if (result.length >= limit) break;
-            if (s.id.isEmpty || excludeIdSet.contains(s.id)) continue;
-            if (excludeCopies && _isCopyOrRemix(s)) continue;
-            if (!_isVibeCompatible(s, activeVibeMood)) continue;
-            final fp = _fingerprint(s);
-            if (excludeFingerprints.contains(fp)) continue;
-            if (_isNearDuplicate(s, seenSongs) || _isNearDuplicate(s, result)) continue;
-            
-            excludeIdSet.add(s.id);
-            excludeFingerprints.add(fp);
-            result.add(s);
-          }
-        }
-      } catch (e) {
-        debugPrint('ROTTY SMART RECO ENGINE: YouTube related videos resolution failed: $e');
-      }
-    }
-
-    // B. Native V4 Collaborative Recommendations (Primary Source - Now Playing, 3 Recents, 3 Favorites in parallel)
-    final seeds = <String>[];
-    if (nowPlaying != null && !nowPlaying.id.startsWith('youtube_')) seeds.add(nowPlaying.id);
-    seeds.addAll(recent.where((s) => !s.id.startsWith('youtube_') && (nowPlaying == null || s.id != nowPlaying.id)).take(3).map((s) => s.id));
-    seeds.addAll(favorites.where((s) => !s.id.startsWith('youtube_') && !seeds.contains(s.id)).take(3).map((s) => s.id));
-
-    if (seeds.isNotEmpty) {
-      try {
-        debugPrint('ROTTY SMART RECO ENGINE: Pulling V4 Android recommendations for ${seeds.length} seeds...');
-        final recFutures = seeds.map((id) => _api.getRecommendations(id));
-        final recsLists = await Future.wait(recFutures);
-
-        for (final nativeRecommended in recsLists) {
-          if (nativeRecommended.isNotEmpty) {
-            for (final s in nativeRecommended) {
-              if (result.length >= limit) break;
-              if (s.id.isEmpty || excludeIdSet.contains(s.id)) continue;
-              if (nowPlaying != null && _isIndianVibe(s) != isIndian) continue;
-              if (excludeCopies && _isCopyOrRemix(s)) continue;
-              if (!_isVibeCompatible(s, activeVibeMood)) continue;
-              final fp = _fingerprint(s);
-              if (excludeFingerprints.contains(fp)) continue;
-              if (_isNearDuplicate(s, seenSongs) || _isNearDuplicate(s, result)) continue;
-              
-              excludeIdSet.add(s.id);
-              excludeFingerprints.add(fp);
-              result.add(s);
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint('ROTTY SMART RECO ENGINE: Collaborative Recommendations failed ($e)');
-      }
-    }
-    
-    if (nowPlaying != null) {
-      excludeIdSet.add(nowPlaying.id);
-      excludeFingerprints.add(_fingerprint(nowPlaying));
-    }
-
-    // B. Smart Queries & Fallbacks
-    final queries = <String>[];
-    bool useLocalFallback = true;
-
-    if (nowPlaying != null && result.length < limit) {
-      try {
-        final groqQ = await _groq.suggestSearchQueries(
-          nowPlayingTitle: nowPlaying.title,
-          nowPlayingArtist: nowPlaying.artist,
-          moodLabel: activeVibeMood.label,
-          recentTitles: recent.map((s) => s.title).toList(),
+      // Fetch recommendations for a random recently played song to personalize the experience
+      List<SongModel> personalizedRecs = [];
+      final recentsFiltered = recent.where((s) => s.id != songToMatch.id).toList();
+      if (recentsFiltered.isNotEmpty) {
+        final randomSeed = recentsFiltered[_rng.nextInt(min(5, recentsFiltered.length))];
+        personalizedRecs = await _api.getRecommendations(
+          randomSeed.id,
+          title: randomSeed.title,
+          artist: randomSeed.artist,
+          limit: 8,
         );
-        if (groqQ.isNotEmpty) {
-          queries.addAll(groqQ);
-          useLocalFallback = false;
-        }
-      } catch (_) {}
-
-      if (useLocalFallback) {
-        final primaryArtist = nowPlaying.artist.split(RegExp(r'[,&]')).first.trim();
-        queries.add('$primaryArtist popular');
-        queries.add('$primaryArtist hits');
-        if (nowPlaying.album.isNotEmpty && nowPlaying.album != 'Single') {
-          queries.add(nowPlaying.album);
-        }
-      }
-    }
-
-    // Mood query based on dynamic session vibe evaluation
-    String moodQuery = activeVibeMood.searchQuery;
-    if (!isIndian) {
-      moodQuery = switch (activeVibeMood) {
-        AiMood.energetic => 'workout dance pop hits english',
-        AiMood.chill => 'lofi study chill acoustic english',
-        AiMood.romantic => 'romantic pop love songs english',
-        AiMood.focus => 'ambient focus study post-rock lofi',
-        AiMood.party => 'edm party club dance hits billboard',
-        AiMood.night => 'mellow sad late night indie pop',
-        AiMood.devotional => 'spiritual worship church christian gospel',
-      };
-    }
-    queries.add(moodQuery);
-
-    // Add popular songs from user's absolute favorite artists
-    if (favorites.isNotEmpty) {
-      final favArtists = favorites
-          .map((s) => s.artist)
-          .where((a) => nowPlaying == null || a != nowPlaying.artist)
-          .toSet()
-          .toList()
-        ..shuffle(_rng);
-      for (final a in favArtists.take(3)) {
-        final primary = a.split(RegExp(r'[,&]')).first.trim();
-        final moodQueryKeyword = switch (activeVibeMood) {
-          AiMood.devotional => 'bhajan devotional bhakti',
-          AiMood.night => 'sad emotional song',
-          AiMood.romantic => 'romantic love song',
-          AiMood.party => 'party dance song',
-          AiMood.energetic => 'popular hits',
-          AiMood.chill => 'acoustic chill lofi',
-          AiMood.focus => 'instrumental peaceful',
-        };
-        queries.add('$primary $moodQueryKeyword');
-      }
-    }
-
-    // Vibe-specific language-locked diversity filters
-    if (isIndian) {
-      final vibeFallbacks = switch (activeVibeMood) {
-        AiMood.devotional => [
-            'shree krishna bhajan',
-            'lord ram bhajans',
-            'bhakti songs hindi',
-            'morning aarti bhajan',
-            'shiv bhajan mahadev',
-          ],
-        AiMood.romantic => [
-            'romantic hindi love songs',
-            'soft bollywood romantic',
-            'latest love hits hindi',
-            'romantic duets hindi',
-          ],
-        AiMood.party => [
-            'party dance bollywood',
-            'punjabi party dance hits',
-            'remix high energy hindi',
-            'latest club hits hindi',
-          ],
-        AiMood.energetic => [
-            'trending hindi songs',
-            'latest bollywood hits',
-            'punjabi popular hits',
-            'workout motivational hindi',
-          ],
-        AiMood.chill => [
-            'hindi lofi chill',
-            'acoustic unplugged hindi',
-            'chill vibes hindi',
-            'indie pop hindi',
-          ],
-        AiMood.focus => [
-            'ambient focus study',
-            'instrumental classical hindi',
-            'lofi study beats',
-            'peaceful instrumental hindi',
-          ],
-        AiMood.night => [
-            'sad hindi songs',
-            'dard bhare geet',
-            'broken heart hindi songs',
-            'late night sad hits',
-            'emotional hindi songs',
-          ],
-      };
-      queries.addAll(vibeFallbacks);
-    } else {
-      final vibeFallbacks = switch (activeVibeMood) {
-        AiMood.devotional => [
-            'spiritual worship songs',
-            'gospel worship hits',
-            'christian praise songs',
-            'peaceful spiritual english',
-          ],
-        AiMood.romantic => [
-            'romantic pop love songs english',
-            'soft acoustic love songs',
-            'popular romantic hits english',
-          ],
-        AiMood.party => [
-            'edm party club dance hits billboard',
-            'dance pop hits party',
-            'club remix songs english',
-          ],
-        AiMood.energetic => [
-            'billboard top hits',
-            'trending pop songs',
-            'viral hits english',
-            'workout gym motivation english',
-          ],
-        AiMood.chill => [
-            'lofi study chill acoustic english',
-            'chill acoustic indie pop',
-            'ambient relax english',
-          ],
-        AiMood.focus => [
-            'ambient focus study post-rock lofi',
-            'classical piano focus study',
-            'deep focus instrumental',
-          ],
-        AiMood.night => [
-            'mellow sad late night indie pop',
-            'sad slow aesthetic english',
-            'broken heart emotional songs english',
-          ],
-      };
-      queries.addAll(vibeFallbacks);
-    }
-
-    final usedQueries = <String>{};
-    final addedFingerprints = <String>{};
-
-    for (final rawQ in queries) {
-      if (result.length >= limit) break;
-      final q = rawQ.trim().toLowerCase();
-      if (q.isEmpty || q.length < 3 || usedQueries.contains(q)) continue;
-      usedQueries.add(q);
-
-      String? expectedArtist;
-      String? expectedTitle;
-      final hyphenIndex = rawQ.indexOf(' - ');
-      if (hyphenIndex != -1) {
-        expectedTitle = rawQ.substring(0, hyphenIndex).trim();
-        expectedArtist = rawQ.substring(hyphenIndex + 3).trim();
       }
 
-      try {
-        final songs = await _api.searchSongs(rawQ.trim(), limit: 12, page: 1);
-        if (songs.isEmpty) continue;
+      // Interleave/Blend recommendations
+      final combined = <SongModel>[...primaryRecs];
+      for (int i = 0; i < personalizedRecs.length; i++) {
+        final targetIndex = min(combined.length, (i * 2) + 1);
+        combined.insert(targetIndex, personalizedRecs[i]);
+      }
 
-        final candidates = (expectedTitle != null && expectedArtist != null)
-            ? songs
-            : (List<SongModel>.from(songs)..shuffle(_rng));
+      // Setup duplicate & fingerprint filters (already in queue or playing)
+      final existingIds = Set<String>.from(excludeIds);
+      final existingFingerprints = <String>{};
+
+      for (final s in excludeSongs) {
+        existingFingerprints.add(_getSongFingerprint(s));
+      }
+      if (nowPlaying != null) {
+        existingIds.add(nowPlaying.id);
+        existingFingerprints.add(_getSongFingerprint(nowPlaying));
+      }
+
+      final newSongs = <SongModel>[];
+      for (final s in combined) {
+        if (s.id.isEmpty) continue;
+        if (s.id.startsWith('youtube_')) continue;
+        if (existingIds.contains(s.id)) continue;
+        final fp = _getSongFingerprint(s);
+        if (fp.isEmpty || existingFingerprints.contains(fp)) continue;
+
+        existingIds.add(s.id);
+        existingFingerprints.add(fp);
+        newSongs.add(s);
+      }
+
+      // Robust multi-level fallback if suggestions are empty
+      if (newSongs.isEmpty) {
+        debugPrint('[AiDjService] Smart queue empty. Executing robust fallbacks...');
+        final fallbackQuery = _getLanguageFallbackQuery(songToMatch, isSecondary: false);
+        final fallbackSongs = await _api.searchSongs(fallbackQuery, limit: 12);
         
-        for (final s in candidates) {
-          if (result.length >= limit) break;
-          if (s.id.isEmpty || excludeIdSet.contains(s.id)) continue;
-          if (nowPlaying != null && _isIndianVibe(s) != isIndian) continue;
-          if (excludeCopies && _isCopyOrRemix(s)) continue;
-          if (!_isVibeCompatible(s, activeVibeMood)) continue;
+        for (final s in fallbackSongs) {
+          if (s.id.isEmpty) continue;
+          if (s.id.startsWith('youtube_')) continue;
+          if (existingIds.contains(s.id)) continue;
+          final fp = _getSongFingerprint(s);
+          if (fp.isEmpty || existingFingerprints.contains(fp)) continue;
 
-          if (expectedArtist != null && !_isArtistMatch(s.artist, expectedArtist)) {
-            continue;
-          }
-
-          final fp = _fingerprint(s);
-          if (excludeFingerprints.contains(fp)) continue;
-          if (addedFingerprints.contains(fp)) continue;
-          if (_isNearDuplicate(s, seenSongs) || _isNearDuplicate(s, result)) continue;
-          
-          excludeIdSet.add(s.id);
-          addedFingerprints.add(fp);
-          result.add(s);
+          existingIds.add(s.id);
+          existingFingerprints.add(fp);
+          newSongs.add(s);
         }
-      } catch (_) {}
-    }
 
-    result.shuffle(_rng);
-    return result.take(limit).toList();
+        if (newSongs.isEmpty) {
+          final secondaryQuery = _getLanguageFallbackQuery(songToMatch, isSecondary: true);
+          final trendingSongs = await _api.searchSongs(secondaryQuery, limit: 12);
+          for (final s in trendingSongs) {
+            if (s.id.isEmpty) continue;
+            if (s.id.startsWith('youtube_')) continue;
+            if (existingIds.contains(s.id)) continue;
+            final fp = _getSongFingerprint(s);
+            if (fp.isEmpty || existingFingerprints.contains(fp)) continue;
+
+            existingIds.add(s.id);
+            existingFingerprints.add(fp);
+            newSongs.add(s);
+          }
+        }
+      }
+
+      return newSongs.take(limit).toList();
+    } catch (e) {
+      debugPrint('[AiDjService] Smart Queue generation failed: $e');
+      return [];
+    }
   }
 
   String buildReasonLine({
@@ -720,6 +485,7 @@ class AiDjService {
     final List<SongModel> result = [];
     for (final s in songs) {
       if (result.length >= limit) break;
+      if (s.id.startsWith('youtube_')) continue;
       if (exclude.contains(s.id)) continue;
       if (excludeFp.contains(_fingerprint(s))) continue;
       if (nowPlaying != null && _isIndianVibe(s) != isIndian) continue;

@@ -85,7 +85,7 @@ class ArtistScreen extends ConsumerWidget {
                             style: FilledButton.styleFrom(backgroundColor: AppColors.accent, minimumSize: const Size.fromHeight(52)),
                             onPressed: () async {
                               if (d.songs.isEmpty) return;
-                              await playSongWithContext(ref, d.songs.first, playlist: d.songs);
+                              await playSongWithContext(ref, d.songs.first, playlist: d.songs, isPlayAll: true);
                               if (context.mounted) context.push('/player');
                             },
                             icon: const Icon(Icons.play_arrow_rounded),

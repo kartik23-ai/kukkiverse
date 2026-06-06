@@ -172,7 +172,7 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
                         for (var i = 0; i < list.length && i < 5; i++) {
                           await Future.delayed(const Duration(milliseconds: 120));
                         }
-                        await playSongWithContext(ref, list.first, playlist: list);
+                        await playSongWithContext(ref, list.first, playlist: list, isPlayAll: true);
                         if (mounted) context.push('/player');
                       },
                       icon: const Icon(Icons.play_arrow_rounded),

@@ -408,7 +408,7 @@ class StorageService {
     return id;
   }
 
-  bool get aiDjEnabled => _prefs.getBool('ai_dj_enabled') ?? false;
+  bool get aiDjEnabled => _prefs.getBool('ai_dj_enabled') ?? true;
   Future<void> setAiDjEnabled(bool value) => _prefs.setBool('ai_dj_enabled', value);
 
   String? get cloudSyncUrl {

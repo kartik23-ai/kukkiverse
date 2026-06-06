@@ -67,23 +67,6 @@ class QueueScreen extends ConsumerWidget {
               ? Center(child: Text('Queue is empty', style: GoogleFonts.inter(color: AppColors.textTertiary)))
               : CustomScrollView(
                   slivers: [
-                    if (history.isNotEmpty) ...[
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                          child: Text('History', style: GoogleFonts.inter(color: AppColors.textTertiary, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, i) {
-                            final song = history[i];
-                            return _HistoryRow(song: song);
-                          },
-                          childCount: history.take(5).length,
-                        ),
-                      ),
-                    ],
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -151,6 +134,25 @@ class QueueScreen extends ConsumerWidget {
                             onRemove: () => handler.removeFromQueue(absoluteIndex),
                           );
                         },
+                      ),
+                    ],
+
+                    // History Section (Moved to the bottom!)
+                    if (history.isNotEmpty) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 32, 20, 4),
+                          child: Text('Recently Played', style: GoogleFonts.inter(color: AppColors.textTertiary, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) {
+                            final song = history[i];
+                            return _HistoryRow(song: song);
+                          },
+                          childCount: history.take(5).length,
+                        ),
                       ),
                     ],
                     const SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -312,7 +314,9 @@ class _QueueTimelineRow extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: 8),
                 child: Icon(Icons.drag_handle_rounded, color: Colors.white38, size: 20),
               ),
-            ),
+            )
+          else
+            const SizedBox(width: 36),
           Column(
             children: [
               Container(width: 2, height: 12, color: isNow ? AppColors.accent : AppColors.glassBorder),

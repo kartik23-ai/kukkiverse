@@ -55,45 +55,11 @@ class HomeScreen extends ConsumerWidget {
             (name: 'Anuv Jain', img: 'https://c.saavncdn.com/artists/Anuv_Jain_500x500.jpg'),
           ];
 
-    Future<void> onRefresh() async {
-      ref.read(forceRefreshHomeProvider.notifier).state = true;
-      ref.invalidate(homeDataProvider);
-      ref.invalidate(recentSongsProvider);
-      ref.invalidate(suggestedSongsProvider);
-      ref.invalidate(homeArtistsProvider);
-      if (activeCat != 'All') {
-        ref.invalidate(albumSongsProvider('genre_$activeCat'));
-      }
-      if (premium) {
-        ref.invalidate(aiTasteRadioProvider);
-      }
-      try {
-        await ref.read(homeDataProvider.future);
-      } catch (_) {}
-    }
-
     return AppScaffold(
       bottomPadding: 0,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         slivers: [
-          CupertinoSliverRefreshControl(
-            onRefresh: onRefresh,
-            builder: (context, refreshState, pulledExtent, refreshTriggerPullDistance, refreshIndicatorExtent) {
-              final progress = (pulledExtent / refreshTriggerPullDistance).clamp(0.0, 1.0);
-              final isRefreshing = refreshState == RefreshIndicatorMode.refresh;
-              
-              return Container(
-                padding: const EdgeInsets.only(top: 8),
-                alignment: Alignment.center,
-                child: RottyRefresherSpinner(
-                  progress: progress,
-                  isRefreshing: isRefreshing,
-                  accentColor: mt.accent,
-                ),
-              );
-            },
-          ),
           SliverToBoxAdapter(child: RepaintBoundary(child: _header(context, ref, premium, mt, mode))),
           SliverToBoxAdapter(child: RepaintBoundary(child: _categoryTabs(context, ref, mt))),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -1905,13 +1871,20 @@ class BrandedFooter extends StatelessWidget {
       child: Center(
         child: GestureDetector(
           onTap: () async {
-            final url = Uri.parse('https://www.instagram.com/kartik.__2357/');
+            final appUrl = Uri.parse('instagram://user?username=kartik.__2357');
+            final webUrl = Uri.parse('https://www.instagram.com/kartik.__2357/');
             try {
-              if (await canLaunchUrl(url)) {
-                await launchUrl(url, mode: LaunchMode.externalApplication);
+              final launched = await launchUrl(appUrl, mode: LaunchMode.externalApplication);
+              if (!launched) {
+                await launchUrl(webUrl, mode: LaunchMode.externalApplication);
               }
             } catch (e) {
-              debugPrint('Could not launch Instagram: $e');
+              debugPrint('Could not launch native Instagram, trying web fallback: $e');
+              try {
+                await launchUrl(webUrl, mode: LaunchMode.externalApplication);
+              } catch (webError) {
+                debugPrint('Web fallback failed: $webError');
+              }
             }
           },
           child: MouseRegion(

@@ -19,8 +19,8 @@ class UpdateInfo {
 
   factory UpdateInfo.fromJson(Map<String, dynamic> json) {
     return UpdateInfo(
-      latestVersion: json['version']?.toString() ?? '1.1.0',
-      minVersion: json['min_version']?.toString() ?? '1.1.0',
+      latestVersion: json['version']?.toString() ?? '1.2.0',
+      minVersion: json['min_version']?.toString() ?? '1.2.0',
       downloadUrl: json['download_url']?.toString() ?? 'https://kartik23-ai.github.io/kukkiverse/',
     );
   }
@@ -30,7 +30,7 @@ class UpdateService extends ChangeNotifier {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
 
-  static const String currentVersion = '1.1.0';
+  static const String currentVersion = '1.2.0';
   static const String versionJsonUrl = 'https://kartik23-ai.github.io/kukkiverse/version_info.json';
 
   bool _isLockActive = false;

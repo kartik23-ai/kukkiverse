@@ -843,6 +843,15 @@ app.post('/api/search', async (req, res) => {
 
   const deduplicated = deduplicateSongs(sanitized);
 
+  // Sort: original songs first, then remixes/others
+  deduplicated.sort((a, b) => {
+    const aOrig = isOriginalSong(a);
+    const bOrig = isOriginalSong(b);
+    if (aOrig && !bOrig) return -1;
+    if (!aOrig && bOrig) return 1;
+    return 0;
+  });
+
   return res.json({ d: encryptPayload(JSON.stringify(deduplicated)) });
 });
 
@@ -1202,19 +1211,19 @@ app.post('/api/home', async (req, res) => {
   const qViral = viralPool[(dayIndex + hourIndex + randIdx) % viralPool.length];
   const qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + randIdx + 2) % editorsPicksPool.length];
 
-  const trendingPlaylists = ['1265126272', '82974051', '106180373'];
-  const bollywoodPlaylists = ['1234731818', '106180373', '1265126272'];
-  const punjabiPlaylists = ['4144832', '46624508'];
-  const topHitsPlaylists = ['1265126272', '106180373', '1134595537'];
-  const viralPlaylists = ['1223482895', '110756784'];
-  const editorsPlaylists = ['1139074020', '104618770'];
+  const trendingPlaylists = ['1134543272']; // Hindi: India Superhits Top 50
+  const bollywoodPlaylists = ['1300709425']; // New Hits Hindi
+  const punjabiPlaylists = ['1134543511', '4144832']; // Punjabi: India Superhits Top 50 & Punjabi Hit Songs
+  const topHitsPlaylists = ['1134543272', '1081991857']; // Hindi Superhits & English Hit Songs
+  const viralPlaylists = ['1223482895']; // Trending Viral Mix
+  const editorsPlaylists = ['1139074020']; // Most Streamed Love Songs: Hindi
 
-  const playlistTrending = trendingPlaylists[(dayIndex + hourIndex + randIdx) % trendingPlaylists.length];
-  const playlistBollywood = bollywoodPlaylists[(dayIndex + hourIndex + randIdx) % bollywoodPlaylists.length];
+  const playlistTrending = trendingPlaylists[0];
+  const playlistBollywood = bollywoodPlaylists[0];
   const playlistPunjabi = punjabiPlaylists[(dayIndex + hourIndex + randIdx) % punjabiPlaylists.length];
   const playlistTopHits = topHitsPlaylists[(dayIndex + hourIndex + randIdx) % topHitsPlaylists.length];
-  const playlistViral = viralPlaylists[(dayIndex + hourIndex + randIdx) % viralPlaylists.length];
-  const playlistEditors = editorsPlaylists[(dayIndex + hourIndex + randIdx) % editorsPlaylists.length];
+  const playlistViral = viralPlaylists[0];
+  const playlistEditors = editorsPlaylists[0];
 
   const queries = {
     Trending: { q: qTrending, playlistId: playlistTrending },
@@ -1292,6 +1301,18 @@ app.post('/api/home', async (req, res) => {
   });
 
   await Promise.all(promises);
+
+  // Check if the newly built sections are empty or have very few songs
+  const totalSongs = Object.values(sections).reduce((acc, list) => acc + (list ? list.length : 0), 0);
+  if (totalSongs < 15) {
+    if (cachedHomeSections) {
+      console.warn(`[Home API] New generation returned only ${totalSongs} songs. Retaining previous cache to prevent blank homepage.`);
+      return res.json({ d: cachedHomeSections });
+    } else {
+      console.warn(`[Home API] New generation returned only ${totalSongs} songs and no cache exists. Returning generated sections without caching.`);
+      return res.json({ d: encryptPayload(JSON.stringify(sections)) });
+    }
+  }
 
   const encrypted = encryptPayload(JSON.stringify(sections));
   cachedHomeSections = encrypted;

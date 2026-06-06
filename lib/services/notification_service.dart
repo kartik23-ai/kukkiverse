@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'firebase_service.dart';
 import 'storage_service.dart';
 
@@ -12,7 +13,9 @@ class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  bool _localNotificationsInitialized = false;
 
   void initialize(BuildContext context, WidgetRef ref) {
     if (_initialized) return;
@@ -21,6 +24,7 @@ class NotificationService {
     if (Platform.isAndroid || Platform.isIOS) {
       Permission.notification.request().then((status) {
         debugPrint('[Notifications] Permission requested: $status');
+        _initLocalNotifications();
       });
     }
 
@@ -57,6 +61,48 @@ class NotificationService {
     }
   }
 
+  void _initLocalNotifications() async {
+    if (_localNotificationsInitialized) return;
+    try {
+      const AndroidInitializationSettings initializationSettingsAndroid =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      const InitializationSettings initializationSettings = InitializationSettings(
+        android: initializationSettingsAndroid,
+      );
+      await _localNotifications.initialize(
+        settings: initializationSettings,
+      );
+      _localNotificationsInitialized = true;
+      debugPrint('[Notifications] local notifications initialized successfully.');
+    } catch (e) {
+      debugPrint('[Notifications] Failed to initialize local notifications: $e');
+    }
+  }
+
+  Future<void> _showSystemNotification(String title, String body, {String? route}) async {
+    if (!_localNotificationsInitialized) return;
+    try {
+      const AndroidNotificationDetails androidNotificationDetails = AndroidNotificationDetails(
+        'rotty_music_notifications',
+        'Rotty Music Notifications',
+        channelDescription: 'General notifications for Rotty Music App',
+        importance: Importance.max,
+        priority: Priority.high,
+        ticker: 'ticker',
+      );
+      const NotificationDetails notificationDetails = NotificationDetails(android: androidNotificationDetails);
+      await _localNotifications.show(
+        id: DateTime.now().millisecond, // unique id per message
+        title: title,
+        body: body,
+        notificationDetails: notificationDetails,
+        payload: route,
+      );
+    } catch (e) {
+      debugPrint('[Notifications] Failed to show system notification: $e');
+    }
+  }
+
   void _handleNotificationDocs(BuildContext context, List<Map<String, dynamic>> docs) {
     if (docs.isEmpty) return;
     final latest = docs.first;
@@ -70,6 +116,7 @@ class NotificationService {
     final route = latest['route'] as String?;
 
     showForegroundNotification(context, title, body, route: route);
+    _showSystemNotification(title, body, route: route);
   }
 
   void showForegroundNotification(BuildContext context, String title, String body, {String? route}) {

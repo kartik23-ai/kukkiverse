@@ -674,6 +674,29 @@ class _DesktopSettingsState extends ConsumerState<_DesktopSettings> {
           ),
         ),
         const SizedBox(height: 10),
+        // Help & Support Card
+        LiquidGlassCard(
+          accentColor: palette.primary,
+          padding: const EdgeInsets.all(16),
+          onTap: () => context.push('/contact-support'),
+          child: Row(
+            children: [
+              const Icon(Icons.support_agent_rounded, color: Colors.cyanAccent, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Help & Support', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    Text('Submit feedback, bug reports or query to Kartik', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white30),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
         // Edit Profile Card
         LiquidGlassCard(
           accentColor: palette.primary,

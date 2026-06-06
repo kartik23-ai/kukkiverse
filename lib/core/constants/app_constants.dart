@@ -3,7 +3,7 @@ class AppConstants {
 
   static const String appName = 'ROTTY MUSIC';
   static const String appTagline = 'Feel The Future Of Music';
-  static const String version = '1.1.0';
+  static const String version = '1.2.0';
 
   // Hive boxes
   static const String playlistBox = 'playlists';

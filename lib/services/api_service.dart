@@ -47,25 +47,51 @@ class ApiService {
 
   Future<List<SongModel>> searchSongs(String query, {int limit = 25, int page = 1}) async {
     if (query.trim().isEmpty) return [];
-    if (GhostProxyClient.isEnabled) {
+    List<SongModel> list = [];
+    
+    try {
+      // Prioritize direct local search (using user's Indian IP to avoid geo-blocks)
       try {
-        final proxyClient = GhostProxyClient();
-        final results = await proxyClient.search(query.trim(), limit: limit);
-        if (results != null) {
-          return results.map((e) => SongModel.fromJson(e, preferredQuality: _quality)).toList();
+        final r = await _get(_web('search.getResults', {
+          'q': query.trim(),
+          'p': '$page',
+          'n': '$limit',
+          'type': 'song',
+        }));
+        if (r != null) {
+          list = _parseWebSongs(r.body);
         }
       } catch (e) {
-        print("ApiService: Search through proxy failed: $e");
+        print("ApiService: Direct local search failed: $e");
       }
+
+      // Fallback to proxy search if local search failed or returned nothing
+      if (list.isEmpty && GhostProxyClient.isEnabled) {
+        try {
+          final proxyClient = GhostProxyClient();
+          final results = await proxyClient.search(query.trim(), limit: limit);
+          if (results != null) {
+            list = results.map((e) => SongModel.fromJson(e, preferredQuality: _quality)).toList();
+          }
+        } catch (e) {
+          print("ApiService: Search through proxy failed: $e");
+        }
+      }
+
+      // Final fallback to Sumit API directly
+      if (list.isEmpty) {
+        try {
+          list = await _fallbackSumitSearch(query, limit);
+        } catch (e) {
+          print("ApiService: Fallback Sumit search failed: $e");
+        }
+      }
+    } catch (e) {
+      print("ApiService: Global search error: $e");
     }
-    final r = await _get(_web('search.getResults', {
-      'q': query.trim(),
-      'p': '$page',
-      'n': '$limit',
-      'type': 'song',
-    }));
-    if (r != null) return _parseWebSongs(r.body);
-    return _fallbackSumitSearch(query, limit);
+
+    _sortSearchSongs(list);
+    return list;
   }
 
   Future<List<AlbumItem>> searchAlbums(String query, {int limit = 20}) async {
@@ -355,15 +381,25 @@ class ApiService {
         if (homeJson != null) {
           final sections = <String, List<SongModel>>{};
           sections.addAll(favoriteSections);
+          
+          int nonFavCount = 0;
           homeJson.forEach((key, value) {
             if (value is List) {
               final parsed = value
                   .map((e) => SongModel.fromJson(Map<String, dynamic>.from(e as Map), preferredQuality: _quality))
                   .toList();
-              sections[key] = _deduplicate(parsed);
+              if (parsed.isNotEmpty) {
+                sections[key] = _deduplicate(parsed);
+                if (!key.startsWith('Best of ')) {
+                  nonFavCount += parsed.length;
+                }
+              }
             }
           });
-          if (sections.isNotEmpty) return sections;
+          
+          if (nonFavCount > 0) {
+            return sections;
+          }
         }
       } catch (e) {
         print("ApiService: getHomeData through proxy failed: $e");
@@ -462,7 +498,14 @@ class ApiService {
     });
 
     final keys = targetQueries.keys.toList();
-    final futures = keys.map((key) => searchSongs(targetQueries[key]!, limit: 12));
+    final futures = keys.map((key) async {
+      try {
+        return await searchSongs(targetQueries[key]!, limit: 12);
+      } catch (e) {
+        print("ApiService: Error loading home section fallback for $key: $e");
+        return <SongModel>[];
+      }
+    });
     final resultsList = await Future.wait(futures);
 
     final sections = <String, List<SongModel>>{};
@@ -489,65 +532,80 @@ class ApiService {
   }
 
   Future<List<SongModel>> getGenreSongs(String genre) async {
-    if (GhostProxyClient.isEnabled) {
+    List<SongModel> list = [];
+    try {
+      final queries = _getGenreQueries(genre);
+      final futures = queries.map((q) => searchSongs(q, limit: 20));
+      final results = await Future.wait(futures);
+      final merged = <SongModel>[];
+      for (final songs in results) {
+        merged.addAll(songs);
+      }
+      list = _deduplicate(merged);
+      _sortSearchSongs(list);
+    } catch (e) {
+      print("ApiService: Direct local genre search failed: $e");
+    }
+
+    if (list.isEmpty && GhostProxyClient.isEnabled) {
       try {
         final proxyClient = GhostProxyClient();
         final results = await proxyClient.getGenreSongs(genre);
         if (results != null) {
-          return results.map((e) => SongModel.fromJson(e, preferredQuality: _quality)).toList();
+          list = results.map((e) => SongModel.fromJson(e, preferredQuality: _quality)).toList();
+          _sortSearchSongs(list);
         }
       } catch (e) {
         print("ApiService: getGenreSongs through proxy failed: $e");
       }
     }
-    // Fallback: search using fallback queries
-    final query = _getGenreQueryFallback(genre);
-    return searchSongs(query, limit: 30);
+
+    return list;
   }
 
-  String _getGenreQueryFallback(String genre) {
-    final dayOfWeek = DateTime.now().weekday;
+  List<String> _getGenreQueries(String genre) {
     return switch (genre.toLowerCase()) {
-      'love' || 'romantic' => switch (dayOfWeek % 3) {
-          0 => 'Latest Hindi Romance',
-          1 => 'Hindi Love Songs',
-          _ => 'Hindi Romantic Hits',
-        },
-      'devotional' => switch (dayOfWeek % 3) {
-          0 => 'Hindi Bhakti Bhajans',
-          1 => 'Aarti Bhakti Sangrah',
-          _ => 'Krishna Bhajans popular',
-        },
-      'party' => switch (dayOfWeek % 3) {
-          0 => 'Latest Bollywood Dance',
-          1 => 'Hindi Party Hits',
-          _ => 'Punjabi Dance Club',
-        },
-      'workout' => switch (dayOfWeek % 2) {
-          0 => 'Gym Workout Beats',
-          _ => 'High Energy Workout EDM',
-        },
-      'chill' => switch (dayOfWeek % 3) {
-          0 => 'Hindi Lofi Chill',
-          1 => 'Lofi Acoustic Hindi',
-          _ => 'Late Night Hindi Chill',
-        },
-      'sad' => switch (dayOfWeek % 3) {
-          0 => 'Sad Hindi Dard',
-          1 => 'Breakup Sad Hindi',
-          _ => 'Mellow Sad Hindi',
-        },
-      'punjabi' => switch (dayOfWeek % 3) {
-          0 => 'Punjabi Hits 2026',
-          1 => 'Latest Punjabi Pop',
-          _ => 'Punjabi Hits dance',
-        },
-      'english' => switch (dayOfWeek % 3) {
-          0 => 'English Pop Hits',
-          1 => 'Billboard Hot 100 English',
-          _ => 'Trending English Pop',
-        },
-      _ => '$genre Hits',
+      'love' || 'romantic' => [
+          'Latest Hindi Romance',
+          'Hindi Love Songs',
+          'Hindi Romantic Hits',
+        ],
+      'devotional' => [
+          'Hindi Bhakti Bhajans',
+          'Aarti Bhakti Sangrah',
+          'Krishna Bhajans popular',
+        ],
+      'party' => [
+          'Latest Bollywood Dance',
+          'Hindi Party Hits',
+          'Punjabi Dance Club',
+        ],
+      'workout' => [
+          'Gym Workout Beats',
+          'High Energy Workout EDM',
+        ],
+      'chill' => [
+          'lofi hindi',
+          'hindi lofi hits',
+          'bollywood lofi',
+          'lofi chill hindi',
+          'acoustic hindi songs',
+        ],
+      'sad' => [
+          'Sad Hindi Dard',
+          'Breakup Sad Hindi',
+          'Mellow Sad Hindi',
+        ],
+      'punjabi' => [
+          'Latest Punjabi Pop',
+          'Punjabi Hits dance',
+          'Trending Punjabi Songs',
+        ],
+      'english' => [
+          'popular english pop hits 2026',
+          'trending english pop hits',
+        ],
+      _ => ['$genre Hits'],
     };
   }
 
@@ -1161,12 +1219,22 @@ class ApiService {
     }
   }
 
-  Future<List<SongModel>> getRecommendations(String songId) async {
+  Future<List<SongModel>> getRecommendations(
+    String songId, {
+    String? title,
+    String? artist,
+    int limit = 15,
+  }) async {
     if (songId.isEmpty) return [];
     if (GhostProxyClient.isEnabled) {
       try {
         final proxyClient = GhostProxyClient();
-        final list = await proxyClient.getRecommendations(songId);
+        final list = await proxyClient.getRecommendations(
+          songId,
+          limit: limit,
+          title: title,
+          artist: artist,
+        );
         if (list != null) {
           final parsed = list
               .map((e) => SongModel.fromJson(e, preferredQuality: _quality))
@@ -1192,6 +1260,21 @@ class ApiService {
         }
       }
     } catch (_) {}
+
+    // Fallback: search for songs by primary artist or title
+    if (artist != null && artist.isNotEmpty && !_isGenericArtist(artist)) {
+      final cleanArtist = artist.split(RegExp(r'[,&]')).first.trim();
+      if (cleanArtist.isNotEmpty) {
+        try {
+          return await searchSongs(cleanArtist, limit: limit);
+        } catch (_) {}
+      }
+    }
+    if (title != null && title.isNotEmpty) {
+      try {
+        return await searchSongs(title, limit: limit);
+      } catch (_) {}
+    }
     return [];
   }
 
@@ -1229,5 +1312,37 @@ class ApiService {
       }
     }
     return result;
+  }
+
+  void _sortSearchSongs(List<SongModel> list) {
+    list.sort((a, b) {
+      final aOrig = _isOriginalSongLocal(a);
+      final bOrig = _isOriginalSongLocal(b);
+      if (aOrig && !bOrig) return -1;
+      if (!aOrig && bOrig) return 1;
+      return 0;
+    });
+  }
+
+  bool _isOriginalSongLocal(SongModel song) {
+    final title = song.title.toLowerCase();
+    final album = song.album.toLowerCase();
+    if (title.contains('remix') || title.contains('re-mix') || title.contains('mashup') || title.contains('mash-up') ||
+        title.contains('lofi') || title.contains('lo-fi') || title.contains('slowed') ||
+        title.contains('reverb') || title.contains('sped up') || title.contains('cover') ||
+        title.contains('tribute') || title.contains('instrumental') || title.contains('karaoke') ||
+        title.contains('sad version') || title.contains('female version') || title.contains('male version') ||
+        title.contains('ringtone') || title.contains('bgm') || title.contains('acoustic') ||
+        title.contains('dj ') || title.contains(' dj') || title.contains('trap mix') ||
+        title.contains('non stop') || title.contains('non-stop') || title.contains('unplugged') ||
+        title.contains('lullaby') || title.contains('slow ') || title.contains('sped-up') ||
+        title.contains('reverbed') || title.contains('chillout') || title.contains('extended mix') ||
+        title.contains('radio edit') || title.contains('club mix') || title.contains('remixed') ||
+        title.contains('synthwave') || title.contains('piano version') || title.contains('violin version') ||
+        title.contains('re-created') || title.contains('recreated') ||
+        album.contains('remix') || album.contains('lofi') || album.contains('covers')) {
+      return false;
+    }
+    return true;
   }
 }

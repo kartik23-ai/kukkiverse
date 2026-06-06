@@ -1,7 +1,7 @@
 name: rotty_music
 description: "ROTTY MUSIC - Ultra Premium Music Streaming"
 publish_to: 'none'
-version: 1.1.0+4
+version: 1.2.0+5
 
 environment:
   sdk: ^3.11.1
@@ -46,6 +46,7 @@ dependencies:
   permission_handler: ^11.3.1
   webview_flutter: ^4.10.0
   webview_cookie_manager_plus: ^2.0.17
+  flutter_local_notifications: ^21.0.0
 
 
 dev_dependencies:

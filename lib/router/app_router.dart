@@ -15,6 +15,7 @@ import '../screens/playlist/playlist_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/settings/about_screen.dart';
 import '../screens/settings/support_screen.dart';
+import '../screens/settings/contact_support_screen.dart';
 import '../screens/album/album_screen.dart';
 import '../screens/artist/artist_screen.dart';
 import '../screens/queue/queue_screen.dart';
@@ -178,6 +179,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/support',
       pageBuilder: (_, __) => rottyPage(child: const SupportScreen(), from: AxisDirection.right),
+    ),
+    GoRoute(
+      path: '/contact-support',
+      pageBuilder: (_, __) => rottyPage(child: const ContactSupportScreen(), from: AxisDirection.right),
     ),
   ],
 );

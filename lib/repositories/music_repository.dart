@@ -75,20 +75,32 @@ class MusicRepository {
     if (song.id.startsWith('spotify_track_') || song.url.isEmpty) {
       final query = '${song.title} ${song.artist}';
       try {
-        final results = await _api.searchSongs(query, limit: 1);
-        if (results.isNotEmpty) {
-          final saavnSong = results.first;
-          final details = await _api.getSongDetails(saavnSong.id);
+        final results = await _api.searchSongs(query, limit: 5);
+        SongModel? bestMatch;
+        double bestScore = -1.0;
+        for (final r in results) {
+          final score = _calculateMatchScore(song.title, song.artist, r.title, r.artist);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = r;
+          }
+        }
+
+        if (bestMatch != null && bestScore >= 0.55) {
+          final details = await _api.getSongDetails(bestMatch.id);
           if (details != null && details.hasPlayableUrl) {
             return song.copyWith(url: details.url);
           }
         }
       } catch (_) {}
-      return song;
+      
+      // If it's a Spotify track or URL is empty, and JioSaavn resolved nothing, fall through to YouTube self-healing!
+    } else {
+      // Normal JioSaavn song with an ID but maybe expired URL
+      final details = await _api.getSongDetails(song.id);
+      if (details != null && details.hasPlayableUrl) return details;
     }
 
-    final details = await _api.getSongDetails(song.id);
-    if (details != null && details.hasPlayableUrl) return details;
     if (song.hasPlayableUrl) return song;
 
     // Self-healing: if JioSaavn loading fails or URL is empty, search YouTube and stream!
@@ -112,8 +124,58 @@ class MusicRepository {
       print('Self-healing YouTube fallback failed: $e');
     }
 
-    return details ?? song;
+    return song;
   }
+
+  double _calculateMatchScore(String requestedTitle, String requestedArtist, String resultTitle, String resultArtist) {
+    String clean(String s) {
+      var c = s.toLowerCase();
+      c = c.replaceAll(RegExp(r'\([^)]*\)'), '');
+      c = c.replaceAll(RegExp(r'\[[^\]]*\]'), '');
+      c = c.replaceAll(RegExp(r'[^a-z0-9\s]'), '');
+      return c.trim();
+    }
+
+    final reqT = clean(requestedTitle);
+    final reqA = clean(requestedArtist);
+    final resT = clean(resultTitle);
+    final resA = clean(resultArtist);
+
+    if (reqT.isEmpty || resT.isEmpty) return 0.0;
+
+    double titleScore = 0.0;
+    if (reqT == resT) {
+      titleScore = 1.0;
+    } else if (resT.contains(reqT) || reqT.contains(resT)) {
+      titleScore = 0.8;
+    } else {
+      final reqTWords = reqT.split(' ').toSet();
+      final resTWords = resT.split(' ').toSet();
+      if (reqTWords.isNotEmpty) {
+        final intersection = reqTWords.intersection(resTWords);
+        titleScore = (intersection.length / reqTWords.length) * 0.7;
+      }
+    }
+
+    double artistScore = 0.0;
+    final reqAFirst = reqA.split(' ').first;
+    final resAFirst = resA.split(' ').first;
+    if (reqAFirst.isNotEmpty && resAFirst.isNotEmpty && reqAFirst == resAFirst) {
+      artistScore = 1.0;
+    } else if (resA.contains(reqAFirst) || reqA.contains(resAFirst)) {
+      artistScore = 0.8;
+    } else {
+      final reqAWords = reqA.split(' ').toSet();
+      final resAWords = resA.split(' ').toSet();
+      if (reqAWords.isNotEmpty) {
+        final intersection = reqAWords.intersection(resAWords);
+        artistScore = (intersection.length / reqAWords.length) * 0.7;
+      }
+    }
+
+    return (titleScore * 0.6) + (artistScore * 0.4);
+  }
+
   Future<String?> getLyrics(String id, {String? title, String? artist, int? durationSec}) =>
       _api.getLyrics(id, title: title, artist: artist, durationSec: durationSec);
   void updateAudioQuality(String q) {

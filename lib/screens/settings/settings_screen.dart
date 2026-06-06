@@ -96,6 +96,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
 
+          // Contact & Support tile
+          RepaintBoundary(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.15), width: 1.0),
+                color: Colors.cyan.withValues(alpha: 0.05),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.support_agent_rounded, color: Colors.cyanAccent),
+                title: Text('Help & Support', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+                subtitle: Text('Submit feedback, bug reports or query to Kartik', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                onTap: () => context.push('/contact-support'),
+              ),
+            ),
+          ),
+
           // Experience Modes (kept outside)
           RepaintBoundary(
             child: Column(

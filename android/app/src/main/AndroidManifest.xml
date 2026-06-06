@@ -77,6 +77,16 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="upi"/>
         </intent>
+        <!-- Instagram intent query -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="instagram"/>
+        </intent>
+        <!-- Mailto intent query -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="mailto"/>
+        </intent>
         <!-- Explicit popular UPI apps for Android 11+ package visibility -->
         <package android:name="com.google.android.apps.nbu.paisa.user"/>
         <package android:name="com.phonepe.app"/>

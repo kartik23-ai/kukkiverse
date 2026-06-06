@@ -484,13 +484,13 @@ class SupportOverlayVisibilityNotifier extends StateNotifier<bool> {
     // 1. Absolute Suppressing for Verified Supporters
     if (storage.isSupporter) {
       storage.setHasSeenSupportOverlay(true);
-      storage.setLastSeenVersion('1.1.0');
+      storage.setLastSeenVersion('1.2.0');
       state = false;
       return;
     }
 
     // 2. Fresh Install / Version Update reset
-    if (storage.lastSeenVersion != '1.1.0') {
+    if (storage.lastSeenVersion != '1.2.0') {
       storage.setHasSeenSupportOverlay(false);
       state = true;
       return;

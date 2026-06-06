@@ -16,6 +16,7 @@ Future<void> playSongWithContext(
   SongModel song, {
   List<SongModel>? playlist,
   bool runAiDj = false,
+  bool isPlayAll = false,
 }) async {
   final handler = ref.read(audioHandlerProvider);
   final repo = ref.read(musicRepositoryProvider);
@@ -28,7 +29,8 @@ Future<void> playSongWithContext(
       throw StateError('Could not load audio for "${song.title}" (URL is empty)');
     }
 
-    var queue = runAiDj ? [track] : (playlist ?? [track]);
+    final aiDjEnabled = runAiDj || ref.read(aiDjEnabledProvider);
+    var queue = (aiDjEnabled && !isPlayAll) ? [track] : (playlist ?? [track]);
     queue = queue.map((s) => s.id == track.id ? track : s).toList();
     final idx = queue.indexWhere((s) => s.id == track.id);
 
@@ -86,28 +88,38 @@ Future<void> playSongWithContext(
 }
 
 Future<void> refreshAiQueue(WidgetRef ref) async {
-  final handler = ref.read(audioHandlerProvider);
-  final current = handler.currentSong;
-  if (current == null) return;
+  try {
+    final handler = ref.read(audioHandlerProvider);
+    final current = handler.currentSong;
+    if (current == null) return;
 
-  final exclude = buildAiExcludeSet(ref, handler);
-  final smart = await ref.read(aiDjServiceProvider).buildSmartQueue(
-    nowPlaying: current,
-    recent: ref.read(recentSongsProvider),
-    favorites: ref.read(favoritesProvider),
-    excludeIds: exclude,
-    excludeSongs: [
-      ...handler.songQueue,
-      ...handler.history,
-    ],
-    limit: 20,
-  );
-  final blocked = ref.read(dislikedIdsProvider);
-  final filtered = smart.where((s) => !blocked.contains(s.id)).toList();
-  if (filtered.isNotEmpty) {
-    await handler.appendUpcoming(filtered);
+    final exclude = buildAiExcludeSet(ref, handler);
+    final aiDjService = ref.read(aiDjServiceProvider);
+    final recent = ref.read(recentSongsProvider);
+    final favorites = ref.read(favoritesProvider);
+    final blocked = ref.read(dislikedIdsProvider);
+
+    final smart = await aiDjService.buildSmartQueue(
+      nowPlaying: current,
+      recent: recent,
+      favorites: favorites,
+      excludeIds: exclude,
+      excludeSongs: [
+        ...handler.songQueue,
+        ...handler.history,
+      ],
+      limit: 20,
+    );
+
+    final filtered = smart.where((s) => !blocked.contains(s.id)).toList();
+    if (filtered.isNotEmpty) {
+      await handler.appendUpcoming(filtered);
+    }
+  } catch (e, stack) {
+    debugPrint('Error in refreshAiQueue: $e\n$stack');
   }
 }
+
 
 Future<void> navigateToArtist(BuildContext context, WidgetRef ref, String artistName) async {
   final cleanName = artistName.split(RegExp(r'[,&]')).first.trim();

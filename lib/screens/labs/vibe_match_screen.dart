@@ -81,6 +81,7 @@ class VibeMatchScreen extends ConsumerWidget {
                               current,
                               playlist: [current, ...songs.where((s) => s.id != current.id)],
                               runAiDj: false,
+                              isPlayAll: true,
                             );
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
