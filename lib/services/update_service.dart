@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -155,8 +156,9 @@ class UpdateService extends ChangeNotifier {
   void _triggerUpdateNotificationIfNeeded() {
     if (_latestUpdate == null) return;
 
-    // 1. Check for OTA update
-    if (_isNewer(currentVersion, _latestUpdate!.latestVersion)) {
+    // 1. Check for OTA update — only notify on Android (desktop exe builds handled separately)
+    final bool isAndroid = Platform.isAndroid;
+    if (isAndroid && _isNewer(currentVersion, _latestUpdate!.latestVersion)) {
       if (!_notifiedUpdate) {
         _notifiedUpdate = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
