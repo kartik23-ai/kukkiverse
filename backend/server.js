@@ -1192,47 +1192,29 @@ app.post('/api/home', async (req, res) => {
     '90s Bollywood Romance',
   ];
 
-  const trendingPlaylists = ['1265126272', '82974051', '106180373', '104618770', '1134595537', '1223482895', '82973946'];
-  const bollywoodPlaylists = ['1234731818', '106180373', '1265126272', '1139074020', '48624237', '82974013'];
-  const punjabiPlaylists = ['4144832', '46624508', '83241285', '110756784', '1134595462'];
-  const topHitsPlaylists = ['1265126272', '106180373', '1134595537', '1223482895', '1234731818'];
-  const viralPlaylists = ['1223482895', '110756784', '1134595537', '1265126272'];
-  const editorsPlaylists = ['1139074020', '104618770', '82974051', '106180373'];
+  const randIdx = refresh ? Math.floor(Math.random() * 10) : 0;
 
   // Pick queries dynamically
-  let qTrending, qBollywood, qPunjabi, qTopHits, qViral, qEditorsPicks;
-  let playlistTrending, playlistBollywood, playlistPunjabi, playlistTopHits, playlistViral, playlistEditors;
+  const qTrending = trendingPool[(dayIndex + hourIndex + randIdx) % trendingPool.length];
+  const qBollywood = bollywoodPool[(dayIndex + hourIndex + randIdx + 2) % bollywoodPool.length];
+  const qPunjabi = punjabiPool[(dayIndex + hourIndex + randIdx + 4) % punjabiPool.length];
+  const qTopHits = topHitsPool[(dayIndex + hourIndex + randIdx + 6) % topHitsPool.length];
+  const qViral = viralPool[(dayIndex + hourIndex + randIdx) % viralPool.length];
+  const qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + randIdx + 2) % editorsPicksPool.length];
 
-  if (refresh) {
-    // True shuffle: pick random index from pools
-    qTrending = trendingPool[Math.floor(Math.random() * trendingPool.length)];
-    qBollywood = bollywoodPool[Math.floor(Math.random() * bollywoodPool.length)];
-    qPunjabi = punjabiPool[Math.floor(Math.random() * punjabiPool.length)];
-    qTopHits = topHitsPool[Math.floor(Math.random() * topHitsPool.length)];
-    qViral = viralPool[Math.floor(Math.random() * viralPool.length)];
-    qEditorsPicks = editorsPicksPool[Math.floor(Math.random() * editorsPicksPool.length)];
+  const trendingPlaylists = ['1265126272', '82974051', '106180373'];
+  const bollywoodPlaylists = ['1234731818', '106180373', '1265126272'];
+  const punjabiPlaylists = ['4144832', '46624508'];
+  const topHitsPlaylists = ['1265126272', '106180373', '1134595537'];
+  const viralPlaylists = ['1223482895', '110756784'];
+  const editorsPlaylists = ['1139074020', '104618770'];
 
-    playlistTrending = trendingPlaylists[Math.floor(Math.random() * trendingPlaylists.length)];
-    playlistBollywood = bollywoodPlaylists[Math.floor(Math.random() * bollywoodPlaylists.length)];
-    playlistPunjabi = punjabiPlaylists[Math.floor(Math.random() * punjabiPlaylists.length)];
-    playlistTopHits = topHitsPlaylists[Math.floor(Math.random() * topHitsPlaylists.length)];
-    playlistViral = viralPlaylists[Math.floor(Math.random() * viralPlaylists.length)];
-    playlistEditors = editorsPlaylists[Math.floor(Math.random() * editorsPlaylists.length)];
-  } else {
-    qTrending = trendingPool[(dayIndex + hourIndex) % trendingPool.length];
-    qBollywood = bollywoodPool[(dayIndex + hourIndex + 2) % bollywoodPool.length];
-    qPunjabi = punjabiPool[(dayIndex + hourIndex + 4) % punjabiPool.length];
-    qTopHits = topHitsPool[(dayIndex + hourIndex + 6) % topHitsPool.length];
-    qViral = viralPool[(dayIndex + hourIndex) % viralPool.length];
-    qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + 2) % editorsPicksPool.length];
-
-    playlistTrending = trendingPlaylists[(dayIndex + hourIndex) % trendingPlaylists.length];
-    playlistBollywood = bollywoodPlaylists[(dayIndex + hourIndex) % bollywoodPlaylists.length];
-    playlistPunjabi = punjabiPlaylists[(dayIndex + hourIndex) % punjabiPlaylists.length];
-    playlistTopHits = topHitsPlaylists[(dayIndex + hourIndex) % topHitsPlaylists.length];
-    playlistViral = viralPlaylists[(dayIndex + hourIndex) % viralPlaylists.length];
-    playlistEditors = editorsPlaylists[(dayIndex + hourIndex) % editorsPlaylists.length];
-  }
+  const playlistTrending = trendingPlaylists[(dayIndex + hourIndex + randIdx) % trendingPlaylists.length];
+  const playlistBollywood = bollywoodPlaylists[(dayIndex + hourIndex + randIdx) % bollywoodPlaylists.length];
+  const playlistPunjabi = punjabiPlaylists[(dayIndex + hourIndex + randIdx) % punjabiPlaylists.length];
+  const playlistTopHits = topHitsPlaylists[(dayIndex + hourIndex + randIdx) % topHitsPlaylists.length];
+  const playlistViral = viralPlaylists[(dayIndex + hourIndex + randIdx) % viralPlaylists.length];
+  const playlistEditors = editorsPlaylists[(dayIndex + hourIndex + randIdx) % editorsPlaylists.length];
 
   const queries = {
     Trending: { q: qTrending, playlistId: playlistTrending },
@@ -1295,7 +1277,7 @@ app.post('/api/home', async (req, res) => {
         }
       }
 
-      // Shuffle the results for variety
+      // Shuffle the results slightly for variety
       const shuffled = songs.sort(() => 0.5 - Math.random());
       
       const mapped = shuffled
@@ -1312,11 +1294,8 @@ app.post('/api/home', async (req, res) => {
   await Promise.all(promises);
 
   const encrypted = encryptPayload(JSON.stringify(sections));
-  
-  if (!refresh) {
-    cachedHomeSections = encrypted;
-    lastHomeCacheTime = now;
-  }
+  cachedHomeSections = encrypted;
+  lastHomeCacheTime = now;
 
   return res.json({ d: encrypted });
 });

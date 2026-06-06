@@ -2092,7 +2092,7 @@ class _RottyRefresherSpinnerState extends State<RottyRefresherSpinner>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(seconds: 1),
     );
     if (widget.isRefreshing) {
       _controller.repeat();
@@ -2117,66 +2117,43 @@ class _RottyRefresherSpinnerState extends State<RottyRefresherSpinner>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          height: 36,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: List.generate(5, (index) {
-                  double heightFactor;
-                  if (widget.isRefreshing) {
-                    final phase = index * (3.14159 / 4);
-                    heightFactor = 0.2 + 0.8 * (0.5 + 0.5 * math.sin(_controller.value * 2 * 3.14159 + phase));
-                  } else {
-                    final startThreshold = index * 0.15;
-                    if (widget.progress <= startThreshold) {
-                      heightFactor = 0.1;
-                    } else {
-                      heightFactor = 0.1 + 0.9 * ((widget.progress - startThreshold) / (1.0 - startThreshold)).clamp(0.0, 1.0);
-                    }
-                  }
-
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: 4,
-                    height: 32 * heightFactor,
-                    decoration: BoxDecoration(
-                      color: widget.accentColor.withValues(
-                        alpha: widget.isRefreshing
-                            ? 0.5 + 0.5 * heightFactor
-                            : 0.3 + 0.7 * heightFactor,
-                      ),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  );
-                }),
-              );
-            },
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final angle = widget.isRefreshing
+            ? _controller.value * 2 * 3.14159
+            : widget.progress * 2 * 3.14159;
+        
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.05),
+              border: Border.all(
+                color: widget.accentColor.withValues(alpha: widget.isRefreshing ? 0.8 : 0.3),
+                width: 1.5,
+              ),
+              boxShadow: [
+                if (widget.isRefreshing)
+                  BoxShadow(
+                    color: widget.accentColor.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+              ],
+            ),
+            child: Transform.rotate(
+              angle: angle,
+              child: Icon(
+                Icons.music_note_rounded,
+                color: widget.accentColor,
+                size: 20,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        AnimatedDefaultTextStyle(
-          duration: const Duration(milliseconds: 200),
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2,
-            color: widget.isRefreshing
-                ? widget.accentColor
-                : widget.accentColor.withValues(alpha: (widget.progress * 0.8).clamp(0.0, 0.8)),
-          ),
-          child: Text(
-            widget.isRefreshing ? 'TUNING KUKKIVERSE...' : 'PULL TO SHUFFLE',
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
