@@ -45,7 +45,7 @@ export async function decryptPayload(payload: string): Promise<string> {
     const ivBytes = base64ToBytes(parts[0]);
     const cipherBytes = base64ToBytes(parts[1]);
     
-    let secretKey = import.meta.env.VITE_ROTTY_SECRET_KEY || 'rotty-ghost-key-32chars-xxxxxxxx';
+    let secretKey = import.meta.env.VITE_ROTTY_SECRET_KEY || 'R0ttyGh0st2026xKr7mP9qW4vZ8nB3j';
     secretKey = secretKey.slice(0, 32).padEnd(32, '0');
     const keyBytes = new TextEncoder().encode(secretKey);
     

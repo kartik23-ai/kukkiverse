@@ -478,6 +478,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.dns_rounded, color: Colors.white),
+                      title: Text('Custom Backend URL', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      subtitle: Text(
+                        StorageService().customBackendIp.isEmpty ? 'Using production server' : StorageService().customBackendIp,
+                        style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11),
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
+                      onTap: _showCustomIpDialog,
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.restart_alt_rounded, color: Colors.white),
                       title: Text('Reset Taste Preferences', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
                       subtitle: Text('Re-select your favorite artists', style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 11)),
@@ -849,6 +860,85 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               setState(() {});
             },
             child: Text('Save & Sync', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.black87)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCustomIpDialog() {
+    final TextEditingController ipCtrl = TextEditingController(text: StorageService().customBackendIp);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF16162A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            const Icon(Icons.dns_rounded, color: Colors.purpleAccent),
+            const SizedBox(width: 10),
+            Text(
+              'Custom Backend URL',
+              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter custom backend IP/URL (e.g. 192.168.1.5) for local testing. Leave blank to use production Railway server.',
+              style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ipCtrl,
+              autofocus: true,
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'e.g. 192.168.1.100',
+                hintStyle: GoogleFonts.inter(color: Colors.white30, fontSize: 13),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.04),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.purpleAccent, width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await StorageService().setCustomBackendIp('');
+              if (ctx.mounted) Navigator.pop(ctx);
+              setState(() {});
+            },
+            child: Text('Reset to Production', style: GoogleFonts.inter(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54, fontWeight: FontWeight.w600)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.purpleAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              final newIp = ipCtrl.text.trim();
+              await StorageService().setCustomBackendIp(newIp);
+              if (ctx.mounted) Navigator.pop(ctx);
+              setState(() {});
+            },
+            child: Text('Save', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white)),
           ),
         ],
       ),

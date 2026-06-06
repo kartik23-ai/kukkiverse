@@ -247,7 +247,7 @@ Future<List<SongModel>> _fetchFromGoogle(Ref ref, String searchQuery, String fal
       final proxyClient = GhostProxyClient();
       final results = await proxyClient.getScrapedSongs(searchQuery, fallbackQuery, limit: 20);
       if (results != null && results.isNotEmpty) {
-        final qual = StorageService().preferredQuality;
+        final qual = StorageService().audioQuality;
         return results.map((e) => SongModel.fromJson(e, preferredQuality: qual)).toList();
       }
     } catch (e) {

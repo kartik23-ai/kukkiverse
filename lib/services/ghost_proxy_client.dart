@@ -21,7 +21,7 @@ class GhostProxyClient {
 
   static const _secretKey = String.fromEnvironment(
     'GHOST_KEY',
-    defaultValue: 'rotty-ghost-key-32chars-xxxxxxxx',
+    defaultValue: 'R0ttyGh0st2026xKr7mP9qW4vZ8nB3j',
   );
 
   final http.Client _client = http.Client();
