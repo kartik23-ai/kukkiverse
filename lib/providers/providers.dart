@@ -51,8 +51,15 @@ final aiDjEnabledProvider = StateProvider<bool>((ref) {
   return isEnabled;
 });
 
+final forceRefreshHomeProvider = StateProvider<bool>((ref) => false);
+
 final homeDataProvider = FutureProvider<Map<String, List<SongModel>>>((ref) async {
-  return ref.read(musicRepositoryProvider).getHomeSections();
+  final forceRefresh = ref.read(forceRefreshHomeProvider);
+  if (forceRefresh) {
+    // Reset immediately so future normal builds use cache
+    ref.read(forceRefreshHomeProvider.notifier).state = false;
+  }
+  return ref.read(musicRepositoryProvider).getHomeSections(refresh: forceRefresh);
 });
 
 /// Debounced query used for API calls.
@@ -664,6 +671,22 @@ class PlaylistNotifier extends StateNotifier<List<PlaylistModel>> {
     if (index == -1) return;
     if (playlists[index].songs.any((s) => s.id == song.id)) return;
     await _storage.savePlaylist(playlists[index].copyWith(songs: [...playlists[index].songs, song]));
+    state = _storage.getPlaylists();
+  }
+
+  Future<void> addMultipleToPlaylist(String playlistId, List<SongModel> songs) async {
+    final playlists = _storage.getPlaylists();
+    final index = playlists.indexWhere((p) => p.id == playlistId);
+    if (index == -1) return;
+    final currentSongs = playlists[index].songs;
+    final newSongs = <SongModel>[];
+    for (final song in songs) {
+      if (!currentSongs.any((s) => s.id == song.id) && !newSongs.any((s) => s.id == song.id)) {
+        newSongs.add(song);
+      }
+    }
+    if (newSongs.isEmpty) return;
+    await _storage.savePlaylist(playlists[index].copyWith(songs: [...currentSongs, ...newSongs]));
     state = _storage.getPlaylists();
   }
 

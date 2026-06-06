@@ -35,6 +35,23 @@ class QueueScreen extends ConsumerWidget {
             title: Text('Queue Timeline', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
             centerTitle: true,
             actions: [
+              if (upcoming.isNotEmpty) ...[
+                IconButton(
+                  tooltip: 'Save queue as playlist',
+                  icon: const Icon(Icons.playlist_add_rounded, color: Colors.white),
+                  onPressed: () => _showSaveQueueDialog(context, ref, upcoming),
+                ),
+                IconButton(
+                  tooltip: 'Clear queue',
+                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+                  onPressed: () {
+                    handler.clearQueue();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Queue cleared')),
+                    );
+                  },
+                ),
+              ],
               TextButton(
                 onPressed: () async {
                   await refreshAiQueue(ref);
@@ -143,6 +160,106 @@ class QueueScreen extends ConsumerWidget {
       },
     );
   }
+
+  void _showSaveQueueDialog(BuildContext context, WidgetRef ref, List<SongModel> upcoming) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final playlists = ref.watch(playlistsProvider);
+        final nameController = TextEditingController();
+
+        return AlertDialog(
+          backgroundColor: AppColors.bgCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Save Queue as Playlist',
+            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  style: GoogleFonts.inter(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'New Playlist Name',
+                    hintStyle: GoogleFonts.inter(color: Colors.white54),
+                    filled: true,
+                    fillColor: Colors.black26,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                if (playlists.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Or add to existing:',
+                    style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: playlists.length,
+                      itemBuilder: (context, idx) {
+                        final pl = playlists[idx];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(pl.name, style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
+                          trailing: const Icon(Icons.add_rounded, color: AppColors.accent),
+                          onTap: () async {
+                            await ref.read(playlistsProvider.notifier).addMultipleToPlaylist(pl.id, upcoming);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Added ${upcoming.length} songs to ${pl.name}')),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  final newId = await ref.read(playlistsProvider.notifier).create(name);
+                  await ref.read(playlistsProvider.notifier).addMultipleToPlaylist(newId, upcoming);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Created playlist "$name" with ${upcoming.length} songs')),
+                    );
+                  }
+                }
+              },
+              child: Text('Create & Save', style: GoogleFonts.inter(color: Colors.black, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _HistoryRow extends StatelessWidget {
@@ -182,59 +299,64 @@ class _QueueTimelineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ReorderableDelayedDragStartListener(
-      index: index,
-      child: RottyGlassLite(
-        onTap: onTap,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        accentColor: isNow ? AppColors.accent : null,
-        child: Row(
-          children: [
-            Column(
-              children: [
-                Container(width: 2, height: 12, color: isNow ? AppColors.accent : AppColors.glassBorder),
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isNow ? AppColors.accent : AppColors.bgCard,
-                    border: Border.all(color: isNow ? AppColors.accent : AppColors.glassBorder),
-                  ),
+    return RottyGlassLite(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      accentColor: isNow ? AppColors.accent : null,
+      child: Row(
+        children: [
+          if (!isNow)
+            ReorderableDragStartListener(
+              index: index,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(Icons.drag_handle_rounded, color: Colors.white38, size: 20),
+              ),
+            ),
+          Column(
+            children: [
+              Container(width: 2, height: 12, color: isNow ? AppColors.accent : AppColors.glassBorder),
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isNow ? AppColors.accent : AppColors.bgCard,
+                  border: Border.all(color: isNow ? AppColors.accent : AppColors.glassBorder),
                 ),
-                Container(width: 2, height: 12, color: AppColors.glassBorder),
+              ),
+              Container(width: 2, height: 12, color: AppColors.glassBorder),
+            ],
+          ),
+          const SizedBox(width: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: CachedNetworkImage(imageUrl: song.image, width: 48, height: 48, fit: BoxFit.cover, memCacheWidth: 96),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(song.title, style: GoogleFonts.inter(color: isNow ? AppColors.accent : Colors.white, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(song.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
               ],
             ),
-            const SizedBox(width: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: CachedNetworkImage(imageUrl: song.image, width: 48, height: 48, fit: BoxFit.cover, memCacheWidth: 96),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(song.title, style: GoogleFonts.inter(color: isNow ? AppColors.accent : Colors.white, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(song.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
-                ],
+          ),
+          if (isNow)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: Text('NOW', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1)),
             ),
-            if (isNow)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text('NOW', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1)),
-              ),
-            if (!isNow) ...[
-              IconButton(icon: const Icon(Icons.playlist_add_rounded, color: Colors.white54, size: 20), onPressed: onPlayNext),
-              IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20), onPressed: onRemove),
-            ],
+          if (!isNow) ...[
+            IconButton(icon: const Icon(Icons.playlist_add_rounded, color: Colors.white54, size: 20), onPressed: onPlayNext),
+            IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20), onPressed: onRemove),
           ],
-        ),
+        ],
       ),
     );
   }

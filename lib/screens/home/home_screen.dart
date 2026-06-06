@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,6 +21,7 @@ import '../../widgets/crystal_shatter_skeleton.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/rotty_glow_r_skeleton.dart';
 import '../../services/ai_image_service.dart';
+import 'dart:math' as math;
 
 
 final homeCategoryProvider = StateProvider<String>((ref) => 'All');
@@ -54,6 +56,7 @@ class HomeScreen extends ConsumerWidget {
           ];
 
     Future<void> onRefresh() async {
+      ref.read(forceRefreshHomeProvider.notifier).state = true;
       ref.invalidate(homeDataProvider);
       ref.invalidate(recentSongsProvider);
       ref.invalidate(suggestedSongsProvider);
@@ -71,16 +74,29 @@ class HomeScreen extends ConsumerWidget {
 
     return AppScaffold(
       bottomPadding: 0,
-      body: RefreshIndicator(
-        onRefresh: onRefresh,
-        color: mt.accent,
-        backgroundColor: mt.bg,
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-          slivers: [
-            SliverToBoxAdapter(child: RepaintBoundary(child: _header(context, ref, premium, mt, mode))),
-            SliverToBoxAdapter(child: RepaintBoundary(child: _categoryTabs(context, ref, mt))),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        slivers: [
+          CupertinoSliverRefreshControl(
+            onRefresh: onRefresh,
+            builder: (context, refreshState, pulledExtent, refreshTriggerPullDistance, refreshIndicatorExtent) {
+              final progress = (pulledExtent / refreshTriggerPullDistance).clamp(0.0, 1.0);
+              final isRefreshing = refreshState == RefreshIndicatorMode.refresh;
+              
+              return Container(
+                padding: const EdgeInsets.only(top: 8),
+                alignment: Alignment.center,
+                child: RottyRefresherSpinner(
+                  progress: progress,
+                  isRefreshing: isRefreshing,
+                  accentColor: mt.accent,
+                ),
+              );
+            },
+          ),
+          SliverToBoxAdapter(child: RepaintBoundary(child: _header(context, ref, premium, mt, mode))),
+          SliverToBoxAdapter(child: RepaintBoundary(child: _categoryTabs(context, ref, mt))),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
             if (mode == RottyAppMode.focus)
               SliverToBoxAdapter(child: RepaintBoundary(child: _focusTimer(context, ref, mt))),
@@ -223,8 +239,7 @@ class HomeScreen extends ConsumerWidget {
             const SliverToBoxAdapter(child: SizedBox(height: 180)),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _categoryTabs(BuildContext context, WidgetRef ref, ModeTheme mt) {
@@ -2048,6 +2063,120 @@ class _TopHitSongTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class RottyRefresherSpinner extends StatefulWidget {
+  final double progress;
+  final bool isRefreshing;
+  final Color accentColor;
+
+  const RottyRefresherSpinner({
+    super.key,
+    required this.progress,
+    required this.isRefreshing,
+    required this.accentColor,
+  });
+
+  @override
+  State<RottyRefresherSpinner> createState() => _RottyRefresherSpinnerState();
+}
+
+class _RottyRefresherSpinnerState extends State<RottyRefresherSpinner>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    if (widget.isRefreshing) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(RottyRefresherSpinner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isRefreshing && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!widget.isRefreshing && _controller.isAnimating) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(
+          height: 36,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: List.generate(5, (index) {
+                  double heightFactor;
+                  if (widget.isRefreshing) {
+                    final phase = index * (3.14159 / 4);
+                    heightFactor = 0.2 + 0.8 * (0.5 + 0.5 * math.sin(_controller.value * 2 * 3.14159 + phase));
+                  } else {
+                    final startThreshold = index * 0.15;
+                    if (widget.progress <= startThreshold) {
+                      heightFactor = 0.1;
+                    } else {
+                      heightFactor = 0.1 + 0.9 * ((widget.progress - startThreshold) / (1.0 - startThreshold)).clamp(0.0, 1.0);
+                    }
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: 4,
+                    height: 32 * heightFactor,
+                    decoration: BoxDecoration(
+                      color: widget.accentColor.withValues(
+                        alpha: widget.isRefreshing
+                            ? 0.5 + 0.5 * heightFactor
+                            : 0.3 + 0.7 * heightFactor,
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2,
+            color: widget.isRefreshing
+                ? widget.accentColor
+                : widget.accentColor.withValues(alpha: (widget.progress * 0.8).clamp(0.0, 0.8)),
+          ),
+          child: Text(
+            widget.isRefreshing ? 'TUNING KUKKIVERSE...' : 'PULL TO SHUFFLE',
+          ),
+        ),
+      ],
     );
   }
 }

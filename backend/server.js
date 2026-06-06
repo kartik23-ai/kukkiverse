@@ -1140,8 +1140,9 @@ const googleSongsCache = {};
 
 // POST /api/home
 app.post('/api/home', async (req, res) => {
+  const { refresh } = req.body || {};
   const now = Date.now();
-  if (cachedHomeSections && (now - lastHomeCacheTime < 2 * 60 * 60 * 1000)) {
+  if (!refresh && cachedHomeSections && (now - lastHomeCacheTime < 2 * 60 * 60 * 1000)) {
     return res.json({ d: cachedHomeSections });
   }
 
@@ -1191,21 +1192,55 @@ app.post('/api/home', async (req, res) => {
     '90s Bollywood Romance',
   ];
 
+  const trendingPlaylists = ['1265126272', '82974051', '106180373', '104618770', '1134595537', '1223482895', '82973946'];
+  const bollywoodPlaylists = ['1234731818', '106180373', '1265126272', '1139074020', '48624237', '82974013'];
+  const punjabiPlaylists = ['4144832', '46624508', '83241285', '110756784', '1134595462'];
+  const topHitsPlaylists = ['1265126272', '106180373', '1134595537', '1223482895', '1234731818'];
+  const viralPlaylists = ['1223482895', '110756784', '1134595537', '1265126272'];
+  const editorsPlaylists = ['1139074020', '104618770', '82974051', '106180373'];
+
   // Pick queries dynamically
-  const qTrending = trendingPool[(dayIndex + hourIndex) % trendingPool.length];
-  const qBollywood = bollywoodPool[(dayIndex + hourIndex + 2) % bollywoodPool.length];
-  const qPunjabi = punjabiPool[(dayIndex + hourIndex + 4) % punjabiPool.length];
-  const qTopHits = topHitsPool[(dayIndex + hourIndex + 6) % topHitsPool.length];
-  const qViral = viralPool[(dayIndex + hourIndex) % viralPool.length];
-  const qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + 2) % editorsPicksPool.length];
+  let qTrending, qBollywood, qPunjabi, qTopHits, qViral, qEditorsPicks;
+  let playlistTrending, playlistBollywood, playlistPunjabi, playlistTopHits, playlistViral, playlistEditors;
+
+  if (refresh) {
+    // True shuffle: pick random index from pools
+    qTrending = trendingPool[Math.floor(Math.random() * trendingPool.length)];
+    qBollywood = bollywoodPool[Math.floor(Math.random() * bollywoodPool.length)];
+    qPunjabi = punjabiPool[Math.floor(Math.random() * punjabiPool.length)];
+    qTopHits = topHitsPool[Math.floor(Math.random() * topHitsPool.length)];
+    qViral = viralPool[Math.floor(Math.random() * viralPool.length)];
+    qEditorsPicks = editorsPicksPool[Math.floor(Math.random() * editorsPicksPool.length)];
+
+    playlistTrending = trendingPlaylists[Math.floor(Math.random() * trendingPlaylists.length)];
+    playlistBollywood = bollywoodPlaylists[Math.floor(Math.random() * bollywoodPlaylists.length)];
+    playlistPunjabi = punjabiPlaylists[Math.floor(Math.random() * punjabiPlaylists.length)];
+    playlistTopHits = topHitsPlaylists[Math.floor(Math.random() * topHitsPlaylists.length)];
+    playlistViral = viralPlaylists[Math.floor(Math.random() * viralPlaylists.length)];
+    playlistEditors = editorsPlaylists[Math.floor(Math.random() * editorsPlaylists.length)];
+  } else {
+    qTrending = trendingPool[(dayIndex + hourIndex) % trendingPool.length];
+    qBollywood = bollywoodPool[(dayIndex + hourIndex + 2) % bollywoodPool.length];
+    qPunjabi = punjabiPool[(dayIndex + hourIndex + 4) % punjabiPool.length];
+    qTopHits = topHitsPool[(dayIndex + hourIndex + 6) % topHitsPool.length];
+    qViral = viralPool[(dayIndex + hourIndex) % viralPool.length];
+    qEditorsPicks = editorsPicksPool[(dayIndex + hourIndex + 2) % editorsPicksPool.length];
+
+    playlistTrending = trendingPlaylists[(dayIndex + hourIndex) % trendingPlaylists.length];
+    playlistBollywood = bollywoodPlaylists[(dayIndex + hourIndex) % bollywoodPlaylists.length];
+    playlistPunjabi = punjabiPlaylists[(dayIndex + hourIndex) % punjabiPlaylists.length];
+    playlistTopHits = topHitsPlaylists[(dayIndex + hourIndex) % topHitsPlaylists.length];
+    playlistViral = viralPlaylists[(dayIndex + hourIndex) % viralPlaylists.length];
+    playlistEditors = editorsPlaylists[(dayIndex + hourIndex) % editorsPlaylists.length];
+  }
 
   const queries = {
-    Trending: { q: qTrending, playlistId: '1265126272' }, // Chartbusters 2025 - Hindi
-    Bollywood: { q: qBollywood, playlistId: '1234731818' }, // Latest Hindi Hits
-    Punjabi: { q: qPunjabi, playlistId: '4144832' }, // Punjabi Hit Songs
-    TopHits: { q: qTopHits, playlistId: '1265126272' }, // Chartbusters 2025 - Hindi
-    'Viral Songs': { q: qViral, playlistId: '1223482895' }, // Trending Viral Mix
-    'Editor\'s Picks': { q: qEditorsPicks, playlistId: '1139074020' }, // Most Streamed Love Songs
+    Trending: { q: qTrending, playlistId: playlistTrending },
+    Bollywood: { q: qBollywood, playlistId: playlistBollywood },
+    Punjabi: { q: qPunjabi, playlistId: playlistPunjabi },
+    TopHits: { q: qTopHits, playlistId: playlistTopHits },
+    'Viral Songs': { q: qViral, playlistId: playlistViral },
+    'Editor\'s Picks': { q: qEditorsPicks, playlistId: playlistEditors },
   };
 
   const promises = Object.entries(queries).map(async ([key, info]) => {
@@ -1260,7 +1295,7 @@ app.post('/api/home', async (req, res) => {
         }
       }
 
-      // Shuffle the results slightly for variety
+      // Shuffle the results for variety
       const shuffled = songs.sort(() => 0.5 - Math.random());
       
       const mapped = shuffled
@@ -1277,8 +1312,11 @@ app.post('/api/home', async (req, res) => {
   await Promise.all(promises);
 
   const encrypted = encryptPayload(JSON.stringify(sections));
-  cachedHomeSections = encrypted;
-  lastHomeCacheTime = now;
+  
+  if (!refresh) {
+    cachedHomeSections = encrypted;
+    lastHomeCacheTime = now;
+  }
 
   return res.json({ d: encrypted });
 });
@@ -1430,9 +1468,10 @@ app.post('/api/scraped-songs', async (req, res) => {
 
 // POST /api/recommendations — Get song recommendations
 app.post('/api/recommendations', async (req, res) => {
-  const { id, limit = 15 } = req.body;
+  const { id, limit = 15, title: reqTitle, artist: reqArtist } = req.body;
   if (!id) return res.status(400).json({ error: 'id required' });
 
+  let sanitized = [];
   try {
     const qs = new URLSearchParams({
       __call: 'reco.getreco',
@@ -1447,7 +1486,7 @@ app.post('/api/recommendations', async (req, res) => {
     });
     if (r.status === 200) {
       const list = JSON.parse(r.body);
-      const sanitized = (Array.isArray(list) ? list : []).map(s => ({
+      sanitized = (Array.isArray(list) ? list : []).map(s => ({
         id: s.id || '',
         title: s.song || s.title || '',
         artist: s.primary_artists || s.subtitle || '',
@@ -1457,10 +1496,71 @@ app.post('/api/recommendations', async (req, res) => {
         language: s.language || '',
         url: extract320Url(s)
       })).filter(s => s.id);
-
-      return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('Error fetching recommendations from Saavn reco:', err);
+  }
+
+  // Fallback to Last.fm if Saavn reco returned empty or failed
+  if (sanitized.length < 3) {
+    console.log(`Saavn reco returned empty or failed for ID ${id}. Falling back to Last.fm...`);
+    try {
+      let title = reqTitle;
+      let artist = reqArtist;
+
+      if (!title || !artist) {
+        // Try to get details from Saavn
+        const details = await saavnGetDetails(id);
+        if (details) {
+          title = details.title;
+          artist = details.artist;
+        }
+      }
+
+      if (title && artist) {
+        // We have title and artist, query Last.fm for similar tracks
+        const apiKey = '75d20fb472be99275392aefa2760ea09';
+        const url = `http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}&api_key=${apiKey}&format=json&limit=${limit}`;
+        const lfRes = await fetchUrl(url);
+        if (lfRes.status === 200) {
+          const lfJson = JSON.parse(lfRes.body);
+          if (lfJson.similartracks && Array.isArray(lfJson.similartracks.track)) {
+            const tracks = lfJson.similartracks.track.slice(0, limit);
+            console.log(`Found ${tracks.length} similar tracks on Last.fm. Searching them on Saavn...`);
+            
+            // For each similar track, search it on Saavn in parallel
+            const searchPromises = tracks.map(async (t) => {
+              const queryStr = `${t.name} ${t.artist.name}`;
+              try {
+                let sResults = [];
+                try {
+                  sResults = await saavnSearch(queryStr, 1);
+                } catch (_) {
+                  sResults = await saavnFallbackSearch(queryStr, 1);
+                }
+                if (sResults && sResults.length > 0) {
+                  return mapSongToRotty(sResults[0]);
+                }
+              } catch (e) {
+                // Ignore search error
+              }
+              return null;
+            });
+
+            const resolvedSongs = await Promise.all(searchPromises);
+            sanitized = resolvedSongs.filter(s => s && s.id);
+            console.log(`Successfully resolved ${sanitized.length} songs from Last.fm on JioSaavn.`);
+          }
+        }
+      }
+    } catch (lfErr) {
+      console.error('Error in Last.fm recommendations fallback:', lfErr);
+    }
+  }
+
+  if (sanitized.length > 0) {
+    return res.json({ d: encryptPayload(JSON.stringify(sanitized)) });
+  }
 
   return res.status(404).json({ error: 'recommendations_not_found' });
 });

@@ -466,6 +466,51 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     return song;
   }
 
+  Future<SongModel?> _resolveYoutubeFallback(SongModel song) async {
+    debugPrint('ROTTY PLAYBACK: JioSaavn load failed. Resolving YouTube fallback for: ${song.title} - ${song.artist}');
+    try {
+      final query = '${song.title} ${song.artist}';
+      final yt = YoutubeExplode();
+      final searchList = await yt.search.search(query).timeout(const Duration(seconds: 5));
+      if (searchList.isNotEmpty) {
+        final video = searchList.first;
+        final videoId = video.id.value;
+        String? streamUrl;
+        
+        try {
+          final manifest = await yt.videos.streamsClient.getManifest(video.id).timeout(const Duration(seconds: 5));
+          final audioOnly = manifest.audioOnly;
+          if (audioOnly.isNotEmpty) {
+            streamUrl = audioOnly.withHighestBitrate().url.toString();
+          }
+        } catch (_) {}
+
+        if (streamUrl == null) {
+          streamUrl = await _resolvePipedStream(videoId);
+        }
+        if (streamUrl == null) {
+          streamUrl = await _resolveInvidiousStream(videoId);
+        }
+
+        if (streamUrl != null) {
+          yt.close();
+          final server = LocalAudioServer();
+          await server.start();
+          var playUrl = streamUrl;
+          if (server.port != null) {
+            playUrl = 'http://127.0.0.1:${server.port}/proxy?url=${Uri.encodeComponent(streamUrl)}';
+          }
+          debugPrint('ROTTY PLAYBACK: YouTube fallback resolved: $playUrl');
+          return song.copyWith(url: playUrl);
+        }
+      }
+      yt.close();
+    } catch (e) {
+      debugPrint('ROTTY PLAYBACK: YouTube fallback resolution failed: $e');
+    }
+    return null;
+  }
+
   Future<void> _applyFilterToEqualizer(AndroidEqualizer eq, String filterType) async {
     try {
       await eq.setEnabled(true);
@@ -706,10 +751,40 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
               preload: !Platform.isWindows,
             ).timeout(const Duration(seconds: 15));
           } catch (retryError) {
-            debugPrint('ROTTY PLAYBACK: Retry load failed: $retryError');
-            _isCrossfading = false;
-            _handlePlaybackFailure(song);
-            return;
+            debugPrint('ROTTY PLAYBACK: JioSaavn retry failed: $retryError. Trying YouTube fallback self-healing...');
+            try {
+              final fallbackSong = await _resolveYoutubeFallback(activeSong);
+              if (fallbackSong != null && fallbackSong.hasPlayableUrl) {
+                activeSong = fallbackSong;
+                if (_currentUserSong != null && _currentUserSong!.id == activeSong.id) {
+                  _currentUserSong = activeSong;
+                } else if (_currentIndex >= 0 && _currentIndex < _contextQueue.length && _contextQueue[_currentIndex].id == activeSong.id) {
+                  _contextQueue[_currentIndex] = activeSong;
+                }
+                mediaItem.add(_songToMediaItem(activeSong));
+                _bumpQueue();
+
+                final Map<String, String>? ytHeaders = const {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                };
+                await _player.setAudioSource(
+                  AudioSource.uri(
+                    Uri.parse(activeSong.url),
+                    headers: ytHeaders,
+                    tag: _songToMediaItem(activeSong),
+                  ),
+                  preload: !Platform.isWindows,
+                ).timeout(const Duration(seconds: 15));
+                debugPrint('ROTTY PLAYBACK: Successfully self-healed using YouTube fallback stream!');
+              } else {
+                throw Exception('YouTube fallback returned null');
+              }
+            } catch (fallbackError) {
+              debugPrint('ROTTY PLAYBACK: All playback recovery options failed: $fallbackError');
+              _isCrossfading = false;
+              _handlePlaybackFailure(song);
+              return;
+            }
           }
         }
       }
@@ -959,63 +1034,47 @@ class RottyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
 
   void reorderQueue(int oldIndex, int newIndex) {
     try {
-      if (oldIndex < 0 || oldIndex >= songQueue.length) return;
-      if (newIndex < 0 || newIndex > songQueue.length) return;
-      if (oldIndex == newIndex || oldIndex == newIndex - 1) return;
+      final int activeIndex = currentIndex;
+      // Reordering is only allowed for upcoming tracks
+      if (oldIndex < activeIndex + 1 || newIndex < activeIndex + 1) return;
 
-      final int targetIndex = oldIndex < newIndex ? newIndex - 1 : newIndex;
-      final oldLoc = _locateIndex(oldIndex);
+      final upcoming = <SongModel>[..._userQueue, ...(_currentIndex + 1 < _contextQueue.length ? _contextQueue.sublist(_currentIndex + 1) : <SongModel>[])];
       
-      final songToMove = songQueue[oldIndex];
+      final int relativeOld = oldIndex - (activeIndex + 1);
+      final int relativeNew = newIndex - (activeIndex + 1);
 
-      // Remove from original queue
-      if (oldLoc.section == QueueSection.pastContext || oldLoc.section == QueueSection.upcomingContext) {
-        if (oldLoc.index >= 0 && oldLoc.index < _contextQueue.length) {
-          _contextQueue.removeAt(oldLoc.index);
-          _originalContextQueue.removeWhere((s) => s.id == songToMove.id);
-          if (oldLoc.index <= _currentIndex) {
-            _currentIndex--;
-          }
-        }
-      } else if (oldLoc.section == QueueSection.userQueue) {
-        if (oldLoc.index >= 0 && oldLoc.index < _userQueue.length) {
-          _userQueue.removeAt(oldLoc.index);
-        }
-      } else if (oldLoc.section == QueueSection.current) {
-        if (_currentUserSong != null) {
-          _currentUserSong = null;
-        } else {
-          if (_currentIndex >= 0 && _currentIndex < _contextQueue.length) {
-            _contextQueue.removeAt(_currentIndex);
-            _originalContextQueue.removeWhere((s) => s.id == songToMove.id);
-            _currentIndex = _currentIndex.clamp(0, _contextQueue.length - 1);
-          }
-        }
-      }
+      if (relativeOld < 0 || relativeOld >= upcoming.length) return;
+      if (relativeNew < 0 || relativeNew > upcoming.length) return;
 
-      // Recalculate target location in the modified queue structure
-      final newLoc = _locateIndex(targetIndex);
+      final songToMove = upcoming.removeAt(relativeOld);
+      final adjustedNew = relativeNew > relativeOld ? relativeNew - 1 : relativeNew;
+      upcoming.insert(adjustedNew.clamp(0, upcoming.length), songToMove);
 
-      // Insert into target queue with safety clamping
-      if (newLoc.section == QueueSection.pastContext) {
-        final insertIndex = newLoc.index.clamp(0, _contextQueue.length);
-        _contextQueue.insert(insertIndex, songToMove);
-        _originalContextQueue.add(songToMove);
-        _currentIndex++;
-      } else if (newLoc.section == QueueSection.current) {
-        _userQueue.insert(0, songToMove);
-      } else if (newLoc.section == QueueSection.userQueue) {
-        final insertIndex = newLoc.index.clamp(0, _userQueue.length);
-        _userQueue.insert(insertIndex, songToMove);
-      } else {
-        final insertIndex = newLoc.index.clamp(0, _contextQueue.length);
-        _contextQueue.insert(insertIndex, songToMove);
-        _originalContextQueue.add(songToMove);
+      // Save the entire reordered list back to the userQueue and clear the upcoming context queue
+      _userQueue.clear();
+      _userQueue.addAll(upcoming);
+      
+      if (_currentIndex + 1 < _contextQueue.length) {
+        _contextQueue.removeRange(_currentIndex + 1, _contextQueue.length);
       }
 
       _bumpQueue();
+      debugPrint('ROTTY QUEUE: Successfully reordered upcoming queue. Total upcoming size: ${_userQueue.length}');
     } catch (e) {
       print("Error in reorderQueue: $e");
+    }
+  }
+
+  void clearQueue() {
+    try {
+      _userQueue.clear();
+      if (_currentIndex + 1 < _contextQueue.length) {
+        _contextQueue.removeRange(_currentIndex + 1, _contextQueue.length);
+      }
+      _bumpQueue();
+      debugPrint('ROTTY QUEUE: Cleared upcoming queue.');
+    } catch (e) {
+      print("Error in clearQueue: $e");
     }
   }
 

@@ -16,9 +16,9 @@ class MusicRepository {
     _api.setQuality(_storage.audioQuality);
   }
 
-  Future<Map<String, List<SongModel>>> getHomeSections() {
+  Future<Map<String, List<SongModel>>> getHomeSections({bool refresh = false}) {
     UpdateService.instance.checkForUpdates();
-    return _api.getHomeData();
+    return _api.getHomeData(refresh: refresh);
   }
 
   Future<List<SongModel>> searchSongs(String q, {int limit = 25, int page = 1}) {

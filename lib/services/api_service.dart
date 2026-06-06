@@ -331,7 +331,7 @@ class ApiService {
     return _fallbackSumitArtist(resolvedId);
   }
 
-  Future<Map<String, List<SongModel>>> getHomeData() async {
+  Future<Map<String, List<SongModel>>> getHomeData({bool refresh = false}) async {
     final favArtists = StorageService().favoriteArtists;
     final Map<String, List<SongModel>> favoriteSections = {};
 
@@ -351,7 +351,7 @@ class ApiService {
     if (GhostProxyClient.isEnabled) {
       try {
         final proxyClient = GhostProxyClient();
-        final homeJson = await proxyClient.getHome();
+        final homeJson = await proxyClient.getHome(refresh: refresh);
         if (homeJson != null) {
           final sections = <String, List<SongModel>>{};
           sections.addAll(favoriteSections);

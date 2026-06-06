@@ -157,8 +157,8 @@ class GhostProxyClient {
   }
 
   /// Get home sections through proxy
-  Future<Map<String, dynamic>?> getHome() async {
-    final resp = await _post('/api/home', {});
+  Future<Map<String, dynamic>?> getHome({bool refresh = false}) async {
+    final resp = await _post('/api/home', {'refresh': refresh});
     if (resp == null || resp['d'] == null) return null;
     try {
       final decrypted = _decrypt(resp['d'] as String);
