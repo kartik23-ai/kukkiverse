@@ -31,7 +31,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -130,14 +130,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
               indicatorColor: AppColors.accent,
               labelColor: AppColors.accent,
               unselectedLabelColor: AppColors.textTertiary,
-              tabs: const [Tab(text: 'Songs'), Tab(text: 'YouTube'), Tab(text: 'Albums'), Tab(text: 'Artists')],
+              tabs: const [Tab(text: 'Songs'), Tab(text: 'Albums'), Tab(text: 'Artists')],
             ),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
                 children: [
                   _SongsTab(query: query),
-                  _YouTubeTab(query: query),
                   _AlbumsTab(query: query),
                   _ArtistsTab(query: query),
                 ],

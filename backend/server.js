@@ -292,11 +292,13 @@ function fetchUrl(targetUrl, headers = {}, method = 'GET', body = null) {
     };
     let isTerminated = false;
     const isLrc = targetUrl.includes('lrclib.net');
+    const isSaavnDirect = targetUrl.includes('jiosaavn.com/api.php');
+    const timeoutMs = isSaavnDirect ? 1500 : (isLrc ? 10000 : 12000);
     const timer = setTimeout(() => {
       isTerminated = true;
       req.destroy();
       reject(new Error('timeout'));
-    }, isLrc ? 10000 : 12000); // 10s for lrclib, 12s otherwise
+    }, timeoutMs);
 
     const req = lib.request(options, (res) => {
       let data = '';
@@ -1288,6 +1290,45 @@ app.post('/api/scraped-songs', async (req, res) => {
 
   const cacheKey = searchQuery + '_' + limit;
   const now = Date.now();
+
+  // Special override for Hollywood releases to ensure genuine Western hits
+  if (searchQuery.includes('latest english songs') || searchQuery.includes('billboard')) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const jsonPath = path.join(__dirname, 'data', 'official_english_songs.json');
+      if (fs.existsSync(jsonPath)) {
+        const raw = fs.readFileSync(jsonPath, 'utf8');
+        const list = JSON.parse(raw);
+        if (list && list.length > 0) {
+          const encrypted = encryptPayload(JSON.stringify(list.slice(0, limit)));
+          googleSongsCache[cacheKey] = { timestamp: now, data: encrypted };
+          return res.json({ d: encrypted });
+        }
+      }
+    } catch (err) {
+      console.error('Error reading curated English songs file:', err);
+    }
+  }
+
+  // Special override for Bollywood releases to ensure clean Indian hits
+  if (searchQuery.includes('latest hindi songs') || searchQuery.includes('top bollywood songs')) {
+    try {
+      const bollywoodPlaylistId = '1234731818'; // Latest Hindi Hits (Official Hindi Playlist)
+      const rawSongs = await getPlaylistSongs(bollywoodPlaylistId, limit);
+      if (rawSongs && rawSongs.length >= 5) {
+        const sanitized = rawSongs.map(s => mapSongToRotty(s)).filter(s => s && s.id);
+        if (sanitized.length > 0) {
+          const encrypted = encryptPayload(JSON.stringify(sanitized));
+          googleSongsCache[cacheKey] = { timestamp: now, data: encrypted };
+          return res.json({ d: encrypted });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching Bollywood playlist override:', err);
+    }
+  }
+
   if (googleSongsCache[cacheKey] && (now - googleSongsCache[cacheKey].timestamp < 2 * 60 * 60 * 1000)) {
     return res.json({ d: googleSongsCache[cacheKey].data });
   }

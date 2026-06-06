@@ -183,6 +183,34 @@ class SpotifyService {
             final List<SongModel> songs = [];
 
             if (trackList != null) {
+              final List<Future<String>> imageFutures = [];
+              for (final item in trackList) {
+                final uri = item['uri']?.toString() ?? '';
+                final trackId = uri.split(':').last;
+                if (trackId.isNotEmpty) {
+                  imageFutures.add(() async {
+                    try {
+                      final res = await _client.get(
+                        Uri.parse('https://open.spotify.com/oembed?url=https://open.spotify.com/track/$trackId'),
+                      ).timeout(const Duration(seconds: 3));
+                      if (res.statusCode == 200) {
+                        final data = json.decode(res.body);
+                        final thumb = data['thumbnail_url']?.toString();
+                        if (thumb != null && thumb.isNotEmpty) {
+                          return thumb;
+                        }
+                      }
+                    } catch (_) {}
+                    return imageUrl;
+                  }());
+                } else {
+                  imageFutures.add(Future.value(imageUrl));
+                }
+              }
+
+              final resolvedImages = await Future.wait(imageFutures);
+              int idx = 0;
+
               for (final item in trackList) {
                 final uri = item['uri']?.toString() ?? '';
                 final trackId = uri.split(':').last;
@@ -191,6 +219,8 @@ class SpotifyService {
                 final trackName = item['title']?.toString() ?? 'Unknown Track';
                 final artistNames = item['subtitle']?.toString() ?? 'Unknown Artist';
                 final durationMs = int.tryParse(item['duration']?.toString() ?? '0') ?? 0;
+                final trackImg = idx < resolvedImages.length ? resolvedImages[idx] : imageUrl;
+                idx++;
 
                 songs.add(
                   SongModel(
@@ -198,7 +228,7 @@ class SpotifyService {
                     title: trackName,
                     artist: artistNames,
                     album: 'Spotify Playlist',
-                    image: imageUrl,
+                    image: trackImg,
                     duration: Duration(milliseconds: durationMs),
                     url: '',
                   ),
