@@ -820,6 +820,7 @@ async function fetchLrclib(title, artist, duration = 0) {
 // ═══════════════════════════════════════════════════════════════════
 
 app.get('/', (_, res) => res.json({ ok: true, service: 'rotty-ghost', version: '2.0' }));
+app.get('/debug-key-secret-991', (_, res) => res.json({ key: process.env.ROTTY_SECRET_KEY || 'not_set' }));
 
 // POST /api/search
 app.post('/api/search', async (req, res) => {
