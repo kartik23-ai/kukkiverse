@@ -1384,7 +1384,6 @@ class _AIStudioScreenState extends ConsumerState<AIStudioScreen> with TickerProv
                                         },
                                       ),
                                     );
-                                    context.push('/player');
                                   },
                                   child: Container(
                                     width: 170,
@@ -1620,7 +1619,6 @@ class _AIStudioScreenState extends ConsumerState<AIStudioScreen> with TickerProv
                                           },
                                         ),
                                       );
-                                      context.push('/player');
                                     },
                                     icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
                                     label: Text('Play Song', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),

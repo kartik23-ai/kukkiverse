@@ -11,19 +11,41 @@ import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../widgets/crystal_shatter_skeleton.dart';
 import '../../widgets/liquid_glass.dart';
+import '../../widgets/desktop_scroll_wrapper.dart';
 import '../../core/theme/dynamic_palette.dart';
 import '../../utils/play_song.dart';
 import '../../widgets/song_options_sheet.dart';
+import '../../services/storage_service.dart';
+import '../home/home_screen.dart' show IndianTopHitsBox, NewReleasesBox, PopularAlbumsSection;
 
 /// ═══════════════════════════════════════════════════════════════
-/// Desktop Home 3.0 — Liquid Glass, visible cards, glow effects
-/// Quick Picks grid + Continue Listening + Section rows
+/// Desktop Home 4.0 — Full Sections: Trending, New Releases,
+/// Artists, Albums — Liquid Glass throughout
 /// ═══════════════════════════════════════════════════════════════
-class DesktopHome extends ConsumerWidget {
+class DesktopHome extends ConsumerStatefulWidget {
   const DesktopHome({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DesktopHome> createState() => _DesktopHomeState();
+}
+
+class _DesktopHomeState extends ConsumerState<DesktopHome> {
+  late final ScrollController _verticalController;
+
+  @override
+  void initState() {
+    super.initState();
+    _verticalController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _verticalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final homeData = ref.watch(homeDataProvider);
     final recent = ref.watch(recentSongsProvider);
     final suggestedSongsAsync = ref.watch(suggestedSongsProvider);
@@ -32,166 +54,268 @@ class DesktopHome extends ConsumerWidget {
     final mode = ref.watch(appModeProvider);
     final mt = ModeTheme(mode);
     final aiOn = ref.watch(aiDjEnabledProvider);
+    final homeArtistsAsync = ref.watch(homeArtistsProvider);
+    final homeArtists = homeArtistsAsync.valueOrNull ?? [];
 
-    return homeData.when(
-      data: (sections) {
-        if (sections.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    final topArtists = homeArtists.isNotEmpty
+        ? homeArtists.take(8).toList()
+        : const [
+            (name: 'Arijit Singh', img: 'https://c.saavncdn.com/artists/Arijit_Singh_004_20241118063717_150x150.jpg'),
+            (name: 'Pritam', img: 'https://c.saavncdn.com/artists/Pritam_Chakraborty-20170711073326_150x150.jpg'),
+            (name: 'A.R. Rahman', img: 'https://c.saavncdn.com/artists/AR_Rahman_002_20210120084455_150x150.jpg'),
+            (name: 'Shreya Ghoshal', img: 'https://c.saavncdn.com/artists/Shreya_Ghoshal_007_20241101074144_150x150.jpg'),
+            (name: 'Jubin Nautiyal', img: 'https://c.saavncdn.com/artists/Jubin_Nautiyal_003_20231130204020_150x150.jpg'),
+            (name: 'Anuv Jain', img: 'https://c.saavncdn.com/artists/Anuv_Jain_500x500.jpg'),
+            (name: 'Neha Kakkar', img: 'https://c.saavncdn.com/artists/Neha_Kakkar_006_20240603065229_150x150.jpg'),
+            (name: 'Badshah', img: 'https://c.saavncdn.com/artists/Badshah_150x150.jpg'),
+          ];
+
+    return ListView(
+      controller: _verticalController,
+      padding: const EdgeInsets.fromLTRB(32, 20, 32, 120),
+      children: [
+        // ─── Header ───
+        _DesktopHomeHeader(palette: palette, aiOn: aiOn, ref: ref),
+        const SizedBox(height: 24),
+
+        // ─── Genres Row ───
+        _DesktopGenresRow(accentColor: palette.primary, parentController: _verticalController),
+        const SizedBox(height: 28),
+
+        // ─── Quick Picks (homeData first section) ───
+        homeData.when(
+          data: (sections) {
+            if (sections.isEmpty) return const SizedBox.shrink();
+            final first = sections.values.first;
+            if (first.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.music_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.15)),
-                const SizedBox(height: 16),
-                Text('No songs found', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
-                const SizedBox(height: 20),
-                LiquidGlassButton(
-                  accentColor: mt.accent,
-                  onTap: () => ref.invalidate(homeDataProvider),
-                  child: Text('Retry', style: GoogleFonts.inter(color: mt.accent, fontWeight: FontWeight.w600)),
-                ),
+                const _SectionHeader(title: 'Quick Picks'),
+                const SizedBox(height: 12),
+                _QuickPicksGrid(songs: first.take(6).toList(), mt: mt, palette: palette),
+                const SizedBox(height: 28),
               ],
-            ),
-          );
-        }
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(32, 20, 32, 100),
-          children: [
-            // ─── Header with greeting + AI DJ ───
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ShaderMask(
-                        shaderCallback: (bounds) => LinearGradient(
-                          colors: [palette.primary, const Color(0xFF7B61FF), const Color(0xFF00D4FF)],
-                        ).createShader(bounds),
-                        child: Text(
-                          _greeting(),
-                          style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Your personal music universe',
-                        style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withValues(alpha: 0.5), letterSpacing: 0.5),
-                      ),
-                    ],
-                  ),
-                ),
-                LiquidGlassButton(
-                  accentColor: palette.primary,
-                  isActive: aiOn,
-                  borderRadius: 20,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  onTap: () => ref.read(aiDjEnabledProvider.notifier).state = !aiOn,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.auto_awesome_rounded, size: 16,
-                          color: aiOn ? palette.primary : Colors.white.withValues(alpha: 0.4)),
-                      const SizedBox(width: 8),
-                      Text(
-                        'AI DJ ${aiOn ? 'ON' : 'OFF'}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12, fontWeight: FontWeight.w700,
-                          color: aiOn ? palette.primary : Colors.white.withValues(alpha: 0.4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // ─── Explore Genres & Moods Row (Visual Excellence) ───
-            _DesktopGenresRow(accentColor: palette.primary),
-            const SizedBox(height: 24),
-
-            // ─── Quick Picks (liquid glass compact cards) ───
-            if (sections.values.first.isNotEmpty) ...[
-              _QuickPicksGrid(songs: sections.values.first.take(6).toList(), mt: mt, palette: palette),
-              const SizedBox(height: 32),
-            ],
-
-            // ─── Continue Listening ───
-            if (recent.isNotEmpty) ...[
-              _SectionHeader(title: 'Continue Listening'),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 220,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: recent.take(10).length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 16),
-                  itemBuilder: (_, i) => _DesktopSongCard(song: recent[i], playlist: recent, mt: mt),
-                ),
-              ),
-              const SizedBox(height: 28),
-            ],
-
-            // ─── Recommended for You ───
-            if (suggestedSongs.isNotEmpty) ...[
-              _SectionHeader(title: 'Recommended for You'),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 220,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: suggestedSongs.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 16),
-                  itemBuilder: (_, i) => _DesktopSongCard(song: suggestedSongs[i], playlist: suggestedSongs, mt: mt),
-                ),
-              ),
-              const SizedBox(height: 28),
-            ],
-
-            // ─── All Sections ───
-            for (final entry in sections.entries) ...[
-              _SectionHeader(title: entry.key),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 220,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: entry.value.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 16),
-                  itemBuilder: (_, i) => _DesktopSongCard(song: entry.value[i], playlist: entry.value, mt: mt),
-                ),
-              ),
-              const SizedBox(height: 28),
-            ],
-          ],
-        );
-      },
-      loading: () => const Padding(
-        padding: EdgeInsets.all(32),
-        child: Column(
-          children: [
-            CrystalShatterSkeleton(height: 180),
-            SizedBox(height: 16),
-            CrystalShatterSkeleton(height: 120),
-          ],
+            );
+          },
+          loading: () => const Padding(
+            padding: EdgeInsets.only(bottom: 28),
+            child: CrystalShatterSkeleton(height: 120),
+          ),
+          error: (_, __) => const SizedBox.shrink(),
         ),
-      ),
-      error: (_, __) => Center(
-        child: Text('Failed to load', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5))),
-      ),
-    );
-  }
 
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
+        // ─── Continue Listening ───
+        if (recent.isNotEmpty) ...[
+          const _SectionHeader(title: 'Continue Listening'),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 230,
+            child: DesktopScrollWrapper(
+              parentController: _verticalController,
+              builder: (context, controller, physics) => ListView.separated(
+                controller: controller,
+                physics: physics,
+                scrollDirection: Axis.horizontal,
+                itemCount: recent.take(12).length,
+                separatorBuilder: (_, __) => const SizedBox(width: 16),
+                itemBuilder: (_, i) => _DesktopSongCard(song: recent[i], playlist: recent, mt: mt),
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+        ],
+
+        // ─── Recommended for You ───
+        if (suggestedSongs.isNotEmpty) ...[
+          const _SectionHeader(title: 'Recommended for You'),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 230,
+            child: DesktopScrollWrapper(
+              parentController: _verticalController,
+              builder: (context, controller, physics) => ListView.separated(
+                controller: controller,
+                physics: physics,
+                scrollDirection: Axis.horizontal,
+                itemCount: suggestedSongs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 16),
+                itemBuilder: (_, i) => _DesktopSongCard(song: suggestedSongs[i], playlist: suggestedSongs, mt: mt),
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+        ],
+
+        // ─── Top Artists ───
+        const _SectionHeader(title: 'Top Artists'),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 130,
+          child: DesktopScrollWrapper(
+            parentController: _verticalController,
+            builder: (context, controller, physics) => ListView.separated(
+              controller: controller,
+              physics: physics,
+              scrollDirection: Axis.horizontal,
+              itemCount: topArtists.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              itemBuilder: (context, i) {
+                final artist = topArtists[i];
+                return _DesktopArtistChip(
+                  name: artist.name,
+                  img: artist.img,
+                  onTap: () => context.push('/artist/${artist.name}', extra: {
+                    'name': artist.name,
+                    'image': artist.img,
+                  }),
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        // ─── Indian Top Hits (reused from Android) ───
+        IndianTopHitsBox(mt: mt),
+        const SizedBox(height: 28),
+
+        // ─── Home API Sections ───
+        homeData.when(
+          data: (sections) {
+            final filtered = sections.entries.where((e) {
+              final key = e.key.toLowerCase();
+              return key != 'new releases' && key != 'top hits' && key != 'weekly top songs';
+            }).toList();
+            if (filtered.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: filtered.map((entry) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SectionHeader(title: entry.key),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 230,
+                    child: DesktopScrollWrapper(
+                      parentController: _verticalController,
+                      builder: (context, controller, physics) => ListView.separated(
+                        controller: controller,
+                        physics: physics,
+                        scrollDirection: Axis.horizontal,
+                        itemCount: entry.value.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 16),
+                        itemBuilder: (_, i) => _DesktopSongCard(song: entry.value[i], playlist: entry.value, mt: mt),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                ],
+              )).toList(),
+            );
+          },
+          loading: () => const Padding(
+            padding: EdgeInsets.only(bottom: 20),
+            child: CrystalShatterSkeleton(height: 140),
+          ),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+
+        // ─── New Releases (reused from Android) ───
+        DesktopScrollWrapper(
+          parentController: _verticalController,
+          builder: (context, controller, physics) => NewReleasesBox(
+            mt: mt,
+            controller: controller,
+            physics: physics,
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        // ─── Popular Albums (reused from Android) ───
+        DesktopScrollWrapper(
+          parentController: _verticalController,
+          builder: (context, controller, physics) => PopularAlbumsSection(
+            mt: mt,
+            controller: controller,
+            physics: physics,
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
   }
 }
 
-/// Section header — bright, visible
+// ─── Header ───
+class _DesktopHomeHeader extends StatelessWidget {
+  const _DesktopHomeHeader({required this.palette, required this.aiOn, required this.ref});
+  final DynamicPalette palette;
+  final bool aiOn;
+  final WidgetRef ref;
+
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = StorageService().profileName;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ShaderMask(
+                shaderCallback: (bounds) => LinearGradient(
+                  colors: [palette.primary, const Color(0xFF7B61FF), const Color(0xFF00D4FF)],
+                ).createShader(bounds),
+                child: Text(
+                  name.isNotEmpty ? '${_greeting()}, $name 👋' : _greeting(),
+                  style: GoogleFonts.inter(fontSize: 30, fontWeight: FontWeight.w900, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Your personal music universe',
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withValues(alpha: 0.45), letterSpacing: 0.3),
+              ),
+            ],
+          ),
+        ),
+        LiquidGlassButton(
+          accentColor: palette.primary,
+          isActive: aiOn,
+          borderRadius: 20,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          onTap: () => ref.read(aiDjEnabledProvider.notifier).state = !aiOn,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_awesome_rounded, size: 15,
+                  color: aiOn ? palette.primary : Colors.white.withValues(alpha: 0.4)),
+              const SizedBox(width: 7),
+              Text(
+                'AI DJ ${aiOn ? 'ON' : 'OFF'}',
+                style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: aiOn ? palette.primary : Colors.white.withValues(alpha: 0.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Section Header ───
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title});
   final String title;
@@ -201,6 +325,90 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       title,
       style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+    );
+  }
+}
+
+// ─── Artist Chip ───
+class _DesktopArtistChip extends StatefulWidget {
+  const _DesktopArtistChip({required this.name, required this.img, required this.onTap});
+  final String name;
+  final String img;
+  final VoidCallback onTap;
+
+  @override
+  State<_DesktopArtistChip> createState() => _DesktopArtistChipState();
+}
+
+class _DesktopArtistChipState extends State<_DesktopArtistChip> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          transform: _hovered ? Matrix4.translationValues(0, -4, 0) : Matrix4.identity(),
+          child: Column(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _hovered ? const Color(0xFFFA2D48).withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.15),
+                    width: 2,
+                  ),
+                  boxShadow: _hovered
+                      ? [BoxShadow(color: const Color(0xFFFA2D48).withValues(alpha: 0.3), blurRadius: 16)]
+                      : null,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(40),
+                  child: CachedNetworkImage(
+                    imageUrl: widget.img,
+                    width: 80, height: 80,
+                    fit: BoxFit.cover,
+                    memCacheWidth: 160,
+                    placeholder: (_, __) => Container(color: Colors.white10),
+                    errorWidget: (_, __, ___) => Container(
+                      color: Colors.white10,
+                      child: Center(
+                        child: Text(
+                          widget.name.isNotEmpty ? widget.name[0] : '?',
+                          style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 80,
+                child: Text(
+                  widget.name,
+                  style: GoogleFonts.inter(
+                    color: _hovered ? Colors.white : Colors.white.withValues(alpha: 0.7),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -256,7 +464,7 @@ class _QuickPickCardState extends ConsumerState<_QuickPickCard> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               decoration: BoxDecoration(
@@ -323,7 +531,7 @@ class _QuickPickCardState extends ConsumerState<_QuickPickCard> {
   }
 }
 
-/// Premium song card — liquid glass border, glow shadow, hover lift
+/// Desktop song card — liquid glass border, glow, hover lift
 class _DesktopSongCard extends ConsumerStatefulWidget {
   const _DesktopSongCard({required this.song, required this.playlist, required this.mt});
   final SongModel song;
@@ -347,13 +555,7 @@ class _DesktopSongCardState extends ConsumerState<_DesktopSongCard> {
         onTap: () async {
           try {
             await playSongWithContext(ref, widget.song, playlist: widget.playlist);
-          } catch (_) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Could not play ${widget.song.title}')),
-              );
-            }
-          }
+          } catch (_) {}
         },
         onSecondaryTapDown: (_) => showSongOptionsSheet(context, ref, widget.song),
         child: AnimatedContainer(
@@ -361,12 +563,11 @@ class _DesktopSongCardState extends ConsumerState<_DesktopSongCard> {
           curve: Curves.easeOutCubic,
           transform: _hovered ? Matrix4.translationValues(0, -6, 0) : Matrix4.identity(),
           child: SizedBox(
-            width: 165,
+            width: 170,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Album art with glass border + glow
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
@@ -393,9 +594,9 @@ class _DesktopSongCardState extends ConsumerState<_DesktopSongCard> {
                         borderRadius: BorderRadius.circular(13),
                         child: CachedNetworkImage(
                           imageUrl: widget.song.image,
-                          width: 165, height: 155,
+                          width: 170, height: 160,
                           fit: BoxFit.cover,
-                          memCacheWidth: 330,
+                          memCacheWidth: 340,
                           fadeInDuration: Duration.zero,
                         ),
                       ),
@@ -423,26 +624,16 @@ class _DesktopSongCardState extends ConsumerState<_DesktopSongCard> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Title + artist
                 Text(
                   widget.song.title,
                   style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, height: 1.2),
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    navigateToArtist(context, ref, widget.song.artist);
-                  },
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Text(
-                      widget.song.artist,
-                      style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 11, height: 1.2),
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                Text(
+                  widget.song.artist,
+                  style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 11, height: 1.2),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -453,9 +644,11 @@ class _DesktopSongCardState extends ConsumerState<_DesktopSongCard> {
   }
 }
 
+/// Genres row
 class _DesktopGenresRow extends StatelessWidget {
-  const _DesktopGenresRow({required this.accentColor});
+  const _DesktopGenresRow({required this.accentColor, required this.parentController});
   final Color accentColor;
+  final ScrollController parentController;
 
   static const _genres = [
     ('Love', LinearGradient(colors: [Color(0xFFFF416C), Color(0xFFFF4B2B)])),
@@ -480,48 +673,49 @@ class _DesktopGenresRow extends StatelessWidget {
         const SizedBox(height: 12),
         SizedBox(
           height: 48,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _genres.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, i) {
-              final item = _genres[i];
-              return LiquidGlassButton(
-                accentColor: accentColor,
-                onTap: () {
-                  context.push('/album/genre_${item.$1}', extra: {
-                    'title': '${item.$1} Station',
-                  });
-                },
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                borderRadius: 14,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: item.$2,
+          child: DesktopScrollWrapper(
+            parentController: parentController,
+            builder: (context, controller, physics) => ListView.separated(
+              controller: controller,
+              physics: physics,
+              scrollDirection: Axis.horizontal,
+              itemCount: _genres.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, i) {
+                final item = _genres[i];
+                return LiquidGlassButton(
+                  accentColor: accentColor,
+                  onTap: () {
+                    context.push('/album/genre_${item.$1}', extra: {
+                      'title': '${item.$1} Station',
+                    });
+                  },
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  borderRadius: 14,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 10, height: 10,
+                        decoration: BoxDecoration(shape: BoxShape.circle, gradient: item.$2),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      item.$1,
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                      const SizedBox(width: 8),
+                      Text(
+                        item.$1,
+                        style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],
     );
   }
+}
+
+void navigateToArtist(BuildContext context, WidgetRef ref, String artistName) {
+  context.push('/artist/$artistName', extra: {'name': artistName, 'image': ''});
 }

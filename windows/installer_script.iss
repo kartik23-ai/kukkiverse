@@ -4,7 +4,7 @@
 
 [Setup]
 AppName=Rotty Music
-AppVersion=1.1.0
+AppVersion=1.2.0
 AppPublisher=Rotty Music
 DefaultDirName={autopf}\Rotty Music
 DefaultGroupName=Rotty Music

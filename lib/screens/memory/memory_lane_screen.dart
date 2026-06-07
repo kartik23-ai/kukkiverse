@@ -57,7 +57,6 @@ class MemoryLaneScreen extends ConsumerWidget {
       child: RottyGlass(
         onTap: () async {
           await playSongWithContext(ref, song);
-          if (context.mounted) context.push('/player');
         },
         child: Row(
           children: [

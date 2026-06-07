@@ -19,7 +19,7 @@ class RottyGlass extends StatelessWidget {
     this.tint,
     this.accentColor,
     this.glowIntensity = 0.15,
-    this.blurAmount = 10,
+    this.blurAmount = 5,
     this.enableBlur = true,
   });
 
@@ -43,63 +43,71 @@ class RottyGlass extends StatelessWidget {
     final performanceMode = StorageService().albumArtRipples;
     final finalEnableBlur = enableBlur && performanceMode;
 
-    final container = Container(
+    Widget container = Container(
       padding: padding,
       decoration: BoxDecoration(
-        // Semi-transparent tinted surface
-        color: (tint ?? AppColors.bgCard).withValues(alpha: finalEnableBlur ? 0.40 : 0.85),
+        color: (tint ?? Colors.white).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(borderRadius),
-        // ✨ 1px inner glass edge-light
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
+          color: Colors.white.withValues(alpha: 0.15),
           width: 1,
         ),
-        // Subtle inner highlight for depth
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withValues(alpha: 0.06),
-            Colors.transparent,
-            Colors.transparent,
-            Colors.white.withValues(alpha: 0.02),
+            Colors.white.withValues(alpha: 0.12),
+            Colors.white.withValues(alpha: 0.08),
+            Colors.white.withValues(alpha: 0.04),
           ],
-          stops: const [0.0, 0.3, 0.7, 1.0],
+          stops: const [0.0, 0.5, 1.0],
         ),
       ),
       child: child,
     );
 
-    return Material(
+    Widget wrappedContent = Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(borderRadius),
-            // Colored glow shadow from album art palette
-            boxShadow: [
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(borderRadius),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+            if (glowIntensity > 0)
               BoxShadow(
                 color: glow.withValues(alpha: glowIntensity),
-                blurRadius: 24,
-                spreadRadius: -4,
-                offset: const Offset(0, 8),
+                blurRadius: 30,
+                spreadRadius: 2,
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: finalEnableBlur
-                ? BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
-                    child: container,
-                  )
-                : container,
-          ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: finalEnableBlur
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+                  child: container,
+                )
+              : container,
         ),
       ),
     );
+
+    if (onTap != null) {
+      wrappedContent = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: wrappedContent,
+        ),
+      );
+    }
+
+    return wrappedContent;
   }
 }
 
@@ -123,25 +131,53 @@ class RottyGlassLite extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
+    Widget container = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(borderRadius),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: AppColors.bgCard.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(borderRadius),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-            boxShadow: accentColor != null
-                ? [BoxShadow(color: accentColor!.withValues(alpha: 0.12), blurRadius: 16, spreadRadius: -4)]
-                : null,
-          ),
-          child: child,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1,
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.09),
+            Colors.white.withValues(alpha: 0.06),
+            Colors.white.withValues(alpha: 0.03),
+          ],
+          stops: const [0.0, 0.5, 1.0],
         ),
       ),
+      child: child,
     );
+
+    Widget wrappedContent = Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(borderRadius),
+          boxShadow: accentColor != null
+              ? [BoxShadow(color: accentColor!.withValues(alpha: 0.12), blurRadius: 16, spreadRadius: -4)]
+              : null,
+        ),
+        child: container,
+      ),
+    );
+
+    if (onTap != null) {
+      wrappedContent = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: wrappedContent,
+        ),
+      );
+    }
+
+    return wrappedContent;
   }
 }
 

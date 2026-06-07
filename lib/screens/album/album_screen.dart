@@ -17,6 +17,7 @@ import '../../providers/premium_providers.dart';
 import '../../services/storage_service.dart';
 import '../../services/ai_image_service.dart';
 import '../../widgets/rotty_glow_r_skeleton.dart';
+import '../../widgets/elite_background.dart';
 
 class AlbumScreen extends ConsumerStatefulWidget {
   const AlbumScreen({
@@ -102,15 +103,17 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
       img = widget.image ?? (list.isNotEmpty ? list.first.image : '');
     }
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    final isWindows = Theme.of(context).platform == TargetPlatform.windows;
+
+    final scaffold = Scaffold(
+      backgroundColor: isWindows ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
             expandedHeight: 320,
             pinned: true,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            backgroundColor: isWindows ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
               onPressed: () => context.pop(),
@@ -134,7 +137,12 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, AppColors.bg.withValues(alpha: 0.98)],
+                        colors: [
+                          Colors.transparent,
+                          isWindows
+                              ? Colors.black.withValues(alpha: 0.75)
+                              : AppColors.bg.withValues(alpha: 0.98),
+                        ],
                       ),
                     ),
                   ),
@@ -173,7 +181,6 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
                           await Future.delayed(const Duration(milliseconds: 120));
                         }
                         await playSongWithContext(ref, list.first, playlist: list, isPlayAll: true);
-                        if (mounted) context.push('/player');
                       },
                       icon: const Icon(Icons.play_arrow_rounded),
                       label: Text(_playAllWave ? 'Starting…' : 'Play All'),
@@ -210,7 +217,6 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
                     isPlaying: currentSong?.id == song.id,
                     onTap: () async {
                       await playSongWithContext(ref, song, playlist: list);
-                      if (context.mounted) context.push('/player');
                     },
                     onMore: () => showSongOptionsSheet(context, ref, song),
                   )
@@ -225,6 +231,14 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen> {
         ],
       ),
     );
+
+    if (isWindows) {
+      return RottyDynamicAuroraBackground(
+        intensity: 0.8,
+        child: scaffold,
+      );
+    }
+    return scaffold;
   }
 }
 

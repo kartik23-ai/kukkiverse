@@ -54,7 +54,6 @@ class _StudioDetailScreenState extends ConsumerState<StudioDetailScreen> with Si
         },
       ),
     );
-    context.push('/player');
   }
 
   Future<void> _deleteStudioCreation(SongModel song) async {

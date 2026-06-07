@@ -144,7 +144,6 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
             isPlaying: currentSong?.id == s.id,
             onTap: () async {
               await playSongWithContext(ref, s, playlist: songs);
-              if (context.mounted) context.push('/player');
             },
             onMore: () => showSongOptionsSheet(context, ref, s),
           );

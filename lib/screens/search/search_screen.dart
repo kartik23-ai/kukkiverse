@@ -313,7 +313,6 @@ Widget _songList(BuildContext context, WidgetRef ref, List<SongModel> songs) {
           isPlaying: currentSong?.id == s.id,
           onTap: () async {
             await playSongWithContext(ref, s);
-            if (context.mounted) context.push('/player');
           },
           onMore: () => showSongOptionsSheet(context, ref, s),
         ),

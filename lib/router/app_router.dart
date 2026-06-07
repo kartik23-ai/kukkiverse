@@ -43,6 +43,7 @@ import '../screens/drive/night_drive_screen.dart';
 import '../screens/focus/focus_screen.dart';
 import '../screens/sleep/sleep_screen.dart';
 import '../screens/onboarding/taste_selection_screen.dart';
+import '../screens/desktop/desktop_taste_screen.dart';
 import '../providers/feature_providers.dart';
 import '../models/song_model.dart';
 
@@ -54,6 +55,12 @@ final appRouter = GoRouter(
       path: '/taste-selection',
       pageBuilder: (context, state) {
         final isOnboarding = state.uri.queryParameters['onboarding'] == 'true';
+        if (Theme.of(context).platform == TargetPlatform.windows) {
+          return rottyPage(
+            child: DesktopTasteScreen(isOnboarding: isOnboarding),
+            from: AxisDirection.right,
+          );
+        }
         return rottyPage(
           child: TasteSelectionScreen(isOnboarding: isOnboarding),
           from: AxisDirection.right,
@@ -76,6 +83,12 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/player',
       pageBuilder: (_, __) => rottyPage(child: const PlayerScreen(), from: AxisDirection.up),
+      redirect: (context, state) {
+        if (Theme.of(context).platform == TargetPlatform.windows) {
+          return '/home';
+        }
+        return null;
+      },
     ),
     GoRoute(
       path: '/lyrics/:id',

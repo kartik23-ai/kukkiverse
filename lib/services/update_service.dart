@@ -68,20 +68,21 @@ class UpdateService extends ChangeNotifier {
         String? minVersionStr;
         String? downloadUrlStr;
         String? latestVersionStr;
-        if (FirebaseService.instance.useRestFallback) {
-          final doc = await FirestoreRestClient.getDoc('meta/app_config');
-          if (doc != null) {
-            minVersionStr = doc['min_version']?.toString();
-            downloadUrlStr = doc['download_url']?.toString();
-            latestVersionStr = doc['version']?.toString();
-          }
-        } else {
-          final doc = await FirebaseFirestore.instance.collection('meta').doc('app_config').get();
+        final firestore = FirebaseService.instance.db;
+        if (firestore != null) {
+          final doc = await firestore.collection('meta').doc('app_config').get();
           if (doc.exists) {
             final data = doc.data();
             minVersionStr = data?['min_version']?.toString();
             downloadUrlStr = data?['download_url']?.toString();
             latestVersionStr = data?['version']?.toString();
+          }
+        } else {
+          final doc = await FirestoreRestClient.getDoc('meta/app_config');
+          if (doc != null) {
+            minVersionStr = doc['min_version']?.toString();
+            downloadUrlStr = doc['download_url']?.toString();
+            latestVersionStr = doc['version']?.toString();
           }
         }
 

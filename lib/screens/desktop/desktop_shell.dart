@@ -19,6 +19,7 @@ import '../../utils/play_song.dart';
 import 'desktop_sidebar.dart';
 import 'desktop_player_bar.dart';
 import 'desktop_home.dart';
+import 'desktop_taste_screen.dart';
 import 'desktop_search.dart';
 import 'desktop_now_playing.dart';
 import 'desktop_full_screen.dart';
@@ -111,53 +112,83 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     final palette = ref.watch(dynamicPaletteProvider);
     final showOverlay = ref.watch(supportOverlayVisibilityProvider);
     final party = ref.watch(partyRoomProvider);
+    final song = ref.watch(nowPlayingProvider);
 
     final shell = Scaffold(
       backgroundColor: const Color(0xFF050508),
       body: RottyDynamicAuroraBackground(
         intensity: 0.7,
-        child: Column(
+        child: Stack(
           children: [
-            const DesktopTitlebar(),
-            // Mode indicator
-            if (mode != RottyAppMode.normal)
-              _ModeIndicator(mode: mode, mt: mt),
-            // Main area
-            Expanded(
-              child: Row(
-                children: [
-                  DesktopSidebar(
-                    activeTab: _tab,
-                    onTabChanged: (i) => setState(() => _tab = i),
+            Column(
+              children: [
+                const DesktopTitlebar(),
+                // Mode indicator
+                if (mode != RottyAppMode.normal)
+                  _ModeIndicator(mode: mode, mt: mt),
+                // Main area
+                Expanded(
+                  child: Row(
+                    children: [
+                      DesktopSidebar(
+                        activeTab: _tab,
+                        onTabChanged: (i) => setState(() => _tab = i),
+                      ),
+                      // Center content
+                      Expanded(
+                        child: AnimatedPadding(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            24,
+                            _showNowPlaying ? 12 : 24,
+                            24,
+                          ),
+                          child: LiquidGlass(
+                            borderRadius: 20,
+                            blur: 5,
+                            surfaceOpacity: 0.03,
+                            borderOpacity: 0.12,
+                            margin: EdgeInsets.zero,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder: (child, animation) =>
+                                  FadeTransition(opacity: animation, child: child),
+                              child: _buildTab(party),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Right panel
+                      ClipRect(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                          width: _showNowPlaying ? 300 : 0,
+                          child: _showNowPlaying
+                              ? const DesktopNowPlaying()
+                              : const SizedBox.shrink(),
+                        ),
+                      ),
+                    ],
                   ),
-                  // Center content
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) =>
-                          FadeTransition(opacity: animation, child: child),
-                      child: _buildTab(party),
-                    ),
-                  ),
-                  // Right panel
-                  ClipRect(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                      width: _showNowPlaying ? 300 : 0,
-                      child: _showNowPlaying
-                          ? const DesktopNowPlaying()
-                          : const SizedBox.shrink(),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            DesktopPlayerBar(
-              onToggleFullScreen: () => setState(() => _fullScreen = true),
-              onToggleNowPlaying: () => setState(() => _showNowPlaying = !_showNowPlaying),
+            // Floating player bar with smooth springy slide-up entry
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 1100),
+              curve: Curves.elasticOut,
+              left: 264,
+              right: 24,
+              bottom: song != null ? 20 : -130,
+              child: DesktopPlayerBar(
+                onToggleFullScreen: () => setState(() => _fullScreen = true),
+                onToggleNowPlaying: () => setState(() => _showNowPlaying = !_showNowPlaying),
+              ),
             ),
           ],
         ),
@@ -195,7 +226,9 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
       );
     }
     return switch (_tab) {
-      0 => const DesktopHome(key: ValueKey('d_home')),
+      0 => ref.watch(hasSelectedFavoritesProvider)
+          ? const DesktopHome(key: ValueKey('d_home'))
+          : const DesktopTasteScreen(key: ValueKey('d_taste')),
       1 => const DesktopSearch(key: ValueKey('d_search')),
       2 => const _DesktopLibrary(key: ValueKey('d_lib')),
       3 => const _DesktopLabs(key: ValueKey('d_labs')),

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../providers/providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../widgets/live_karaoke_lyrics.dart';
+import '../../widgets/liquid_glass.dart';
 import '../../models/lyrics_line.dart';
 import '../../models/song_model.dart';
 import '../../services/audio_handler.dart';
@@ -31,26 +32,15 @@ class _DesktopNowPlayingState extends ConsumerState<DesktopNowPlaying> {
     final palette = ref.watch(dynamicPaletteProvider);
     final handler = ref.read(audioHandlerProvider);
 
-    return ClipRect(
-      child: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.white.withValues(alpha: 0.06),
-                  Colors.white.withValues(alpha: 0.03),
-                ],
-              ),
-              border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-            ),
-            child: song == null ? _emptyState() : _songPanel(song, palette, handler),
-          ),
-        ),
-      ),
+    return LiquidGlass(
+      borderRadius: 20,
+      blur: 5,
+      surfaceOpacity: 0.08,
+      borderOpacity: 0.15,
+      margin: const EdgeInsets.fromLTRB(12, 24, 24, 24),
+      glowColor: palette.primary.withValues(alpha: 0.05),
+      glowIntensity: 0.5,
+      child: song == null ? _emptyState() : _songPanel(song, palette, handler),
     );
   }
 

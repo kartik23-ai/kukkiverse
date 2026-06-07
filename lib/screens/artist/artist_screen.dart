@@ -9,6 +9,7 @@ import '../../utils/play_song.dart';
 import '../../widgets/album_stage_3d.dart';
 import '../../widgets/rotty_glass.dart';
 import '../../widgets/rotty_glow_r_skeleton.dart';
+import '../../widgets/elite_background.dart';
 
 class ArtistScreen extends ConsumerWidget {
   const ArtistScreen({super.key, required this.artistId, this.name, this.image});
@@ -20,9 +21,10 @@ class ArtistScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(artistDetailProvider(artistId));
+    final isWindows = Theme.of(context).platform == TargetPlatform.windows;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    final scaffold = Scaffold(
+      backgroundColor: isWindows ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
       body: data.when(
         data: (d) {
           final artist = d.artist;
@@ -39,7 +41,7 @@ class ArtistScreen extends ConsumerWidget {
                   SliverAppBar(
                     expandedHeight: 300,
                     pinned: true,
-                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    backgroundColor: isWindows ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
                     flexibleSpace: FlexibleSpaceBar(
                       background: Stack(
                         fit: StackFit.expand,
@@ -50,7 +52,12 @@ class ArtistScreen extends ConsumerWidget {
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Theme.of(context).scaffoldBackgroundColor],
+                                colors: [
+                                  Colors.transparent,
+                                  isWindows
+                                      ? Colors.black.withValues(alpha: 0.75)
+                                      : Theme.of(context).scaffoldBackgroundColor
+                                ],
                               ),
                             ),
                           ),
@@ -86,7 +93,6 @@ class ArtistScreen extends ConsumerWidget {
                             onPressed: () async {
                               if (d.songs.isEmpty) return;
                               await playSongWithContext(ref, d.songs.first, playlist: d.songs, isPlayAll: true);
-                              if (context.mounted) context.push('/player');
                             },
                             icon: const Icon(Icons.play_arrow_rounded),
                             label: const Text('Play like this artist'),
@@ -142,7 +148,6 @@ class ArtistScreen extends ConsumerWidget {
                           subtitle: Text(s.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
                           onTap: () async {
                             await playSongWithContext(ref, s, playlist: d.songs);
-                            if (context.mounted) context.push('/player');
                           },
                         );
                       },
@@ -220,6 +225,14 @@ class ArtistScreen extends ConsumerWidget {
         error: (_, __) => Center(child: Text('Failed to load artist', style: GoogleFonts.inter(color: AppColors.textTertiary))),
       ),
     );
+
+    if (isWindows) {
+      return RottyDynamicAuroraBackground(
+        intensity: 0.8,
+        child: scaffold,
+      );
+    }
+    return scaffold;
   }
 }
 

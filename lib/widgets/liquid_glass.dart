@@ -17,7 +17,7 @@ class LiquidGlass extends StatelessWidget {
     super.key,
     required this.child,
     this.borderRadius = 16,
-    this.blur = 30,
+    this.blur = 5,
     this.surfaceOpacity = 0.08,
     this.borderOpacity = 0.15,
     this.glowColor,
@@ -191,7 +191,7 @@ class _LiquidGlassCardState extends State<LiquidGlassCard> {
       content = ClipRRect(
         borderRadius: BorderRadius.circular(widget.borderRadius),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
           child: cardContent,
         ),
       );
@@ -323,7 +323,7 @@ class LiquidGlassSidebar extends StatelessWidget {
     if (!isMobile) {
       return ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
           child: content,
         ),
       );
@@ -372,7 +372,7 @@ class LiquidGlassBottomBar extends StatelessWidget {
     if (!isMobile) {
       return ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
           child: content,
         ),
       );

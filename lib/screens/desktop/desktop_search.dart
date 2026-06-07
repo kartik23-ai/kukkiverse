@@ -11,6 +11,7 @@ import '../../providers/feature_providers.dart';
 import '../../utils/play_song.dart';
 import '../../widgets/song_options_sheet.dart';
 import '../../widgets/desktop_song_row.dart';
+import '../../widgets/desktop_scroll_wrapper.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Desktop Search — Wide layout with multi-column results
@@ -32,7 +33,7 @@ class DesktopSearch extends ConsumerWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
               child: Container(
                 height: 48,
                 decoration: BoxDecoration(
@@ -90,17 +91,37 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _SearchResults extends ConsumerWidget {
+class _SearchResults extends ConsumerStatefulWidget {
   const _SearchResults({required this.query});
   final String query;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final songs = ref.watch(searchSongsProvider(query));
-    final albums = ref.watch(searchAlbumsProvider(query));
-    final artists = ref.watch(searchArtistsProvider(query));
+  ConsumerState<_SearchResults> createState() => _SearchResultsState();
+}
+
+class _SearchResultsState extends ConsumerState<_SearchResults> {
+  late final ScrollController _verticalController;
+
+  @override
+  void initState() {
+    super.initState();
+    _verticalController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _verticalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final songs = ref.watch(searchSongsProvider(widget.query));
+    final albums = ref.watch(searchAlbumsProvider(widget.query));
+    final artists = ref.watch(searchArtistsProvider(widget.query));
 
     return ListView(
+      controller: _verticalController,
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 100),
       children: [
         // Songs
@@ -134,11 +155,16 @@ class _SearchResults extends ConsumerWidget {
                 _sectionTitle('Albums'),
                 SizedBox(
                   height: 200,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 16),
-                    itemBuilder: (context, i) => _AlbumCard(album: list[i]),
+                  child: DesktopScrollWrapper(
+                    parentController: _verticalController,
+                    builder: (context, controller, physics) => ListView.separated(
+                      controller: controller,
+                      physics: physics,
+                      scrollDirection: Axis.horizontal,
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 16),
+                      itemBuilder: (context, i) => _AlbumCard(album: list[i]),
+                    ),
                   ),
                 ),
               ],
@@ -160,11 +186,16 @@ class _SearchResults extends ConsumerWidget {
                 _sectionTitle('Artists'),
                 SizedBox(
                   height: 180,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 16),
-                    itemBuilder: (context, i) => _ArtistCard(artist: list[i]),
+                  child: DesktopScrollWrapper(
+                    parentController: _verticalController,
+                    builder: (context, controller, physics) => ListView.separated(
+                      controller: controller,
+                      physics: physics,
+                      scrollDirection: Axis.horizontal,
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 16),
+                      itemBuilder: (context, i) => _ArtistCard(artist: list[i]),
+                    ),
                   ),
                 ),
               ],

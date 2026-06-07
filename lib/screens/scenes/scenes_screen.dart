@@ -111,7 +111,6 @@ class SceneDetailScreen extends ConsumerWidget {
                     subtitle: Text(s.artist, style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12)),
                     onTap: () async {
                       await playSongWithContext(ref, s, playlist: list);
-                      if (context.mounted) context.push('/player');
                     },
                   );
                 },

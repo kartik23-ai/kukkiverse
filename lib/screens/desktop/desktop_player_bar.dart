@@ -27,21 +27,60 @@ class DesktopPlayerBar extends ConsumerWidget {
     final party = ref.watch(partyRoomProvider);
 
     if (song == null) {
-      return LiquidGlassBottomBar(
-        height: 86,
-        child: Center(
-          child: Text('Select a song to start listening',
-              style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.25), fontSize: 13)),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
-    return LiquidGlassBottomBar(
+    final songColor = palette.primary;
+    final tintColor = Color.alphaBlend(
+      songColor.withValues(alpha: 0.04),
+      Colors.white.withValues(alpha: 0.015),
+    );
+
+    return Container(
       height: 90,
-      accentColor: palette.primary,
-      child: Column(
-        children: [
-          // ─── Draggable seek bar ───
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: songColor.withValues(alpha: 0.02),
+            blurRadius: 30,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.04),
+                  tintColor,
+                  Colors.white.withValues(alpha: 0.015),
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: const GlassRefractionPainter(borderRadius: 20),
+                  ),
+                ),
+                Column(
+                  children: [
+                    // ─── Draggable seek bar ───
           _SeekBar(handler: handler, song: song, palette: palette, enabled: party.code == null || party.isHost),
           // ─── Main controls ───
           Expanded(
@@ -236,7 +275,12 @@ class DesktopPlayerBar extends ConsumerWidget {
               ),
             ),
           ),
-        ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -498,4 +542,87 @@ class _HoverIconState extends State<_HoverIcon> {
       ),
     );
   }
+}
+
+class GlassRefractionPainter extends CustomPainter {
+  final double borderRadius;
+
+  const GlassRefractionPainter({required this.borderRadius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
+
+    // 1. Draw a dark outer refraction border (gives the lens thickness shadow)
+    final darkEdgePaint = Paint()
+      ..strokeWidth = 3.5
+      ..style = PaintingStyle.stroke
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.black.withValues(alpha: 0.15),
+          Colors.black.withValues(alpha: 0.45),
+        ],
+      ).createShader(rect);
+    canvas.drawRRect(rrect, darkEdgePaint);
+
+    // 2. Draw the main light-catching outer highlight (the sharp glass edge)
+    final borderPaint = Paint()
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: 0.75), // Very bright top-left
+          Colors.white.withValues(alpha: 0.15),
+          Colors.white.withValues(alpha: 0.45), // Subtly bright bottom-right reflection
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(rect);
+    canvas.drawRRect(rrect, borderPaint);
+
+    // 3. Draw a very thin inner glowing ring (simulating the inner refraction reflection)
+    final innerHighlightPaint = Paint()
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white.withValues(alpha: 0.35),
+          Colors.transparent,
+          Colors.white.withValues(alpha: 0.15),
+        ],
+      ).createShader(rect);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        rect.deflate(1.5),
+        Radius.circular(borderRadius - 1.5),
+      ),
+      innerHighlightPaint,
+    );
+
+    // 4. Shiny diagonal highlight across the glass surface
+    final sheenPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..shader = LinearGradient(
+        begin: const Alignment(-0.8, -1.0),
+        end: const Alignment(0.8, 1.0),
+        colors: [
+          Colors.transparent,
+          Colors.white.withValues(alpha: 0.04),
+          Colors.white.withValues(alpha: 0.07),
+          Colors.white.withValues(alpha: 0.01),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.35, 0.4, 0.45, 1.0],
+      ).createShader(rect);
+    canvas.drawRRect(rrect, sheenPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant GlassRefractionPainter oldDelegate) => false;
 }

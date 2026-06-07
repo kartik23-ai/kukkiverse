@@ -1168,7 +1168,6 @@ class _SongCard extends ConsumerWidget {
         onTap: () async {
           try {
             await playSongWithContext(ref, song, playlist: playlist, runAiDj: ref.read(aiDjEnabledProvider));
-            if (context.mounted) context.push('/player');
           } catch (_) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1303,8 +1302,10 @@ Widget _genresRow(BuildContext context, WidgetRef ref, ModeTheme mt) {
 
 
 class PopularAlbumsSection extends ConsumerStatefulWidget {
-  const PopularAlbumsSection({super.key, required this.mt});
+  const PopularAlbumsSection({super.key, required this.mt, this.physics, this.controller});
   final ModeTheme mt;
+  final ScrollPhysics? physics;
+  final ScrollController? controller;
 
   @override
   ConsumerState<PopularAlbumsSection> createState() => _PopularAlbumsSectionState();
@@ -1391,6 +1392,8 @@ class _PopularAlbumsSectionState extends ConsumerState<PopularAlbumsSection> {
           SizedBox(
             height: 196,
             child: ListView.separated(
+              controller: widget.controller,
+              physics: widget.physics,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               scrollDirection: Axis.horizontal,
               itemCount: _albums.length,
@@ -1499,8 +1502,10 @@ class _LoadingChipState extends State<_LoadingChip> with SingleTickerProviderSta
 }
 
 class NewReleasesBox extends ConsumerStatefulWidget {
-  const NewReleasesBox({super.key, required this.mt});
+  const NewReleasesBox({super.key, required this.mt, this.physics, this.controller});
   final ModeTheme mt;
+  final ScrollPhysics? physics;
+  final ScrollController? controller;
 
   @override
   ConsumerState<NewReleasesBox> createState() => _NewReleasesBoxState();
@@ -1584,6 +1589,8 @@ class _NewReleasesBoxState extends ConsumerState<NewReleasesBox> {
                     );
                   }
                   return ListView.separated(
+                    controller: widget.controller,
+                    physics: widget.physics,
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     scrollDirection: Axis.horizontal,
                     itemCount: songs.length + 1,
@@ -1807,7 +1814,6 @@ class _IndianTopHitsBoxState extends ConsumerState<IndianTopHitsBox> {
                                   isPlaying: currentSong?.id == song.id,
                                   onTap: () async {
                                     await playSongWithContext(ref, song, playlist: songs);
-                                    if (context.mounted) context.push('/player');
                                   },
                                   onMore: () => showSongOptionsSheet(context, ref, song),
                                   mt: mt,

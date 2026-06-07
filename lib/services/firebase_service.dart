@@ -396,7 +396,6 @@ class FirebaseService {
     await StorageService().setHasSelectedFavorites(true);
 
     if (!_ready) return;
-    if (FirebaseAuth.instance.currentUser == null) return;
 
     final data = {
       'favoriteArtists': artists,
@@ -406,6 +405,7 @@ class FirebaseService {
     if (_useRestFallback) {
       await FirestoreRestClient.setDoc('users/$_uid', data, merge: true);
     } else {
+      if (FirebaseAuth.instance.currentUser == null) return;
       try {
         await db!.collection('users').doc(_uid).set(data, SetOptions(merge: true));
       } catch (e) {
@@ -422,7 +422,6 @@ class FirebaseService {
     await StorageService().setHasSelectedFavorites(false);
 
     if (!_ready) return;
-    if (FirebaseAuth.instance.currentUser == null) return;
 
     final data = {
       'favoriteArtists': <String>[],
@@ -432,6 +431,7 @@ class FirebaseService {
     if (_useRestFallback) {
       await FirestoreRestClient.setDoc('users/$_uid', data, merge: true);
     } else {
+      if (FirebaseAuth.instance.currentUser == null) return;
       try {
         await db!.collection('users').doc(_uid).set(data, SetOptions(merge: true));
       } catch (e) {

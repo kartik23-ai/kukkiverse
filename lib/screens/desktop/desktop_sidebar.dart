@@ -10,8 +10,8 @@ import '../../widgets/liquid_glass.dart';
 import '../../services/storage_service.dart';
 
 /// ═══════════════════════════════════════════════════════════════
-/// Desktop Sidebar 3.0 — True Liquid Glass Navigation
-/// Translucent, light-catching, neon active pill, visible text
+/// Desktop Sidebar 5.0 — Restored & Deep Liquid Glass Navigation
+/// 240px wide, translucent, light-catching, neon active pill, playlists
 /// ═══════════════════════════════════════════════════════════════
 class DesktopSidebar extends ConsumerWidget {
   const DesktopSidebar({super.key, required this.activeTab, required this.onTabChanged});
@@ -94,7 +94,7 @@ class DesktopSidebar extends ConsumerWidget {
               height: 1,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.transparent, Colors.white.withValues(alpha: 0.15), Colors.transparent],
+                  colors: [Colors.transparent, Colors.white.withValues(alpha: 0.12), Colors.transparent],
                 ),
               ),
             ),
@@ -279,7 +279,7 @@ class _NavItemState extends State<_NavItem> {
                   : null,
               boxShadow: widget.selected
                   ? [BoxShadow(color: widget.accent.withValues(alpha: 0.15), blurRadius: 16)]
-                  : null,
+                  : const [],
             ),
             child: Row(
               children: [
@@ -293,7 +293,7 @@ class _NavItemState extends State<_NavItem> {
                     color: widget.accent,
                     boxShadow: widget.selected
                         ? [BoxShadow(color: widget.accent.withValues(alpha: 0.6), blurRadius: 8)]
-                        : null,
+                        : const [],
                   ),
                 ),
                 Icon(
