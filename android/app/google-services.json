@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "829924809763",
+    "project_id": "rotty-music",
+    "storage_bucket": "rotty-music.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:829924809763:android:078a95235a3aae0b27a596",
+        "android_client_info": {
+          "package_name": "com.rottymusic.rotty_music"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDkD9uaVanSvrsAg_Myg7mYKW0GSjB0t7w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
