@@ -8,9 +8,29 @@
 
 body {
   color: white;
-  background-color: #030303;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #080a10;
+  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   overflow-x: hidden;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #06080e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.3);
+  border-radius: 9999px;
+  border: 2px solid #06080e;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.6);
 }
 
 /* Noise Overlay */
@@ -28,62 +48,41 @@ body {
 
 /* Glassmorphism */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.6);
 }
 
 .glass-button {
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(5px);
-  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-button:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(168, 85, 247, 0.4);
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 25px -5px rgba(168, 85, 247, 0.3);
 }
 
-/* Utility */
-.text-glow {
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+/* Aurora Gradient Animated Background */
+.aurora-bg {
+  background: radial-gradient(circle at 50% -20%, #1e1233 0%, #0c0a17 50%, #06050b 100%);
 }
 
-.gradient-text {
-  background: linear-gradient(135deg, #FFF 0%, #AAA 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.title-glow {
+  text-shadow: 0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(99, 102, 241, 0.4);
 }
 
-/* Smooth Scroll */
-html {
-  scroll-behavior: smooth;
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
 }
 
-@layer utilities {
-  .text-gradient {
-    background: linear-gradient(to right, #7042f8, #00ddeb);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .glass-panel {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-  }
-
-  .title-glow {
-    text-shadow: 0 0 40px rgba(112, 66, 248, 0.5), 0 0 80px rgba(0, 221, 235, 0.3);
-  }
-
-  .aurora-bg {
-    background: radial-gradient(circle at 50% -20%, #1a1a40, #030014 60%);
-  }
+.animate-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
 }

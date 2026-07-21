@@ -57,7 +57,7 @@ export default function BottomPlayer() {
                     ) : (
                         <ReactPlayer
                             ref={playerRef}
-                            url={activeSong.videoUrl || `https://www.youtube.com/watch?v=${activeSong.id}`}
+                            url={activeSong.audioUrl || activeSong.videoUrl || `https://www.youtube.com/watch?v=${activeSong.id}`}
                             playing={playing}
                             volume={volume}
                             width="100%"
@@ -79,7 +79,7 @@ export default function BottomPlayer() {
 
                 {!isFullScreen && (
                     <ReactPlayer
-                        url={activeSong.videoUrl || `https://www.youtube.com/watch?v=${activeSong.id}`}
+                        url={activeSong.audioUrl || activeSong.videoUrl || `https://www.youtube.com/watch?v=${activeSong.id}`}
                         playing={playing}
                         volume={volume}
                         width="0"
