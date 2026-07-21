@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/local_audio_server.dart';
 import '../services/update_service.dart';
+import '../services/yt_music_service.dart';
 
 class MusicRepository {
   final ApiService _api;
@@ -16,24 +17,73 @@ class MusicRepository {
     _api.setQuality(_storage.audioQuality);
   }
 
-  Future<Map<String, List<SongModel>>> getHomeSections({bool refresh = false}) {
+  Future<Map<String, List<SongModel>>> getHomeSections({bool refresh = false}) async {
     UpdateService.instance.checkForUpdates();
-    return _api.getHomeData(refresh: refresh);
+    try {
+      final rawSections = await YtMusicService.instance.getHomeSections(refresh: refresh);
+      final Map<String, List<SongModel>> mappedSections = {};
+      for (final entry in rawSections.entries) {
+        final List<SongModel> songs = [];
+        for (final item in entry.value) {
+          if (item is SongModel) {
+            songs.add(item);
+          } else if (item is AlbumItem) {
+            songs.add(SongModel(
+              id: item.id,
+              title: item.name,
+              artist: item.language,
+              album: 'Playlist',
+              image: item.image,
+              duration: Duration.zero,
+              url: '',
+            ));
+          }
+        }
+        if (songs.isNotEmpty) {
+          mappedSections[entry.key] = songs;
+        }
+      }
+      return mappedSections;
+    } catch (_) {
+      return {};
+    }
   }
 
   Future<List<SongModel>> searchSongs(String q, {int limit = 25, int page = 1}) {
     UpdateService.instance.checkForUpdates();
-    return _api.searchSongs(q, limit: limit, page: page);
+    return YtMusicService.instance.searchSongs(q, limit: limit);
   }
 
-  Future<List<AlbumItem>> searchAlbums(String q) => _api.searchAlbums(q);
-  Future<List<ArtistItem>> searchArtists(String q) => _api.searchArtists(q);
-  Future<List<SongModel>> getAlbumSongs(String id) => _api.getAlbumSongs(id);
+  Future<List<AlbumItem>> searchAlbums(String q) => YtMusicService.instance.searchPlaylists(q);
+
+  Future<List<ArtistItem>> searchArtists(String q) async {
+    final browseId = await YtMusicService.instance.searchArtistBrowseId(q);
+    if (browseId != null) {
+      return [
+        ArtistItem(
+          id: browseId,
+          name: q,
+          image: '',
+          bio: 'YouTube Official Artist',
+          listeners: '250K+',
+        )
+      ];
+    }
+    return [];
+  }
+
+  Future<List<SongModel>> getAlbumSongs(String id) {
+    final cleanId = id.replaceFirst('youtube_playlist_', '');
+    return YtMusicService.instance.getPlaylistSongs(cleanId);
+  }
+
   Future<List<SongModel>> getGenreSongs(String genre) {
     UpdateService.instance.checkForUpdates();
-    return _api.getGenreSongs(genre);
+    return YtMusicService.instance.searchSongs(genre, limit: 30);
   }
-  Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String id) => _api.getArtist(id);
+
+  Future<({ArtistItem? artist, List<SongModel> songs, List<AlbumItem> albums})> getArtist(String id) =>
+      YtMusicService.instance.getArtistDetails(id);
 
   Future<SongModel> resolveSong(SongModel song) async {
     UpdateService.instance.checkForUpdates();

@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   cloud_firestore
   firebase_auth
   firebase_core
+  flutter_inappwebview_windows
   just_audio_windows
   permission_handler_windows
   screen_retriever_windows
