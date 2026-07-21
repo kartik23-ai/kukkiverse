@@ -1,72 +1,85 @@
 'use client';
 
-import { Maximize2, Minimize2, MoreHorizontal, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Volume2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Maximize2, Minimize2, MoreHorizontal, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Volume2, Video, Music, Sparkles } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
 import ReactPlayer from 'react-player/youtube';
 import { usePlayer } from '../context/PlayerContext';
 
 export default function BottomPlayer() {
-    const { state, togglePlay, setVolume, playNext, playPrev, toggleShuffle, toggleRepeat } = usePlayer();
-    const { activeSong, playing, volume, shuffle, repeatMode } = state;
+    const { state, togglePlay, setVolume, playNext, playPrev, toggleShuffle, toggleRepeat, toggleMode } = usePlayer();
+    const { activeSong, playing, volume, shuffle, repeatMode, mode } = state;
     const [progress, setProgress] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const playerRef = useRef<ReactPlayer>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.volume = volume;
+            if (playing) {
+                videoRef.current.play().catch(() => {});
+            } else {
+                videoRef.current.pause();
+            }
+        }
+    }, [playing, volume, activeSong]);
 
     if (!activeSong) return null;
 
     const handleEnded = () => {
         if (repeatMode === 'ONE') {
             playerRef.current?.seekTo(0);
-            playerRef.current?.getInternalPlayer()?.playVideo();
         } else {
             playNext(true);
         }
     };
 
-    /* Full Screen Overlay */
-    /* Full Screen Overlay */
-    /* Full Screen Overlay */
+    const isDirectVideo = activeSong.videoUrl && (activeSong.videoUrl.endsWith('.mp4') || activeSong.videoUrl.endsWith('.webm'));
+
     return (
         <>
-            {/* React Player - Always mounted, never unmounts */}
-            {/* React Player - Persistence is key, so we keep it mounted. 
-            When full screen, we position it to cover the artwork. 
-            When minimized, we hide it visually but keep audio running. */}
+            {/* React Player / Media Container - Always mounted for persistent audio */}
             <div className={`fixed z-[70] transition-all duration-500 ease-in-out
-            ${isFullScreen
-                    ? 'inset-x-0 top-32 mx-auto w-full max-w-lg aspect-square opacity-100 pointer-events-auto'
+                ${isFullScreen
+                    ? 'inset-x-0 top-24 mx-auto w-full max-w-xl aspect-video opacity-100 pointer-events-auto'
                     : 'w-1 h-1 opacity-0 pointer-events-none -top-10 left-0'}
             `}>
                 <div className={`w-full h-full rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 ${!isFullScreen && 'hidden'}`}>
-                    <ReactPlayer
-                        ref={playerRef}
-                        url={`https://www.youtube.com/watch?v=${activeSong.id}`}
-                        playing={playing}
-                        volume={volume}
-                        width="100%"
-                        height="100%"
-                        onProgress={(p) => setProgress(p.played)}
-                        onDuration={setDuration}
-                        onEnded={handleEnded}
-                        config={{
-                            playerVars: {
-                                autoplay: 1,
-                                controls: 0,
-                                modestbranding: 1,
-                                rel: 0
-                            }
-                        }}
-                    />
+                    {mode === 'VIDEO' && isDirectVideo ? (
+                        <video
+                            ref={videoRef}
+                            src={activeSong.videoUrl}
+                            className="w-full h-full object-cover"
+                            controlsList="nodownload"
+                            onEnded={handleEnded}
+                        />
+                    ) : (
+                        <ReactPlayer
+                            ref={playerRef}
+                            url={activeSong.videoUrl || `https://www.youtube.com/watch?v=${activeSong.id}`}
+                            playing={playing}
+                            volume={volume}
+                            width="100%"
+                            height="100%"
+                            onProgress={(p) => setProgress(p.played)}
+                            onDuration={setDuration}
+                            onEnded={handleEnded}
+                            config={{
+                                playerVars: {
+                                    autoplay: 1,
+                                    controls: 1,
+                                    modestbranding: 1,
+                                    rel: 0
+                                }
+                            }}
+                        />
+                    )}
                 </div>
 
-                {/* Fallback hidden player for audio-only mode when minimized (if above is hidden) */}
-                {/* Actually, ReactPlayer needs to stay mounted. If we hide it with display:none it might stop buffering in some browsers, 
-               but opacity:0 is safer. 
-           */}
                 {!isFullScreen && (
                     <ReactPlayer
-                        url={`https://www.youtube.com/watch?v=${activeSong.id}`}
+                        url={activeSong.videoUrl || `https://www.youtube.com/watch?v=${activeSong.id}`}
                         playing={playing}
                         volume={volume}
                         width="0"
@@ -78,9 +91,9 @@ export default function BottomPlayer() {
                 )}
             </div>
 
+            {/* Full Screen Overlay */}
             {isFullScreen && (
                 <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col p-6 backdrop-blur-3xl animate-in fade-in slide-in-from-bottom-10 duration-300">
-                    {/* Background Blur */}
                     <div className="absolute inset-0 z-[-1] opacity-30 pointer-events-none">
                         <img src={activeSong.thumbnail} alt="" className="w-full h-full object-cover blur-3xl scale-125" />
                     </div>
@@ -91,31 +104,60 @@ export default function BottomPlayer() {
                             <Minimize2 size={24} />
                         </button>
                         <div className="flex flex-col items-center">
-                            <span className="text-[10px] md:text-xs font-bold tracking-[0.2em] text-white/50 uppercase">Now Playing</span>
-                            <span className="text-[10px] md:text-xs font-bold tracking-widest text-white/30 hidden md:block">VX MUSIC PLAYER</span>
+                            <span className="text-[10px] md:text-xs font-bold tracking-[0.2em] text-purple-400 uppercase flex items-center gap-1">
+                                <Sparkles size={12} /> ROTTY ULTRA PLAYER
+                            </span>
+                            <span className="text-[10px] md:text-xs font-bold tracking-widest text-white/40">NOW PLAYING</span>
                         </div>
-                        <button className="text-white/70 hover:text-white p-2">
-                            <MoreHorizontal size={24} />
+                        
+                        {/* Audio / Video Toggle Pill */}
+                        <button
+                            onClick={toggleMode}
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold transition-all text-white shadow-lg"
+                        >
+                            {mode === 'VIDEO' ? <Video size={14} className="text-purple-400" /> : <Music size={14} className="text-emerald-400" />}
+                            <span>{mode === 'VIDEO' ? 'Video Mode 🎬' : 'Audio Mode 🎵'}</span>
                         </button>
                     </div>
 
-                    {/* Main Content Container - Fits viewport */}
+                    {/* Main Content Container */}
                     <div className="flex-1 flex flex-col items-center justify-between w-full max-w-lg mx-auto py-2 min-h-0">
+                        {/* Visual Display */}
+                        {mode === 'VIDEO' ? (
+                            <div className="relative aspect-video w-full rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/15 bg-black">
+                                <ReactPlayer
+                                    url={activeSong.videoUrl || `https://www.youtube.com/watch?v=${activeSong.id}`}
+                                    playing={playing}
+                                    volume={volume}
+                                    width="100%"
+                                    height="100%"
+                                    onProgress={(p) => setProgress(p.played)}
+                                    onDuration={setDuration}
+                                    onEnded={handleEnded}
+                                />
+                            </div>
+                        ) : (
+                            <div className="relative aspect-square w-auto h-auto max-h-[42vh] rounded-full overflow-hidden shadow-2xl shadow-black/80 ring-4 ring-white/10 shrink-1 group">
+                                <img
+                                    src={activeSong.thumbnail}
+                                    alt={activeSong.title}
+                                    className={`w-full h-full object-cover transition-all duration-1000 ${playing ? 'animate-[spin_12s_linear_infinite]' : ''}`}
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-black/90 rounded-full flex items-center justify-center border-2 border-white/20">
+                                    <div className="w-4 h-4 bg-purple-500 rounded-full animate-ping" />
+                                </div>
+                            </div>
+                        )}
 
-                        {/* Artwork - Flexible height */}
-                        <div className="relative aspect-square w-auto h-auto max-h-[45vh] lg:max-h-[50vh] rounded-2xl overflow-hidden shadow-2xl shadow-black/50 ring-1 ring-white/10 shrink-1">
-                            <img src={activeSong.thumbnail} alt={activeSong.title} className="w-full h-full object-cover" />
-                        </div>
-
-                        {/* Info */}
+                        {/* Song Details */}
                         <div className="text-center space-y-1 w-full px-4 shrink-0 my-4">
-                            <h1 className="text-xl md:text-3xl font-bold text-white truncate px-2">{activeSong.title}</h1>
-                            <p className="text-base md:text-lg text-gray-400 truncate">{activeSong.artist}</p>
+                            <h1 className="text-xl md:text-2xl font-bold text-white truncate px-2">{activeSong.title}</h1>
+                            <p className="text-sm md:text-base text-gray-400 truncate">{activeSong.artist}</p>
                         </div>
 
-                        {/* Progress & Controls Container */}
+                        {/* Progress & Controls */}
                         <div className="w-full flex flex-col gap-4 shrink-0 pb-4">
-                            {/* Progress */}
                             <div className="w-full space-y-2">
                                 <div className="h-1.5 bg-white/10 rounded-full w-full relative group cursor-pointer">
                                     <input
@@ -132,7 +174,7 @@ export default function BottomPlayer() {
                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                     />
                                     <div
-                                        className="absolute h-full bg-white rounded-full group-hover:bg-green-400 transition-colors pointer-events-none"
+                                        className="absolute h-full bg-gradient-to-r from-purple-500 to-emerald-400 rounded-full group-hover:bg-purple-400 transition-colors pointer-events-none"
                                         style={{ width: `${progress * 100}%` }}
                                     />
                                 </div>
@@ -146,30 +188,27 @@ export default function BottomPlayer() {
                             <div className="flex items-center justify-between w-full max-w-xs md:max-w-md mx-auto">
                                 <button
                                     onClick={toggleShuffle}
-                                    className={`transition p-2 ${shuffle ? 'text-green-500' : 'text-gray-400 hover:text-white'}`}
+                                    className={`transition p-2 ${shuffle ? 'text-purple-400' : 'text-gray-400 hover:text-white'}`}
                                 >
-                                    <Shuffle size={20} className="md:w-6 md:h-6" />
+                                    <Shuffle size={20} />
                                 </button>
-
-                                <button onClick={playPrev} className="text-white hover:scale-110 transition p-2"><SkipBack size={28} className="md:w-10 md:h-10" fill="currentColor" /></button>
-
+                                <button onClick={playPrev} className="text-white hover:scale-110 transition p-2">
+                                    <SkipBack size={28} fill="currentColor" />
+                                </button>
                                 <button
                                     onClick={togglePlay}
-                                    className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-full flex items-center justify-center text-black hover:scale-105 transition shadow-lg shadow-white/20"
+                                    className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-black hover:scale-105 transition shadow-lg shadow-white/20"
                                 >
-                                    {playing ? <Pause size={32} className="md:w-10 md:h-10" fill="black" /> : <Play size={32} className="md:w-10 md:h-10 ml-1" fill="black" />}
+                                    {playing ? <Pause size={30} fill="black" /> : <Play size={30} className="ml-1" fill="black" />}
                                 </button>
-
-                                <button onClick={() => playNext()} className="text-white hover:scale-110 transition p-2"><SkipForward size={28} className="md:w-10 md:h-10" fill="currentColor" /></button>
-
+                                <button onClick={() => playNext()} className="text-white hover:scale-110 transition p-2">
+                                    <SkipForward size={28} fill="currentColor" />
+                                </button>
                                 <button
                                     onClick={toggleRepeat}
-                                    className={`transition p-2 ${repeatMode !== 'OFF' ? 'text-green-500' : 'text-gray-400 hover:text-white'} relative`}
+                                    className={`transition p-2 ${repeatMode !== 'OFF' ? 'text-purple-400' : 'text-gray-400 hover:text-white'} relative`}
                                 >
-                                    <Repeat size={20} className="md:w-6 md:h-6" />
-                                    {repeatMode === 'ONE' && (
-                                        <span className="absolute top-1 right-1 text-[8px] font-bold bg-black rounded-full w-3.5 h-3.5 flex items-center justify-center border border-green-500">1</span>
-                                    )}
+                                    <Repeat size={20} />
                                 </button>
                             </div>
                         </div>
@@ -179,16 +218,15 @@ export default function BottomPlayer() {
 
             {/* Floating Glass Island Player */}
             <div className="fixed bottom-6 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-3xl z-40 transition-all duration-500 ease-in-out">
-                <div className="glass-panel rounded-[2rem] p-3 md:p-4 flex items-center justify-between shadow-2xl shadow-black/50 ring-1 ring-white/10 bg-black/40 backdrop-blur-2xl">
-
-                    {/* Left: Info */}
+                <div className="glass-panel rounded-[2rem] p-3 md:p-4 flex items-center justify-between shadow-2xl shadow-black/80 border border-white/10 bg-black/60 backdrop-blur-2xl">
+                    {/* Left: Song Info */}
                     <div
-                        className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition group min-w-0 flex-1"
+                        className="flex items-center gap-4 cursor-pointer hover:opacity-90 transition group min-w-0 flex-1"
                         onClick={() => setIsFullScreen(true)}
                     >
-                        <div className="w-12 h-12 md:w-14 md:h-14 bg-gray-800 rounded-full md:rounded-2xl overflow-hidden relative shrink-0 shadow-lg animate-[spin_10s_linear_infinite] md:animate-none group-hover:scale-105 transition">
+                        <div className="w-12 h-12 md:w-14 md:h-14 bg-gray-900 rounded-2xl overflow-hidden relative shrink-0 shadow-lg border border-white/10">
                             <img src={activeSong.thumbnail} alt={activeSong.title} className="object-cover w-full h-full" />
-                            <div className="absolute inset-0 bg-black/40 hidden md:flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
                                 <Maximize2 size={16} className="text-white" />
                             </div>
                         </div>
@@ -198,54 +236,44 @@ export default function BottomPlayer() {
                         </div>
                     </div>
 
-                    {/* Center: Controls */}
-                    <div className="flex items-center gap-2 md:gap-6 shrink-0">
+                    {/* Center: Playback Controls & Mode Switcher */}
+                    <div className="flex items-center gap-3 md:gap-5 shrink-0">
+                        {/* Audio / Video Quick Toggle */}
                         <button
-                            onClick={(e) => { e.stopPropagation(); toggleShuffle(); }}
-                            className={`transition hidden md:block p-2 hover:bg-white/5 rounded-full ${shuffle ? 'text-green-400' : 'text-gray-400 hover:text-white'}`}
+                            onClick={toggleMode}
+                            title={mode === 'VIDEO' ? 'Switch to Audio Mode' : 'Switch to Video Mode'}
+                            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-xs font-semibold transition text-white"
                         >
-                            <Shuffle size={18} />
+                            {mode === 'VIDEO' ? <Video size={13} className="text-purple-400" /> : <Music size={13} className="text-emerald-400" />}
+                            <span>{mode === 'VIDEO' ? 'Video' : 'Audio'}</span>
                         </button>
 
-                        <button onClick={(e) => { e.stopPropagation(); playPrev(); }} className="text-gray-300 hover:text-white transition p-2 hover:bg-white/5 rounded-full hidden md:block"><SkipBack size={22} fill="currentColor" /></button>
-
+                        <button onClick={(e) => { e.stopPropagation(); playPrev(); }} className="text-gray-300 hover:text-white transition p-2 hidden md:block">
+                            <SkipBack size={20} fill="currentColor" />
+                        </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                            className="w-10 h-10 md:w-12 md:h-12 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 transition shadow-lg shadow-white/20 active:scale-95"
+                            className="w-11 h-11 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 transition shadow-lg shadow-white/20 active:scale-95"
                         >
-                            {playing ? <Pause size={20} fill="black" /> : <Play size={20} fill="black" className="ml-1" />}
+                            {playing ? <Pause size={20} fill="black" /> : <Play size={20} className="ml-0.5" fill="black" />}
                         </button>
-
-                        <button onClick={(e) => { e.stopPropagation(); playNext(); }} className="text-gray-300 hover:text-white transition p-2 hover:bg-white/5 rounded-full"><SkipForward size={22} fill="currentColor" /></button>
-
-                        <button
-                            onClick={(e) => { e.stopPropagation(); toggleRepeat(); }}
-                            className={`transition hidden md:block p-2 hover:bg-white/5 rounded-full ${repeatMode !== 'OFF' ? 'text-green-400' : 'text-gray-400 hover:text-white'} relative`}
-                        >
-                            <Repeat size={18} />
-                            {repeatMode === 'ONE' && (
-                                <span className="absolute top-1 right-1 text-[8px] font-bold bg-black rounded-full w-3 h-3 flex items-center justify-center border border-green-400">1</span>
-                            )}
+                        <button onClick={(e) => { e.stopPropagation(); playNext(); }} className="text-gray-300 hover:text-white transition p-2">
+                            <SkipForward size={20} fill="currentColor" />
                         </button>
                     </div>
 
-                    {/* Right: Volume / Progress */}
+                    {/* Right: Volume & Progress */}
                     <div className="hidden md:flex items-center gap-4 flex-1 justify-end pl-4">
-                        {/* Mini Progress */}
-                        <div className="w-24 flex flex-col gap-1 group">
+                        <div className="w-20 flex flex-col gap-1">
                             <div className="h-1 bg-white/10 rounded-full overflow-hidden relative">
-                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 w-full transform origin-left transition-transform duration-300"
+                                <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-emerald-400 w-full transform origin-left transition-transform duration-300"
                                     style={{ transform: `scaleX(${progress})` }}
                                 />
                             </div>
-                            <div className="flex justify-between text-[10px] text-gray-500 font-mono">
-                                <span>{formatTime(progress * duration)}</span>
-                            </div>
                         </div>
-
                         <div className="flex items-center gap-2">
-                            <Volume2 size={18} className="text-gray-400" />
-                            <div className="w-16 h-1 bg-white/10 rounded-full relative overflow-hidden group">
+                            <Volume2 size={16} className="text-gray-400" />
+                            <div className="w-16 h-1 bg-white/10 rounded-full relative overflow-hidden">
                                 <div className="absolute inset-0 bg-white w-full transform origin-left" style={{ transform: `scaleX(${volume})` }} />
                                 <input
                                     type="range" min={0} max={1} step={0.05} value={volume}
@@ -266,4 +294,4 @@ const formatTime = (seconds: number) => {
     const min = Math.floor(seconds / 60);
     const sec = Math.floor(seconds % 60);
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
-}
+};

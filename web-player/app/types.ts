@@ -4,9 +4,12 @@ export interface Song {
   artist: string;
   thumbnail: string;
   duration?: number;
+  audioUrl?: string;
+  videoUrl?: string;
 }
 
 export type RepeatMode = 'OFF' | 'ALL' | 'ONE';
+export type PlayerMode = 'AUDIO' | 'VIDEO';
 
 export interface PlayerState {
   playing: boolean;
@@ -16,4 +19,5 @@ export interface PlayerState {
   volume: number;
   shuffle: boolean;
   repeatMode: RepeatMode;
+  mode: PlayerMode;
 }
