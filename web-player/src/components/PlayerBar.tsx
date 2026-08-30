@@ -4,7 +4,7 @@ import { StorageService } from '../services/storage';
 import { SongOptionsMenu } from './SongOptionsMenu';
 import { 
   Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, 
-  Volume2, VolumeX, Heart, Maximize2, Activity, Maximize, Minimize
+  Volume2, VolumeX, Heart, Maximize2, Activity, Maximize, Minimize, Video
 } from 'lucide-react';
 
 interface PlayerBarProps {
@@ -36,8 +36,13 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ isPanelOpen, setIsPanelOpe
     seek,
     setVolume,
     toggleShuffle,
-    toggleLoop
+    toggleLoop,
+    youtubeVideoId,
+    isVideoMode,
+    isResolvingVideo,
+    toggleVideoMode
   } = useAudio();
+  const canUseVideo = Boolean(currentSong && (currentSong.source === 'youtube' || currentSong.youtubeVideoId || youtubeVideoId));
 
   const [isLiked, setIsLiked] = useState<boolean>(() => {
     return currentSong ? StorageService.isSongLiked(currentSong.id) : false;
@@ -88,7 +93,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ isPanelOpen, setIsPanelOpe
   if (!currentSong) {
     return (
       <footer
-        className="liquid-glass"
+        className="player-dock player-dock--empty liquid-glass"
         style={{
           height: '90px',
           display: 'flex',
@@ -109,7 +114,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ isPanelOpen, setIsPanelOpe
 
   return (
     <footer
-      className="liquid-glass"
+      className="player-dock liquid-glass"
       style={{
         height: '90px',
         display: 'flex',
@@ -334,6 +339,29 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ isPanelOpen, setIsPanelOpe
             <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px' }}>8D</span>
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={toggleVideoMode}
+          disabled={!canUseVideo || isResolvingVideo}
+          aria-pressed={isVideoMode}
+          aria-label={isVideoMode ? 'Hide music video' : 'Show music video'}
+          title={isResolvingVideo ? 'Loading music video' : canUseVideo ? (isVideoMode ? 'Hide music video' : 'Watch music video') : 'Video is available for YouTube tracks'}
+          style={{
+            width: '32px',
+            height: '32px',
+            display: 'grid',
+            placeItems: 'center',
+            color: isVideoMode ? 'var(--accent)' : 'var(--text-secondary)',
+            background: isVideoMode ? 'rgba(250,45,72,0.12)' : 'transparent',
+            border: 0,
+            borderRadius: '9px',
+            cursor: canUseVideo ? 'pointer' : 'not-allowed',
+            opacity: canUseVideo ? 1 : 0.35
+          }}
+        >
+          <Video size={16} />
+        </button>
 
         {/* Volume controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

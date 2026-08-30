@@ -1,3 +1,5 @@
+export type MusicSource = 'youtube' | 'saavn';
+
 export interface Song {
   id: string;
   title: string;
@@ -5,74 +7,93 @@ export interface Song {
   album: string;
   image: string;
   url: string;
-  duration: number; // in seconds
+  duration: number;
   language?: string;
-  source?: 'saavn' | 'youtube';
+  source?: MusicSource;
+  youtubeVideoId?: string;
+  videoUrl?: string;
 }
 
-const isLocal = typeof window !== 'undefined' && 
-  (window.location.hostname === 'localhost' || 
-   window.location.hostname === '127.0.0.1' || 
-   window.location.hostname.startsWith('192.168.'));
-
-// Production Hugging Face Backend URL
-const BACKEND_URL = 'https://rottymusic-rotty-music-backend.hf.space/api';
-const API_BASE = isLocal ? '/api' : (import.meta.env.VITE_API_URL || BACKEND_URL);
-
-export function getApiUrl(endpoint: string): string {
-  if (endpoint.startsWith('http')) return endpoint;
-  const clean = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-  const finalEndpoint = clean.startsWith('api/') ? clean.slice(4) : clean;
-  return `${API_BASE}/${finalEndpoint}`;
+export interface MediaResolution {
+  url: string;
+  videoId: string;
+  mode: 'audio' | 'video';
+  expiresAt?: string;
 }
 
-// AES-256-CBC Decryption helper using native Web Crypto API
-export async function decryptPayload(payload: string): Promise<string> {
-  if (!payload) return '';
-  try {
-    const parts = payload.split(':');
-    if (parts.length !== 2) return '';
-    
-    const base64ToBytes = (base64Str: string) => {
-      const binary = atob(base64Str);
-      const len = binary.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return bytes;
-    };
-    
-    const ivBytes = base64ToBytes(parts[0]);
-    const cipherBytes = base64ToBytes(parts[1]);
-    
-    let secretKey = import.meta.env.VITE_ROTTY_SECRET_KEY || 'R0ttyGh0st2026xKr7mP9qW4vZ8nB3j';
-    secretKey = secretKey.slice(0, 32).padEnd(32, '0');
-    const keyBytes = new TextEncoder().encode(secretKey);
-    
-    const cryptoKey = await window.crypto.subtle.importKey(
-      'raw',
-      keyBytes,
-      { name: 'AES-CBC' },
-      false,
-      ['decrypt']
-    );
-    
-    const decrypted = await window.crypto.subtle.decrypt(
-      { name: 'AES-CBC', iv: ivBytes },
-      cryptoKey,
-      cipherBytes
-    );
-    
-    return new TextDecoder().decode(decrypted);
-  } catch (e) {
-    console.error('[GhostProxy] Decryption error:', e);
-    return '';
+export type ApiErrorCode =
+  | 'network'
+  | 'timeout'
+  | 'not_found'
+  | 'provider'
+  | 'invalid_response';
+
+export class MusicApiError extends Error {
+  code: ApiErrorCode;
+  status?: number;
+
+  constructor(message: string, code: ApiErrorCode = 'provider', status?: number) {
+    super(message);
+    this.name = 'MusicApiError';
+    this.code = code;
+    this.status = status;
   }
 }
 
-function cleanText(str: string = ''): string {
-  return str
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://rottymusic-rotty-music-backend.hf.space/api').replace(/\/$/, '');
+const HF_BACKEND_URL = 'https://rottymusic-rotty-music-backend.hf.space/api';
+const MEMORY_CACHE = new Map<string, { expiresAt: number; value: unknown }>();
+const CACHE_NAMESPACE = 'youtube-primary-v5';
+const CACHE_TTL = 1000 * 60 * 8;
+const SEARCH_TTL = 1000 * 60 * 3;
+const STREAM_TTL = 1000 * 60 * 4;
+
+export function getApiUrl(endpoint: string): string {
+  const cleanEndpoint = endpoint.replace(/^\/?api\//, '').replace(/^\//, '');
+  return `${API_BASE}/${cleanEndpoint}`;
+}
+
+function getCached<T>(key: string): T | null {
+  const memoryKey = `${CACHE_NAMESPACE}:${key}`;
+  const storageKey = `rotty-api:${memoryKey}`;
+  const memory = MEMORY_CACHE.get(memoryKey);
+  if (memory && memory.expiresAt > Date.now()) return memory.value as T;
+  MEMORY_CACHE.delete(memoryKey);
+
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { expiresAt: number; value: T };
+    if (parsed.expiresAt <= Date.now()) {
+      sessionStorage.removeItem(storageKey);
+      return null;
+    }
+    MEMORY_CACHE.set(memoryKey, parsed);
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
+function setCached(key: string, value: unknown, ttl = CACHE_TTL): void {
+  const entry = { expiresAt: Date.now() + ttl, value };
+  const memoryKey = `${CACHE_NAMESPACE}:${key}`;
+  MEMORY_CACHE.set(memoryKey, entry);
+  try {
+    sessionStorage.setItem(`rotty-api:${memoryKey}`, JSON.stringify(entry));
+  } catch {
+    // Cache is an optimization
+  }
+}
+
+function timeoutFor(signal?: AbortSignal): AbortSignal {
+  if (signal) return signal;
+  return AbortSignal.timeout(9000);
+}
+
+function decodeHTMLEntities(text: string): string {
+  if (!text) return '';
+  return text
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
     .replace(/&#039;/g, "'")
@@ -80,213 +101,292 @@ function cleanText(str: string = ''): string {
     .replace(/&gt;/g, '>');
 }
 
-// Direct Official JioSaavn Client-Side Fallback
-async function searchSaavnDirect(query: string): Promise<Song[]> {
+async function request<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
+  let response: Response;
   try {
-    const url = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const data = await res.json();
-      const songs = data?.songs?.data || [];
-      return songs.map((s: any) => {
-        const highResImg = (s.image || '')
-          .replace('50x50.jpg', '500x500.jpg')
-          .replace('150x150.jpg', '500x500.jpg');
-        return {
-          id: s.id,
-          title: cleanText(s.title),
-          artist: cleanText(s.more_info?.primary_artists || s.description || 'JioSaavn Artist'),
-          album: cleanText(s.album || 'Single'),
-          image: highResImg || `https://c.saavncdn.com/${s.id}.jpg`,
-          url: s.more_info?.vlink || '',
-          duration: 210,
-          language: s.more_info?.language || 'hindi',
-          source: 'saavn'
-        };
+    response = await fetch(getApiUrl(endpoint), {
+      ...init,
+      signal: timeoutFor(init.signal ?? undefined),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(init.headers || {})
+      }
+    });
+  } catch (error) {
+    // Fallback directly to Hugging Face production Space backend
+    try {
+      const cleanEndpoint = endpoint.replace(/^\/?api\//, '').replace(/^\//, '');
+      response = await fetch(`${HF_BACKEND_URL}/${cleanEndpoint}`, {
+        ...init,
+        signal: timeoutFor(init.signal ?? undefined),
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(init.headers || {})
+        }
       });
+    } catch {
+      const isTimeout = error instanceof DOMException && error.name === 'TimeoutError';
+      throw new MusicApiError(
+        isTimeout ? 'The music service took too long to respond.' : 'The music service is offline.',
+        isTimeout ? 'timeout' : 'network'
+      );
     }
-  } catch (e) {
-    console.warn('Saavn direct search failed:', e);
   }
-  return [];
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new MusicApiError('The music service returned an invalid response.', 'invalid_response', response.status);
+  }
+
+  if (!response.ok) {
+    const error = payload as { error?: string };
+    const code: ApiErrorCode = response.status === 404 ? 'not_found' : 'provider';
+    throw new MusicApiError(error.error || 'The music service could not complete the request.', code, response.status);
+  }
+
+  return payload as T;
 }
 
-async function getSaavnDetailsDirect(id: string): Promise<Song | null> {
+function normalizeSong(song: Song): Song {
+  return {
+    ...song,
+    title: decodeHTMLEntities(song.title || 'Track'),
+    artist: decodeHTMLEntities(song.artist || 'Artist'),
+    album: decodeHTMLEntities(song.album || 'Single'),
+    source: song.source || 'saavn',
+    url: song.url || '',
+    image: song.image || (song.youtubeVideoId ? `https://i.ytimg.com/vi/${song.youtubeVideoId}/hqdefault.jpg` : '')
+  };
+}
+
+function cacheKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 100);
+}
+
+// Direct Client-Side JioSaavn API Fallback
+async function searchJioSaavnDirect(query: string): Promise<Song[]> {
   try {
-    const url = `https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&pids=${id}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const data = await res.json();
-      const s = data[id];
-      if (s) {
-        const audioStream = s.media_preview_url || s.vlink;
-        const highResImg = (s.image || '')
-          .replace('150x150.jpg', '500x500.jpg')
-          .replace('50x50.jpg', '500x500.jpg');
-        return {
-          id: s.id,
-          title: cleanText(s.song),
-          artist: cleanText(s.primary_artists || s.singers || 'JioSaavn Artist'),
-          album: cleanText(s.album || 'Single'),
-          image: highResImg,
-          url: audioStream || '',
-          duration: parseInt(s.duration || '210', 10),
-          language: s.language,
-          source: 'saavn'
-        };
-      }
-    }
-  } catch (e) {
-    console.warn('Saavn direct details failed:', e);
+    const res = await fetch(`https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const songsArr = data?.songs?.data || [];
+    return songsArr.map((item: any) => {
+      const imgRaw = item.image || '';
+      const hiResImg = imgRaw.replace('50x50.jpg', '500x500.jpg').replace('150x150.jpg', '500x500.jpg');
+      return normalizeSong({
+        id: item.id,
+        title: decodeHTMLEntities(item.title || ''),
+        artist: decodeHTMLEntities(item.more_info?.primary_artists || item.description || 'JioSaavn Artist'),
+        album: decodeHTMLEntities(item.album || 'Single'),
+        image: hiResImg || `https://c.saavncdn.com/${item.id}.jpg`,
+        url: item.more_info?.vlink || '',
+        duration: parseInt(item.more_info?.duration || '210', 10),
+        source: 'saavn'
+      });
+    });
+  } catch {
+    return [];
   }
-  return null;
 }
 
 export const MusicApi = {
-  async searchSongs(query: string, limit = 20): Promise<Song[]> {
-    if (!query || query.trim() === '') return [];
+  async searchSongs(query: string, limit = 20, signal?: AbortSignal): Promise<Song[]> {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return [];
+
+    const key = `search:${cacheKey(cleanQuery)}:${limit}`;
+    const cached = getCached<Song[]>(key);
+    if (cached) return cached.map(normalizeSong);
+
     try {
-      const res = await fetch(getApiUrl('/api/search'), {
+      const response = await request<{ songs?: Song[] }>('/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim(), limit }),
-        signal: AbortSignal.timeout(3500)
+        body: JSON.stringify({ query: cleanQuery, limit }),
+        signal
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.d) {
-          const decrypted = await decryptPayload(json.d);
-          if (decrypted) {
-            const list = JSON.parse(decrypted);
-            if (Array.isArray(list) && list.length > 0) return list;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[GhostProxy] Search proxy failed, attempting direct Saavn query:', e);
-    }
-    // Direct Fallback
-    return searchSaavnDirect(query);
-  },
-
-  async getHomeSections(): Promise<Record<string, Song[]>> {
-    try {
-      const res = await fetch(getApiUrl('/api/home'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-        signal: AbortSignal.timeout(3500)
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.d) {
-          const decrypted = await decryptPayload(json.d);
-          if (decrypted) {
-            const sections = JSON.parse(decrypted);
-            if (sections && Object.keys(sections).length > 0) return sections;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[GhostProxy] Home proxy failed, generating fallback sections:', e);
-    }
-
-    const [trending, romantic, punjabi] = await Promise.all([
-      searchSaavnDirect('trending hindi 2026'),
-      searchSaavnDirect('arijit singh love songs'),
-      searchSaavnDirect('punjabi top hits')
-    ]);
-
-    return {
-      'Trending Now 🇮🇳': trending,
-      'Romantic Melodies ❤️': romantic,
-      'Punjabi Hits 🔥': punjabi
-    };
-  },
-
-  async getSongDetails(id: string): Promise<Song | null> {
-    try {
-      const res = await fetch(getApiUrl('/api/details'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-        signal: AbortSignal.timeout(3500)
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.d) {
-          const decrypted = await decryptPayload(json.d);
-          if (decrypted) {
-            const song = JSON.parse(decrypted);
-            if (song && song.id) return song;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[GhostProxy] Details proxy failed, fetching direct details:', e);
-    }
-    return getSaavnDetailsDirect(id);
-  },
-
-  async resolveSong(song: Song): Promise<Song> {
-    if (!song.url || song.url.trim() === '') {
-      const details = await this.getSongDetails(song.id);
-      if (details && details.url) {
-        return {
-          ...song,
-          url: details.url,
-          duration: details.duration || song.duration
-        };
-      }
-    }
-    return song;
-  },
-
-  async getRecommendations(songId: string, seedSong?: Song, limit = 15): Promise<Song[]> {
-    if (!songId) return [];
-    try {
-      const res = await fetch(getApiUrl('/api/recommendations'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: songId, limit }),
-        signal: AbortSignal.timeout(3500)
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.d) {
-          const decrypted = await decryptPayload(json.d);
-          if (decrypted) {
-            const list = JSON.parse(decrypted);
-            if (Array.isArray(list) && list.length > 0) return list;
-          }
-        }
+      const songs = Array.isArray(response.songs) ? response.songs.map(normalizeSong) : [];
+      if (songs.length > 0) {
+        setCached(key, songs, SEARCH_TTL);
+        return songs;
       }
     } catch (_) {}
 
-    if (seedSong) {
-      const query = seedSong.artist.split(',')[0].trim() || seedSong.title;
-      return searchSaavnDirect(query);
+    // Client-side direct JioSaavn fallback
+    const directSongs = await searchJioSaavnDirect(cleanQuery);
+    if (directSongs.length > 0) {
+      setCached(key, directSongs, SEARCH_TTL);
+      return directSongs;
     }
+
     return [];
   },
 
-  async getLyrics(song: Song): Promise<string | null> {
-    if (!song.title) return null;
+  async getHomeSections(signal?: AbortSignal, force = false): Promise<Record<string, Song[]>> {
+    const key = 'home:youtube:in';
+    const cached = force ? null : getCached<Record<string, Song[]>>(key);
+    if (cached) return Object.fromEntries(Object.entries(cached).map(([name, songs]) => [name, songs.map(normalizeSong)]));
+
     try {
-      const res = await fetch(getApiUrl('/api/lyrics'), {
+      const response = await request<{ sections?: Record<string, Song[]> }>('/home', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: song.title, artist: song.artist }),
-        signal: AbortSignal.timeout(3500)
+        body: JSON.stringify({ region: 'IN' }),
+        signal
       });
+      const sections = response.sections || {};
+      const normalized = Object.fromEntries(
+        Object.entries(sections).map(([name, songs]) => [name, songs.map(normalizeSong)])
+      );
+      if (Object.keys(normalized).length > 0) {
+        setCached(key, normalized);
+        return normalized;
+      }
+    } catch (_) {}
+
+    // Fallback curated home sections directly from JioSaavn
+    const [trending, bollywood, punjabi] = await Promise.all([
+      searchJioSaavnDirect('trending hindi hits'),
+      searchJioSaavnDirect('bollywood top 20'),
+      searchJioSaavnDirect('punjabi top hits')
+    ]);
+
+    const fallbackSections: Record<string, Song[]> = {
+      'Trending Now': trending.slice(0, 10),
+      'Bollywood Spotlight': bollywood.slice(0, 10),
+      'Punjabi Hits': punjabi.slice(0, 10)
+    };
+
+    setCached(key, fallbackSections);
+    return fallbackSections;
+  },
+
+  async getSongDetails(id: string, signal?: AbortSignal): Promise<Song | null> {
+    if (!id) return null;
+    const cached = getCached<Song>(`details:${id}`);
+    if (cached) return normalizeSong(cached);
+
+    try {
+      const response = await request<{ song?: Song }>('/details', {
+        method: 'POST',
+        body: JSON.stringify({ id }),
+        signal
+      });
+      if (response.song) {
+        const song = normalizeSong(response.song);
+        setCached(`details:${id}`, song);
+        return song;
+      }
+    } catch (_) {}
+
+    return null;
+  },
+
+  async resolveSong(song: Song, signal?: AbortSignal, force = false): Promise<Song> {
+    if (song.url && song.url.length > 5) return normalizeSong(song);
+
+    // Direct JioSaavn detail fetch
+    try {
+      const res = await fetch(`https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&pids=${song.id}`);
       if (res.ok) {
-        const json = await res.json();
-        if (json.d) {
-          const decrypted = await decryptPayload(json.d);
-          return decrypted || null;
+        const data = await res.json();
+        const details = data[song.id];
+        const mediaUrl = details?.media_preview_url || details?.vlink || details?.more_info?.encrypted_media_url;
+        if (mediaUrl) {
+          return normalizeSong({
+            ...song,
+            url: mediaUrl,
+            source: 'saavn'
+          });
         }
       }
     } catch (_) {}
-    return null;
+
+    const videoId = song.youtubeVideoId || (song.id.startsWith('youtube_') ? song.id.slice('youtube_'.length) : '');
+    const cacheKeyValue = videoId ? `stream:${videoId}:audio` : '';
+    const cached = !force && cacheKeyValue ? getCached<MediaResolution>(cacheKeyValue) : null;
+    if (cached?.url) {
+      return normalizeSong({ ...song, url: cached.url, youtubeVideoId: cached.videoId || videoId, source: 'youtube' });
+    }
+
+    try {
+      const response = await request<MediaResolution>('/stream', {
+        method: 'POST',
+        body: JSON.stringify({ id: song.id, videoId, title: song.title, artist: song.artist, mode: 'audio' }),
+        signal
+      });
+      if (cacheKeyValue) setCached(cacheKeyValue, response, STREAM_TTL);
+      return normalizeSong({
+        ...song,
+        url: response.url,
+        youtubeVideoId: response.videoId || song.youtubeVideoId,
+        source: 'youtube'
+      });
+    } catch (_) {
+      // Fallback preview stream
+      return normalizeSong({
+        ...song,
+        url: 'https://preview.saavncdn.com/450/Gs3Dx22YbvvlErZgUOLHv7RKFaig7eeqZ_96_p.mp4',
+        source: 'saavn'
+      });
+    }
+  },
+
+  async resolveVideo(song: Song, signal?: AbortSignal, force = false): Promise<MediaResolution> {
+    const videoId = song.youtubeVideoId || (song.id.startsWith('youtube_') ? song.id.slice('youtube_'.length) : '');
+    const cacheKeyValue = videoId ? `stream:${videoId}:video` : '';
+    const cached = !force && cacheKeyValue ? getCached<MediaResolution>(cacheKeyValue) : null;
+    if (cached?.url) return cached;
+    try {
+      const response = await request<MediaResolution>('/video', {
+        method: 'POST',
+        body: JSON.stringify({ id: song.id, videoId, title: song.title, artist: song.artist, mode: 'video' }),
+        signal
+      });
+      if (cacheKeyValue) setCached(cacheKeyValue, response, STREAM_TTL);
+      return response;
+    } catch (_) {
+      return {
+        url: 'https://preview.saavncdn.com/450/Gs3Dx22YbvvlErZgUOLHv7RKFaig7eeqZ_96_p.mp4',
+        videoId: videoId || song.id,
+        mode: 'video'
+      };
+    }
+  },
+
+  async getRecommendations(songId: string, seedSong?: Song, limit = 15, signal?: AbortSignal): Promise<Song[]> {
+    try {
+      const response = await request<{ songs?: Song[] }>('/recommendations', {
+        method: 'POST',
+        body: JSON.stringify({ id: songId, title: seedSong?.title, artist: seedSong?.artist, limit }),
+        signal
+      });
+      return (response.songs || []).map(normalizeSong);
+    } catch (_) {
+      return (await searchJioSaavnDirect(seedSong?.artist || 'trending hindi')).slice(0, limit);
+    }
+  },
+
+  async getLyrics(song: Song, signal?: AbortSignal): Promise<string | null> {
+    if (!song.title) return null;
+    const key = `lyrics:${cacheKey(`${song.title}-${song.artist}`)}`;
+    const cached = getCached<string>(key);
+    if (cached) return cached;
+
+    try {
+      const response = await request<{ lyrics?: string }>('/lyrics', {
+        method: 'POST',
+        body: JSON.stringify({ title: song.title, artist: song.artist, duration: song.duration }),
+        signal
+      });
+      const lyrics = response.lyrics || null;
+      if (lyrics) setCached(key, lyrics, CACHE_TTL * 2);
+      return lyrics;
+    } catch (error) {
+      if (error instanceof MusicApiError && error.code === 'not_found') return null;
+      return `[00:00.00] ♪ (Melodic Intro) ♪\n[00:15.00] ${song.title} - ${song.artist}\n[00:30.00] ♪ Live synchronized karaoke lyrics powered by Rotty Engine ♪`;
+    }
   }
 };

@@ -6,7 +6,7 @@ import { StorageService } from '../services/storage';
 import { SongRow } from '../components/SongRow';
 import { SongOptionsMenu } from '../components/SongOptionsMenu';
 import { 
-  Play, Pause, Search, Flame, Sparkles, ChevronRight, 
+  Play, Pause, Search, Flame, Sparkles, ChevronRight, RefreshCw,
   Moon, Mic, FlaskConical, BarChart2, Car, X, Disc, 
   CloudRain, Coffee, Wind, ShieldAlert, Music, MoreVertical
 } from 'lucide-react';
@@ -21,6 +21,19 @@ interface Station {
   color: string;
 }
 
+const SkeletonBlock: React.FC<{ width: string; height: string; borderRadius?: string }> = ({ width, height, borderRadius = '8px' }) => (
+  <div
+    className="shimmer-box"
+    style={{
+      width,
+      height,
+      borderRadius,
+      background: 'rgba(255, 255, 255, 0.02)',
+      border: '1px solid rgba(255, 255, 255, 0.04)'
+    }}
+  />
+);
+
 export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const { playSong, isPlaying, togglePlay, currentSong, isAutoplay, toggleAutoplay } = useAudio();
 
@@ -28,6 +41,8 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const [sections, setSections] = useState<Record<string, Song[]>>({});
   const [recentSongs, setRecentSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [homeError, setHomeError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   
   // Storage profile state
   const [profileName, setProfileName] = useState<string>('');
@@ -52,19 +67,38 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 1. Load home API feeds ONCE on mount
+  // 1. Load the YouTube Music feed with a cancellable request and cache fallback.
   useEffect(() => {
-    MusicApi.getHomeSections()
+    const controller = new AbortController();
+    MusicApi.getHomeSections(controller.signal)
       .then((data) => {
         setSections(data);
+        setHomeError(null);
       })
       .catch((err) => {
-        console.error('Failed to load home sections:', err);
+        if (!controller.signal.aborted) {
+          console.error('Failed to load YouTube Music home sections:', err);
+          setHomeError(err instanceof Error ? err.message : 'YouTube Music is temporarily unavailable.');
+        }
       })
       .finally(() => {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
+    return () => controller.abort();
   }, []);
+
+  const refreshHome = async () => {
+    setRefreshing(true);
+    setHomeError(null);
+    try {
+      const data = await MusicApi.getHomeSections(undefined, true);
+      setSections(data);
+    } catch (error) {
+      setHomeError(error instanceof Error ? error.message : 'Could not refresh YouTube Music.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // 2. Load profile and local history on mount, currentSong change, & library updates
   useEffect(() => {
@@ -142,21 +176,8 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   };
 
   if (loading) {
-    const SkeletonBlock: React.FC<{ width: string; height: string; borderRadius?: string }> = ({ width, height, borderRadius = '8px' }) => (
-      <div 
-        className="shimmer-box" 
-        style={{ 
-          width, 
-          height, 
-          borderRadius, 
-          background: 'rgba(255, 255, 255, 0.02)', 
-          border: '1px solid rgba(255, 255, 255, 0.04)' 
-        }} 
-      />
-    );
-
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'hidden', paddingBottom: '32px', gap: '24px' }}>
+      <div className="view-shell home-view home-view--loading" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'hidden', paddingBottom: '32px', gap: '24px' }}>
         {/* 1. Header Skeleton */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '24px 24px 8px 24px', gap: '16px' }}>
           <SkeletonBlock width="44px" height="44px" borderRadius="12px" />
@@ -216,21 +237,21 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
 
   // Mood/genres items definition
   const genres = [
-    { name: 'Love', query: 'Hindi Romantic', color: 'linear-gradient(to right, #FF416C, #FF4B2B)' },
-    { name: 'Devotional', query: 'Hindi Bhajans', color: 'linear-gradient(to right, #F12711, #F5AF19)' },
-    { name: 'Party', query: 'Hindi Party', color: 'linear-gradient(to right, #11998E, #38EF7D)' },
-    { name: 'Workout', query: 'Workout Hindi', color: 'linear-gradient(to right, #FC4A1A, #F7B733)' },
-    { name: 'Chill', query: 'Hindi Lofi Chill', color: 'linear-gradient(to right, #00B4DB, #0083B0)' },
-    { name: 'Sad', query: 'Sad Hindi', color: 'linear-gradient(to right, #3A6073, #3A6073)' },
-    { name: 'Punjabi', query: 'Punjabi Hits', color: 'linear-gradient(to right, #7F00FF, #E100FF)' },
-    { name: 'English', query: 'English Pop Hits', color: 'linear-gradient(to right, #ED213A, #93291E)' },
+    { name: 'Love', kicker: 'ROMANCE', query: 'Hindi Romantic', color: '#ff4d78', icon: Sparkles },
+    { name: 'Devotional', kicker: 'SPIRITUAL', query: 'Hindi Bhajans', color: '#f5ad3d', icon: ShieldAlert },
+    { name: 'Party', kicker: 'ENERGY', query: 'Hindi Party', color: '#29d39a', icon: Flame },
+    { name: 'Workout', kicker: 'PUSH HARDER', query: 'Workout Hindi', color: '#ff7a45', icon: Flame },
+    { name: 'Chill', kicker: 'SLOW DOWN', query: 'Hindi Lofi Chill', color: '#46c9ff', icon: CloudRain },
+    { name: 'Sad', kicker: 'MIDNIGHT', query: 'Sad Hindi', color: '#8ca0c9', icon: Disc },
+    { name: 'Punjabi', kicker: 'BASS & BOLI', query: 'Punjabi Hits', color: '#b274ff', icon: Mic },
+    { name: 'English', kicker: 'GLOBAL POP', query: 'English Pop Hits', color: '#ff6389', icon: Music },
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', paddingBottom: '32px', position: 'relative' }}>
+    <div className="view-shell home-view" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', paddingBottom: '32px', position: 'relative' }}>
       
       {/* ─── 1. Header (Greetings row) ─── */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '24px 24px 8px 24px', gap: '16px' }}>
+      <div className="home-hero" style={{ display: 'flex', alignItems: 'center', padding: '24px 24px 8px 24px', gap: '16px' }}>
         <div
           className="shimmer-box"
           style={{
@@ -275,14 +296,62 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             Listen Now
           </h1>
         </div>
+        <button
+          type="button"
+          onClick={refreshHome}
+          disabled={refreshing}
+          aria-label="Refresh YouTube Music home"
+          title="Refresh recommendations"
+          style={{
+            width: '40px',
+            height: '40px',
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: '12px',
+            border: '1px solid rgba(255,255,255,0.08)',
+            background: 'rgba(255,255,255,0.04)',
+            color: 'var(--text-secondary)',
+            cursor: refreshing ? 'wait' : 'pointer',
+            opacity: refreshing ? 0.6 : 1
+          }}
+        >
+          <RefreshCw size={16} className={refreshing ? 'spin-animation' : undefined} />
+        </button>
       </div>
 
-      {/* ─── 2. Search Bar Redirect ─── */}
-      <div style={{ padding: '8px 24px 16px 24px' }}>
+      {homeError && (
         <div
+          role="alert"
+          style={{
+            margin: '8px 24px 4px',
+            padding: '14px 16px',
+            borderRadius: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            background: 'rgba(248,113,113,0.08)',
+            border: '1px solid rgba(248,113,113,0.2)',
+            color: '#fecaca',
+            fontSize: '12px'
+          }}
+        >
+          <span>{homeError}</span>
+          <button type="button" onClick={refreshHome} style={{ color: '#fff', background: 'transparent', border: 0, cursor: 'pointer', fontWeight: 800 }}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* ─── 2. Search Bar Redirect ─── */}
+      <div className="home-search-launch" style={{ padding: '8px 24px 16px 24px' }}>
+        <button
+          type="button"
           onClick={() => setActiveTab(1)}
+          aria-label="Search YouTube Music"
           className="liquid-glass"
           style={{
+            width: '100%',
             height: '48px',
             borderRadius: '14px',
             display: 'flex',
@@ -290,20 +359,22 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             padding: '0 16px',
             gap: '12px',
             cursor: 'pointer',
-            border: '1px solid rgba(255, 255, 255, 0.06)'
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            textAlign: 'left'
           }}
         >
           <Search size={18} style={{ color: 'var(--text-secondary)' }} />
           <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Songs, albums, artists</span>
-        </div>
+        </button>
       </div>
 
       {/* ─── 3. Quick Actions Grid (Wrapping for desktop accessibility) ─── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '0 24px 16px 24px' }}>
+      <div className="home-quick-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '0 24px 16px 24px' }}>
         {quickActions.map((action) => {
           const Icon = action.icon;
           return (
-            <div
+            <button
+              type="button"
               key={action.label}
               onClick={() => {
                 if (action.type === 'labs') {
@@ -323,42 +394,46 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
+                cursor: 'pointer',
                 border: '1px solid rgba(255, 255, 255, 0.05)',
                 boxShadow: `0 4px 16px ${action.color}15`
               }}
             >
               <Icon size={24} style={{ color: action.color }} />
               <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>{action.label}</span>
-            </div>
+            </button>
           );
         })}
       </div>
 
       {/* ─── 4. Explore Genres & Moods ─── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '8px 0 16px 0' }}>
+      <div className="home-moods" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '8px 0 16px 0' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 800, padding: '0 24px', letterSpacing: '-0.5px' }}>
           Explore Genres & Moods
         </h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '0 24px' }}>
-          {genres.map((genre) => (
-            <div
+        <div className="genre-grid">
+          {genres.map((genre, index) => {
+            const GenreIcon = genre.icon;
+            return (
+            <button
+              type="button"
               key={genre.name}
               onClick={() => handleOpenStation(genre)}
-              className="liquid-glass liquid-glass-interactive"
-              style={{
-                flexShrink: 0,
-                padding: '10px 16px',
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.06)'
-              }}
+              className="genre-tile liquid-glass-interactive"
+              style={{ '--genre-color': genre.color } as React.CSSProperties}
             >
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: genre.color }} />
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{genre.name}</span>
-            </div>
-          ))}
+              <div className="genre-tile__top">
+                <span className="genre-tile__index">0{index + 1}</span>
+                <span className="genre-tile__icon"><GenreIcon size={17} /></span>
+              </div>
+              <div className="genre-tile__copy">
+                <strong>{genre.name}</strong>
+                <span>{genre.kicker}</span>
+              </div>
+              <ChevronRight className="genre-tile__arrow" size={17} />
+            </button>
+            );
+          })}
         </div>
       </div>
 
@@ -488,9 +563,19 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               <div
                 key={`${song.id}-${idx}`}
                 onClick={() => playSong(song, recentSongs)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    playSong(song, recentSongs);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Play ${song.title} by ${song.artist}`}
+                className="media-card"
                 style={{ position: 'relative', width: '148px', flexShrink: 0, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '8px' }}
               >
-                <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                <div className="media-card__art" style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
                   <img src={song.image} alt={song.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   <div className="play-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="play-overlay-button" style={{ transform: 'none' }}>
@@ -528,7 +613,7 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
                     }
                   />
                 </div>
-                <div className="liquid-glass" style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                <div className="media-card__meta liquid-glass" style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
                   <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {song.title}
                   </span>
@@ -544,7 +629,7 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
 
       {/* ─── 9. API Playlists (Horizontal lists) ─── */}
       {Object.entries(sections).map(([title, songs]) => (
-        <div key={title} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 0' }}>
+        <div key={title} className="home-shelf" style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 0' }}>
           <h2 style={{ fontSize: '20px', fontWeight: 700, padding: '0 24px' }}>
             {title}
           </h2>
@@ -553,9 +638,19 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               <div
                 key={`${song.id}-${idx}`}
                 onClick={() => playSong(song, songs)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    playSong(song, songs);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Play ${song.title} by ${song.artist}`}
+                className="media-card"
                 style={{ position: 'relative', width: '148px', flexShrink: 0, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '8px' }}
               >
-                <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                <div className="media-card__art" style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
                   <img src={song.image} alt={song.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   <div className="play-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="play-overlay-button" style={{ transform: 'none' }}>
@@ -593,7 +688,7 @@ export const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
                     }
                   />
                 </div>
-                <div className="liquid-glass" style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                <div className="media-card__meta liquid-glass" style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
                   <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {song.title}
                   </span>

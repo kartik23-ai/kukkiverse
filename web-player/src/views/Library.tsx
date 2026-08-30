@@ -100,7 +100,7 @@ export const Library: React.FC = () => {
   return (
     <div 
       ref={containerRef}
-      className="library-container"
+      className="view-shell library-container library-view"
       style={{ 
         padding: isCompact ? '20px' : '32px', 
         display: 'flex', 
@@ -114,7 +114,7 @@ export const Library: React.FC = () => {
       }}
     >
       {/* 1. Left: Playlists list & Creator */}
-      <div style={{ width: isCompact ? '100%' : '280px', display: 'flex', flexDirection: 'column', gap: '24px', flexShrink: 0 }}>
+      <div className="library-rail" style={{ width: isCompact ? '100%' : '280px', display: 'flex', flexDirection: 'column', gap: '24px', flexShrink: 0 }}>
         <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Library</h2>
 
         {/* Create playlist input form */}
@@ -248,7 +248,7 @@ export const Library: React.FC = () => {
       </div>
 
       {/* 2. Right: Songs detail screen in selected playlist */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div className="library-content" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {activePlaylistId ? (
           <>
             {/* Playlist Header card */}

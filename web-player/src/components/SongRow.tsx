@@ -27,7 +27,16 @@ export const SongRow: React.FC<SongRowProps> = ({ song, index, customQueue }) =>
   return (
     <div
       onClick={handlePlay}
-      className="liquid-glass-interactive"
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handlePlay();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Play ${song.title} by ${song.artist}`}
+      className="song-row liquid-glass-interactive"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -38,7 +47,8 @@ export const SongRow: React.FC<SongRowProps> = ({ song, index, customQueue }) =>
         backgroundColor: isCurrent ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
         transition: 'all 0.2s ease',
         cursor: 'pointer',
-        position: 'relative'
+        position: 'relative',
+        outline: 'none'
       }}
     >
       {/* Index or Play icon */}
@@ -67,6 +77,8 @@ export const SongRow: React.FC<SongRowProps> = ({ song, index, customQueue }) =>
       <img
         src={song.image || 'https://via.placeholder.com/150'}
         alt={song.title}
+        loading="lazy"
+        decoding="async"
         style={{
           width: '40px',
           height: '40px',
@@ -106,6 +118,8 @@ export const SongRow: React.FC<SongRowProps> = ({ song, index, customQueue }) =>
       <div className="song-album-column" style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {song.album}
       </div>
+
+      <span className="source-pill" aria-label="Source YouTube">YT</span>
 
       {/* Duration */}
       <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', fontWeight: 500, minWidth: '40px', textAlign: 'right', flexShrink: 0 }}>

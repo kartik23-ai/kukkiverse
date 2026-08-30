@@ -9,6 +9,7 @@ import { AuthModal } from './components/AuthModal';
 import { LibrarySyncService } from './services/librarySync';
 import { SongOptionsMenu } from './components/SongOptionsMenu';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
+import { YouTubeTransport } from './components/YouTubeTransport';
 
 
 // Views
@@ -216,6 +217,7 @@ const AppContent: React.FC = () => {
   if (showSplash) {
     return (
       <div
+        className="splash-screen"
         style={{
           width: '100vw',
           height: '100vh',
@@ -234,7 +236,7 @@ const AppContent: React.FC = () => {
         
         {showGuestPrompt ? (
           <div
-            className="liquid-glass"
+            className="guest-onboarding liquid-glass"
             style={{
               padding: '32px',
               borderRadius: '28px',
@@ -404,6 +406,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div
+      className="app-shell"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -413,9 +416,11 @@ const AppContent: React.FC = () => {
         position: 'relative'
       }}
     >
+      <YouTubeTransport />
       <AuroraBackground />
 
       <div
+        className="app-workspace"
         style={{
           display: 'flex',
           flex: 1,
@@ -433,6 +438,7 @@ const AppContent: React.FC = () => {
         )}
         
         <main
+          className="app-main"
           style={{
             flex: 1,
             height: '100%',
@@ -455,7 +461,7 @@ const AppContent: React.FC = () => {
           {currentSong && (
             <div
               onClick={() => setIsMobilePlayerOpen(true)}
-              className="liquid-glass"
+              className="mobile-mini-player liquid-glass"
               style={{
                 position: 'fixed',
                 bottom: '76px',
@@ -573,7 +579,7 @@ const AppContent: React.FC = () => {
 
       {isMobile && isMobilePlayerOpen && currentSong && (
         <div
-          className="liquid-glass"
+          className="mobile-full-player liquid-glass"
           style={{
             position: 'fixed',
             top: 0,

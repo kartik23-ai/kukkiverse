@@ -414,6 +414,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isForced 
 
       {/* Main Responsive Split Layout Wrapper */}
       <div
+        className="auth-overlay"
         style={{
           width: '100%',
           maxWidth: isMobile ? '450px' : '1000px',

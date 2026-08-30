@@ -5,7 +5,7 @@ import { SongOptionsMenu } from './SongOptionsMenu';
 import { 
   ListMusic, AlignLeft, ChevronUp, ChevronDown, X, 
   Wifi, Laptop, Smartphone, RefreshCw, Sparkles, AlertCircle, CloudLightning,
-  Crown, LogOut, Radio, Copy
+  Crown, LogOut, Radio, Copy, Video
 } from 'lucide-react';
 
 interface LrcLine {
@@ -725,7 +725,8 @@ export const ConnectPane: React.FC<ConnectPaneProps> = ({ onOpenAuth }) => {
 // 4. MAIN PANEL WITH DESKTOP TABS
 // ──────────────────────────────────────────────────────────────────
 export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({ onOpenAuth }) => {
-  const { queue } = useAudio();
+  const { currentSong, queue, youtubeVideoId, isVideoMode, isResolvingVideo, toggleVideoMode } = useAudio();
+  const canUseVideo = Boolean(currentSong && (currentSong.source === 'youtube' || currentSong.youtubeVideoId || youtubeVideoId));
   const [activeTab, setActiveTab] = useState<'lyrics' | 'queue' | 'connect'>('lyrics');
   const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth <= 768);
 
@@ -737,7 +738,7 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({ onOpenAuth }) 
 
   return (
     <aside
-      className="liquid-glass"
+      className="now-playing-panel liquid-glass"
       style={{
         width: isMobile ? '100%' : '320px',
         height: '100%',
@@ -757,6 +758,29 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({ onOpenAuth }) 
           gap: '4px'
         }}
       >
+        <button
+          type="button"
+          onClick={toggleVideoMode}
+          disabled={!canUseVideo || isResolvingVideo}
+          aria-pressed={isVideoMode}
+          aria-label={isVideoMode ? 'Hide music video' : 'Show music video'}
+          title={isResolvingVideo ? 'Loading music video' : canUseVideo ? (isVideoMode ? 'Hide music video' : 'Watch music video') : 'Video available when a YouTube track is playing'}
+          style={{
+            width: '34px',
+            height: '34px',
+            flexShrink: 0,
+            display: 'grid',
+            placeItems: 'center',
+            color: isVideoMode ? 'var(--accent)' : canUseVideo ? 'var(--text-secondary)' : 'var(--text-tertiary)',
+            background: isVideoMode ? 'rgba(250,45,72,0.12)' : 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '10px',
+            cursor: canUseVideo ? 'pointer' : 'not-allowed',
+            opacity: canUseVideo ? 1 : 0.45
+          }}
+        >
+          <Video size={15} />
+        </button>
         <button
           onClick={() => setActiveTab('lyrics')}
           style={{

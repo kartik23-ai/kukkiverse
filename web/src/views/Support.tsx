@@ -107,6 +107,7 @@ export const Support: React.FC = () => {
 
   return (
     <div 
+      className="view-shell support-view"
       style={{ 
         padding: '32px', 
         display: 'flex', 

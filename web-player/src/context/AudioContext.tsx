@@ -6,6 +6,12 @@ import { RottyConnectService } from '../services/rottyConnect';
 import type { SyncDevice, PlaybackState } from '../services/rottyConnect';
 import { SupabaseService } from '../services/supabase';
 import type { PartyRoom } from '../services/supabase';
+import {
+  getCachedVideoObjectUrl,
+  invalidateCachedVideo,
+  prefetchCachedVideo,
+  releaseCachedVideoObjectUrl
+} from '../services/videoCache';
 
 type LoopMode = 'none' | 'one' | 'all';
 
@@ -55,6 +61,12 @@ interface AudioContextType {
   currentTime: number;
   duration: number;
   volume: number;
+  youtubeVideoId: string | null;
+  videoUrl: string | null;
+  isVideoMode: boolean;
+  isResolvingVideo: boolean;
+  toggleVideoMode: () => void;
+  onYoutubeVideoError: () => void;
   queue: Song[];
   queueIndex: number;
   isShuffle: boolean;
@@ -133,10 +145,23 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const partyWatcherRef = useRef<(() => void) | null>(null);
   const isSyncingFromPartyRef = useRef<boolean>(false);
   const prefetchedForSongIdRef = useRef<string>('');
+  const prefetchedStreamForSongIdRef = useRef<string>('');
+  const triggerAiRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const togglePlayHandlerRef = useRef<() => void>(() => {});
+  const nextSongHandlerRef = useRef<() => void>(() => {});
+  const prevSongHandlerRef = useRef<() => void>(() => {});
+  const seekHandlerRef = useRef<(time: number) => void>(() => {});
 
   // Refs for audio engine
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const originalQueueRef = useRef<Song[]>([]);
+  const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [isVideoMode, setIsVideoMode] = useState<boolean>(false);
+  const [isResolvingVideo, setIsResolvingVideo] = useState<boolean>(false);
+  const activeVideoIdRef = useRef<string | null>(null);
+  const videoAbortRef = useRef<AbortController | null>(null);
+  const prefetchedVideoForSongIdRef = useRef<string>('');
 
   // Web Audio EQ Node references
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -150,11 +175,23 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleSongErrorRef = useRef<() => void>(() => {});
   const isRecoveringRef = useRef<string | null>(null);
   const retryCountRef = useRef<Record<string, number>>({});
+  const playbackRequestRef = useRef<number>(0);
+  const videoRequestRef = useRef<number>(0);
 
   // 1. Initialize HTML5 Audio instance
   useEffect(() => {
-    const audio = new Audio();
-    audio.crossOrigin = 'anonymous'; // Enable CORS for Web Audio filters
+    const audio = document.createElement('audio');
+    audio.preload = 'auto';
+    audio.setAttribute('playsinline', 'true');
+    audio.setAttribute('data-rotty-audio-engine', 'true');
+    audio.setAttribute('aria-hidden', 'true');
+    audio.style.position = 'fixed';
+    audio.style.left = '-10000px';
+    audio.style.width = '1px';
+    audio.style.height = '1px';
+    audio.style.opacity = '0';
+    audio.style.pointerEvents = 'none';
+    document.body.appendChild(audio);
     audioRef.current = audio;
 
     const onTimeUpdate = () => {
@@ -181,7 +218,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     audio.addEventListener('error', onError);
 
     // Load volume from cache
-    audio.volume = volume;
+    audio.volume = StorageService.getVolume();
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
@@ -189,9 +226,19 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
       audio.pause();
+      audio.remove();
       if (orbitIntervalRef.current) clearInterval(orbitIntervalRef.current);
     };
   }, []);
+
+  useEffect(() => () => {
+    videoAbortRef.current?.abort();
+    if (activeVideoIdRef.current) releaseCachedVideoObjectUrl(activeVideoIdRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume;
+  }, [volume]);
 
   // Cleanup party sync watcher on unmount
   useEffect(() => {
@@ -210,10 +257,54 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const timeRemaining = duration - currentTime;
       if (timeRemaining < 25 && prefetchedForSongIdRef.current !== currentSong.id) {
         prefetchedForSongIdRef.current = currentSong.id;
-        triggerAiRefill();
+        triggerAiRef.current();
       }
     }
   }, [currentTime, duration, isAutoplay, queueIndex, queue, currentSong]);
+
+  // Resolve the next YouTube audio URL in the background so clicking Next is instant.
+  useEffect(() => {
+    const nextSong = queue[queueIndex + 1];
+    if (!nextSong || nextSong.url) return;
+    const isYoutube = Boolean(nextSong.source === 'youtube' || nextSong.youtubeVideoId || nextSong.id.startsWith('youtube_'));
+    if (!isYoutube || prefetchedStreamForSongIdRef.current === nextSong.id) return;
+
+    prefetchedStreamForSongIdRef.current = nextSong.id;
+    MusicApi.resolveSong(nextSong)
+      .then((freshSong) => {
+        if (!freshSong.url) return;
+        setQueue((previousQueue) => previousQueue.map((item) => item.id === freshSong.id ? freshSong : item));
+        originalQueueRef.current = originalQueueRef.current.map((item) => item.id === freshSong.id ? freshSong : item);
+      })
+      .catch(() => {
+        prefetchedStreamForSongIdRef.current = '';
+      });
+  }, [queue, queueIndex]);
+
+  // Cache the next music video only when it is close enough to be useful. The
+  // current video remains the single source of truth while the next one warms
+  // the bounded browser cache in the background.
+  useEffect(() => {
+    const nextSong = queue[queueIndex + 1];
+    const isNextYoutube = Boolean(nextSong && (
+      nextSong.source === 'youtube' || nextSong.youtubeVideoId || nextSong.id.startsWith('youtube_')
+    ));
+    const secondsRemaining = duration > 0 ? duration - currentTime : Number.POSITIVE_INFINITY;
+    if (!nextSong || !isNextYoutube || !isPlaying || (!isVideoMode && secondsRemaining > 30)) return;
+    if (prefetchedVideoForSongIdRef.current === nextSong.id) return;
+
+    const videoId = nextSong.youtubeVideoId || (nextSong.id.startsWith('youtube_') ? nextSong.id.slice('youtube_'.length) : '');
+    if (!videoId) return;
+    prefetchedVideoForSongIdRef.current = nextSong.id;
+    const controller = new AbortController();
+    MusicApi.resolveVideo(nextSong, controller.signal)
+      .then((resolution) => prefetchCachedVideo(videoId, resolution.url, controller.signal))
+      .catch(() => {
+        if (!controller.signal.aborted) prefetchedVideoForSongIdRef.current = '';
+      });
+
+    return () => controller.abort();
+  }, [currentTime, duration, isPlaying, isVideoMode, queue, queueIndex]);
 
   // 2. Initialize Web Audio API nodes (Runs on first user play interaction to comply with browser safety)
   const initWebAudio = () => {
@@ -319,12 +410,12 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ]
     });
 
-    navigator.mediaSession.setActionHandler('play', () => togglePlay());
-    navigator.mediaSession.setActionHandler('pause', () => togglePlay());
-    navigator.mediaSession.setActionHandler('nexttrack', () => nextSong());
-    navigator.mediaSession.setActionHandler('previoustrack', () => prevSong());
+    navigator.mediaSession.setActionHandler('play', () => togglePlayHandlerRef.current());
+    navigator.mediaSession.setActionHandler('pause', () => togglePlayHandlerRef.current());
+    navigator.mediaSession.setActionHandler('nexttrack', () => nextSongHandlerRef.current());
+    navigator.mediaSession.setActionHandler('previoustrack', () => prevSongHandlerRef.current());
     navigator.mediaSession.setActionHandler('seekto', (details) => {
-      if (details.seekTime !== undefined) seek(details.seekTime);
+      if (details.seekTime !== undefined) seekHandlerRef.current(details.seekTime);
     });
 
     return () => {
@@ -338,11 +429,71 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [currentSong, queueIndex, queue]);
 
   // 6. Playback triggers
+  const isYoutubeSong = (song: Song) => Boolean(
+    song.source === 'youtube' || song.youtubeVideoId || song.id.startsWith('youtube_')
+  );
+
+  const getYoutubeVideoId = (song: Song): string => song.youtubeVideoId
+    || (song.id.startsWith('youtube_') ? song.id.slice('youtube_'.length) : '');
+
+  const clearVideoState = () => {
+    videoRequestRef.current += 1;
+    videoAbortRef.current?.abort();
+    videoAbortRef.current = null;
+    if (activeVideoIdRef.current) releaseCachedVideoObjectUrl(activeVideoIdRef.current);
+    activeVideoIdRef.current = null;
+    setVideoUrl(null);
+    setIsVideoMode(false);
+    setIsResolvingVideo(false);
+  };
+
+  const cacheCurrentVideo = async (song: Song, force = false): Promise<void> => {
+    const videoId = getYoutubeVideoId(song);
+    if (!videoId) throw new Error('missing_video_id');
+
+    videoAbortRef.current?.abort();
+    const controller = new AbortController();
+    videoAbortRef.current = controller;
+    const requestId = ++videoRequestRef.current;
+    setIsResolvingVideo(true);
+
+    try {
+      const resolution = await MusicApi.resolveVideo(song, controller.signal, force);
+      const objectUrl = await getCachedVideoObjectUrl(videoId, resolution.url, controller.signal);
+      if (requestId !== videoRequestRef.current || controller.signal.aborted) {
+        releaseCachedVideoObjectUrl(videoId);
+        return;
+      }
+      if (activeVideoIdRef.current && activeVideoIdRef.current !== videoId) {
+        releaseCachedVideoObjectUrl(activeVideoIdRef.current);
+      }
+      activeVideoIdRef.current = videoId;
+      setVideoUrl(objectUrl);
+      setIsVideoMode(true);
+    } finally {
+      if (requestId === videoRequestRef.current) setIsResolvingVideo(false);
+    }
+  };
+
+  const onYoutubeVideoError = () => {
+    if (!currentSong || !isYoutubeSong(currentSong)) return;
+    const videoId = getYoutubeVideoId(currentSong);
+    if (!videoId) return;
+    void invalidateCachedVideo(videoId)
+      .catch(() => undefined)
+      .finally(() => {
+        void cacheCurrentVideo(currentSong, true).catch(() => {
+          if (videoRequestRef.current > 0) setIsVideoMode(false);
+        });
+      });
+  };
+
   const playSong = (song: Song, customQueue?: Song[]) => {
     if (!audioRef.current) return;
+    const requestId = ++playbackRequestRef.current;
 
     // Lazy load Web Audio Nodes
-    initWebAudio();
+    if (!isYoutubeSong(song)) initWebAudio();
     if (audioCtxRef.current?.state === 'suspended') {
       audioCtxRef.current.resume();
     }
@@ -386,14 +537,23 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const startPlayback = (targetSong: Song) => {
+      if (isYoutubeSong(targetSong) && !targetSong.url) {
+        setIsPlaying(false);
+        return;
+      }
+      clearVideoState();
+      setYoutubeVideoId(isYoutubeSong(targetSong) ? getYoutubeVideoId(targetSong) || null : null);
       setCurrentSong(targetSong);
       setQueueIndex(index);
 
       if (audioRef.current) {
         audioRef.current.src = targetSong.url;
+        audioRef.current.load();
         audioRef.current.play()
           .then(() => {
             setIsPlaying(true);
+            delete retryCountRef.current[targetSong.id];
+            isRecoveringRef.current = null;
             StorageService.addRecentSong(targetSong);
             StorageService.recordStreakDay();
 
@@ -409,9 +569,33 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     };
 
-    if (song.id.startsWith('spotify_track_') || !song.url) {
+    if (isYoutubeSong(song)) {
+      setIsPlaying(false);
+      MusicApi.resolveSong(song)
+        .then((freshSong) => {
+          if (requestId !== playbackRequestRef.current) return;
+          if (freshSong.url) {
+            setQueue((previousQueue) => previousQueue.map((item) => item.id === song.id ? freshSong : item));
+            startPlayback(freshSong);
+          } else setIsPlaying(false);
+        })
+        .catch(() => {
+          if (requestId !== playbackRequestRef.current) return;
+          MusicApi.resolveSong({ ...song, url: '' })
+            .then((retrySong) => {
+              if (requestId !== playbackRequestRef.current || !retrySong.url) {
+                setIsPlaying(false);
+                return;
+              }
+              setQueue((previousQueue) => previousQueue.map((item) => item.id === song.id ? retrySong : item));
+              startPlayback(retrySong);
+            })
+            .catch(() => setIsPlaying(false));
+        });
+    } else if (song.id.startsWith('spotify_track_') || !song.url) {
       // Fetch details immediately (resolving Spotify tracks if necessary)
       MusicApi.resolveSong(song).then((freshSong) => {
+        if (requestId !== playbackRequestRef.current) return;
         if (freshSong && freshSong.url) {
           // Update queue state with resolved URL
           setQueue((prevQueue) => {
@@ -429,6 +613,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           setIsPlaying(false);
           nextSong();
         }
+      }).catch((error) => {
+        console.warn('[AudioContext] Native stream resolution failed:', error);
+        setIsPlaying(false);
       });
     } else {
       startPlayback(song);
@@ -666,10 +853,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    if (!audioRef.current || queue.length === 0) return;
+    if (queue.length === 0) return;
     
     // Restart song if it has played more than 3 seconds
-    if (audioRef.current.currentTime > 3) {
+    if (currentTime > 3) {
       seek(0);
       return;
     }
@@ -688,10 +875,15 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
+    const safeTime = Math.max(0, Number.isFinite(time) ? time : 0);
     if (!audioRef.current) return;
-    audioRef.current.currentTime = time;
-    setCurrentTime(time);
+    audioRef.current.currentTime = safeTime;
+    setCurrentTime(safeTime);
   };
+
+  useEffect(() => {
+    triggerAiRef.current = triggerAiRefill;
+  }, [triggerAiRefill]);
 
   const setVolume = (vol: number) => {
     if (isSyncControlled) {
@@ -706,6 +898,29 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     setVolumeState(safeVol);
     StorageService.setVolume(safeVol);
+  };
+
+  useEffect(() => {
+    togglePlayHandlerRef.current = togglePlay;
+    nextSongHandlerRef.current = nextSong;
+    prevSongHandlerRef.current = prevSong;
+    seekHandlerRef.current = seek;
+  }, [nextSong, prevSong, seek, togglePlay]);
+
+  const toggleVideoMode = () => {
+    if (!currentSong || !isYoutubeSong(currentSong)) return;
+    if (isResolvingVideo) return;
+    if (isVideoMode) {
+      setIsVideoMode(false);
+      return;
+    }
+
+    if (videoUrl) {
+      setIsVideoMode(true);
+      return;
+    }
+
+    void cacheCurrentVideo(currentSong).catch(() => setIsVideoMode(false));
   };
 
   const toggleShuffle = () => {
@@ -769,17 +984,16 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleSongError = () => {
     if (!currentSong) return;
     const songId = currentSong.id;
-    
+
     if (isRecoveringRef.current === songId) {
       return; // Already recovering this song
     }
     
     const retries = retryCountRef.current[songId] || 0;
-    if (retries >= 1) {
-      console.warn(`[AudioContext] Playback failed again for ${currentSong.title}. Skipping to next song.`);
-      delete retryCountRef.current[songId];
+    if (retries >= 2) {
+      console.warn(`[AudioContext] Playback paused after recovery attempts for ${currentSong.title}. User can retry or skip manually.`);
       isRecoveringRef.current = null;
-      nextSong();
+      setIsPlaying(false);
       return;
     }
     
@@ -787,7 +1001,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     retryCountRef.current[songId] = retries + 1;
     console.log(`[AudioContext] Playback failed for ${currentSong.title}. Attempting auto-recovery with fresh URL...`);
     
-    MusicApi.resolveSong({ ...currentSong, url: '' }).then((freshSong) => {
+    MusicApi.resolveSong({ ...currentSong, url: '' }, undefined, true).then((freshSong) => {
       isRecoveringRef.current = null;
       if (freshSong && freshSong.url) {
         // Update queue state with resolved URL
@@ -804,22 +1018,23 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setCurrentSong(freshSong);
         if (audioRef.current) {
           audioRef.current.src = freshSong.url;
+          audioRef.current.load();
           audioRef.current.play()
             .then(() => {
               setIsPlaying(true);
+              delete retryCountRef.current[songId];
             })
-            .catch((err) => {
+          .catch((err) => {
               console.error('[AudioContext] Auto-recovery playback failed on retry:', err);
               setIsPlaying(false);
-              nextSong();
             });
         }
       } else {
-        nextSong();
+        setIsPlaying(false);
       }
     }).catch(() => {
       isRecoveringRef.current = null;
-      nextSong();
+      setIsPlaying(false);
     });
   };
 
@@ -991,6 +1206,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         audioRef.current.src = '';
       }
       setCurrentSong(null);
+      setYoutubeVideoId(null);
+      setVideoUrl(null);
+      setIsVideoMode(false);
       setIsPlaying(false);
       setQueueIndex(-1);
       
@@ -1008,6 +1226,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     originalQueueRef.current = [];
     setQueueIndex(-1);
     setCurrentSong(null);
+    setYoutubeVideoId(null);
+    setVideoUrl(null);
+    setIsVideoMode(false);
     setIsPlaying(false);
     if (audioRef.current) {
       audioRef.current.pause();
@@ -1140,6 +1361,12 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         currentTime,
         duration,
         volume,
+        youtubeVideoId,
+        videoUrl,
+        isVideoMode,
+        isResolvingVideo,
+        toggleVideoMode,
+        onYoutubeVideoError,
         queue,
         queueIndex,
         isShuffle,

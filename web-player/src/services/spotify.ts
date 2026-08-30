@@ -1,4 +1,4 @@
-import { decryptPayload, getApiUrl } from './api';
+import { getApiUrl } from './api';
 
 export interface SpotifyPlaylist {
   id: string;
@@ -26,17 +26,7 @@ export const SpotifyService = {
         throw new Error(errJson.error || 'Failed to connect to Spotify sync server.');
       }
 
-      const json = await res.json();
-      if (!json.d) {
-        throw new Error('Invalid empty payload returned from server.');
-      }
-
-      const decrypted = await decryptPayload(json.d);
-      if (!decrypted) {
-        throw new Error('Decryption of playlist data failed.');
-      }
-
-      const playlist = JSON.parse(decrypted);
+      const playlist = await res.json();
       if (!playlist || !playlist.songs || playlist.songs.length === 0) {
         throw new Error('Failed to parse songs or playlist is empty/private.');
       }

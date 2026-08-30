@@ -44,7 +44,7 @@ export const Settings: React.FC<SettingsProps> = ({ onOpenAuth, setActiveTab }) 
   const userName = localStorage.getItem('rotty_user_name') || '';
 
   return (
-    <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '32px', overflowY: 'auto', height: '100%', maxWidth: '800px' }}>
+    <div className="view-shell settings-view" style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '32px', overflowY: 'auto', height: '100%', maxWidth: '800px' }}>
       
       {/* Page Header */}
       <div>
@@ -179,7 +179,7 @@ export const Settings: React.FC<SettingsProps> = ({ onOpenAuth, setActiveTab }) 
       )}
 
       {/* Setting 1: Cloud Sync & Account */}
-      <div className="liquid-glass" style={{ padding: '24px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="settings-card liquid-glass" style={{ padding: '24px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <CloudLightning size={20} style={{ color: 'var(--accent)' }} />
           <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Rotty Connect & Cloud Sync</h2>

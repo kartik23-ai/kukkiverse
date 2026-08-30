@@ -20,7 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
 
   return (
     <aside
-      className="liquid-glass"
+      className="sidebar-shell liquid-glass"
       style={{
         width: '240px',
         height: '100%',
@@ -185,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
           )}
         </div>
         <p style={{ fontSize: '8px', color: 'var(--text-tertiary)', marginTop: '2px', alignSelf: 'flex-start' }}>
-          v1.2.0-web
+          v1.3.0-web
         </p>
       </div>
     </aside>
