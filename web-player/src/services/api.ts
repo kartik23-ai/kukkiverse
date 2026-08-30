@@ -1,4 +1,4 @@
-export type MusicSource = 'youtube' | 'saavn';
+export type MusicSource = 'youtube';
 
 export interface Song {
   id: string;
@@ -40,15 +40,14 @@ export class MusicApiError extends Error {
   }
 }
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'https://rottymusic-rotty-music-backend.hf.space/api').replace(/\/$/, '');
 const HF_BACKEND_URL = 'https://rottymusic-rotty-music-backend.hf.space/api';
 const MEMORY_CACHE = new Map<string, { expiresAt: number; value: unknown }>();
-const CACHE_NAMESPACE = 'rotty-web-v7';
-const CACHE_TTL = 1000 * 60 * 15;
+const CACHE_NAMESPACE = 'rotty-youtube-v10';
+const CACHE_TTL = 1000 * 60 * 10;
 
 export function getApiUrl(endpoint: string): string {
   const cleanEndpoint = endpoint.replace(/^\/?api\//, '').replace(/^\//, '');
-  return `${API_BASE}/${cleanEndpoint}`;
+  return `${HF_BACKEND_URL}/${cleanEndpoint}`;
 }
 
 function decodeHTMLEntities(text: string): string {
@@ -90,199 +89,170 @@ function setCached(key: string, value: unknown, ttl = CACHE_TTL): void {
   } catch {}
 }
 
-const INITIAL_CURATED_SONGS: Song[] = [
-  {
-    id: "Gehra_Hua_Dhurandhar",
-    title: "Gehra Hua",
-    artist: "Arijit Singh, Shashwat Sachdev",
-    album: "Dhurandhar",
-    image: "https://c.saavncdn.com/450/Gehra-Hua-From-Dhurandhar-Hindi-2025-20251205154217-500x500.jpg",
-    url: "https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3",
-    duration: 228,
-    source: "saavn"
-  },
-  {
-    id: "Kesariya_Brahmastra",
-    title: "Kesariya",
-    artist: "Pritam, Arijit Singh, Amitabh Bhattacharya",
-    album: "Brahmastra",
-    image: "https://c.saavncdn.com/191/Kesariya-From-Brahmastra-Hindi-2022-20220717092820-500x500.jpg",
-    url: "https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3",
-    duration: 268,
-    source: "saavn"
-  },
-  {
-    id: "Tum_Hi_Ho_Aashiqui_2",
-    title: "Tum Hi Ho",
-    artist: "Mithoon, Arijit Singh",
-    album: "Aashiqui 2",
-    image: "https://c.saavncdn.com/430/Aashiqui-2-Hindi-2013-500x500.jpg",
-    url: "https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3",
-    duration: 262,
-    source: "saavn"
-  },
-  {
-    id: "Chaleya_Jawan",
-    title: "Chaleya",
-    artist: "Anirudh Ravichander, Arijit Singh, Shilpa Rao",
-    album: "Jawan",
-    image: "https://c.saavncdn.com/026/Chaleya-From-Jawan-Hindi-2023-20230814114321-500x500.jpg",
-    url: "https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3",
-    duration: 200,
-    source: "saavn"
-  },
-  {
-    id: "Heeriye_Jasleen",
-    title: "Heeriye",
-    artist: "Jasleen Royal, Dulquer Salmaan, Arijit Singh",
-    album: "Heeriye Single",
-    image: "https://c.saavncdn.com/022/Heeriye-feat-Arijit-Singh-Hindi-2023-20230928050405-500x500.jpg",
-    url: "https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3",
-    duration: 194,
-    source: "saavn"
-  }
-];
+// 100% Dynamic YouTube Search Scraper (Live Direct Request)
+async function searchYouTubeDynamic(query: string): Promise<Song[]> {
+  const cleanQuery = query.trim();
+  if (!cleanQuery) return [];
 
-async function fetchJioSaavnApi(query: string): Promise<Song[]> {
+  const cached = getCached<Song[]>(`yt_search:${cleanQuery}`);
+  if (cached) return cached;
+
+  // 1. Try Hugging Face production Space YouTube backend endpoint
   try {
-    const res = await fetch(`https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    const songsArr = data?.songs?.data || [];
-    return songsArr.map((item: any) => {
-      const imgRaw = item.image || '';
-      const hiResImg = imgRaw.replace('50x50.jpg', '500x500.jpg').replace('150x150.jpg', '500x500.jpg');
-      const vlink = item.more_info?.vlink || item.more_info?.encrypted_media_url || 'https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3';
-      return {
-        id: item.id,
-        title: decodeHTMLEntities(item.title || 'Track'),
-        artist: decodeHTMLEntities(item.more_info?.primary_artists || item.description || 'Artist'),
-        album: decodeHTMLEntities(item.album || 'Single'),
-        image: hiResImg || `https://c.saavncdn.com/${item.id}.jpg`,
-        url: vlink,
-        duration: parseInt(item.more_info?.duration || '210', 10),
-        source: 'saavn' as const
-      };
+    const res = await fetch(`${HF_BACKEND_URL}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: cleanQuery, limit: 18 })
     });
-  } catch {
-    return [];
+    if (res.ok) {
+      const data = await res.json();
+      const songs = (data.songs || []).map((s: Song) => ({
+        ...s,
+        id: s.id.startsWith('youtube_') ? s.id : `youtube_${s.id}`,
+        youtubeVideoId: s.youtubeVideoId || s.id.replace('youtube_', ''),
+        title: decodeHTMLEntities(s.title),
+        artist: decodeHTMLEntities(s.artist),
+        album: decodeHTMLEntities(s.album || 'YouTube Music'),
+        source: 'youtube' as const
+      }));
+      if (songs.length > 0) {
+        setCached(`yt_search:${cleanQuery}`, songs);
+        return songs;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Try Invidious public CORS API search instances
+  const invidiousInstances = [
+    'https://invidious.nerdvpn.de',
+    'https://inv.tux.pizza',
+    'https://vid.puffyan.us'
+  ];
+  for (const inst of invidiousInstances) {
+    try {
+      const res = await fetch(`${inst}/api/v1/search?q=${encodeURIComponent(cleanQuery)}&type=video`);
+      if (res.ok) {
+        const items = await res.json();
+        if (Array.isArray(items) && items.length > 0) {
+          const songs: Song[] = items.slice(0, 18).map((item: any) => ({
+            id: `youtube_${item.videoId}`,
+            youtubeVideoId: item.videoId,
+            title: decodeHTMLEntities(item.title || 'YouTube Track'),
+            artist: decodeHTMLEntities(item.author || 'YouTube Artist'),
+            album: 'YouTube Music',
+            image: item.videoThumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
+            url: '',
+            duration: item.lengthSeconds || 210,
+            source: 'youtube' as const
+          }));
+          setCached(`yt_search:${cleanQuery}`, songs);
+          return songs;
+        }
+      }
+    } catch (_) {}
   }
+
+  return [];
 }
 
 export const MusicApi = {
   async searchSongs(query: string, limit = 20, _signal?: AbortSignal): Promise<Song[]> {
     const cleanQuery = query.trim();
-    if (!cleanQuery) return INITIAL_CURATED_SONGS;
-
-    const cached = getCached<Song[]>(`search:${cleanQuery}`);
-    if (cached) return cached;
-
-    // 1. Direct JioSaavn search
-    const saavnSongs = await fetchJioSaavnApi(cleanQuery);
-    if (saavnSongs.length > 0) {
-      setCached(`search:${cleanQuery}`, saavnSongs);
-      return saavnSongs;
-    }
-
-    // 2. Hugging Face backend proxy search
-    try {
-      const res = await fetch(`${HF_BACKEND_URL}/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: cleanQuery, limit })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const songs = (data.songs || []).map((s: Song) => ({
-          ...s,
-          title: decodeHTMLEntities(s.title),
-          artist: decodeHTMLEntities(s.artist),
-          album: decodeHTMLEntities(s.album)
-        }));
-        if (songs.length > 0) {
-          setCached(`search:${cleanQuery}`, songs);
-          return songs;
-        }
-      }
-    } catch (_) {}
-
-    return INITIAL_CURATED_SONGS;
+    if (!cleanQuery) return await searchYouTubeDynamic('new hindi songs 2026 hits');
+    const songs = await searchYouTubeDynamic(cleanQuery);
+    return songs.slice(0, limit);
   },
 
-  async getHomeSections(_signal?: AbortSignal, _force = false): Promise<Record<string, Song[]>> {
-    const cached = _force ? null : getCached<Record<string, Song[]>>('home_sections');
+  async getHomeSections(_signal?: AbortSignal, force = false): Promise<Record<string, Song[]>> {
+    const cached = force ? null : getCached<Record<string, Song[]>>('yt_home_sections');
     if (cached) return cached;
 
     const [trending, bollywood, punjabi, lofi] = await Promise.all([
-      fetchJioSaavnApi('trending hindi hits 2026'),
-      fetchJioSaavnApi('top 20 bollywood hits'),
-      fetchJioSaavnApi('punjabi hits 2026'),
-      fetchJioSaavnApi('lofi hindi chill beats')
+      searchYouTubeDynamic('trending hindi songs 2026'),
+      searchYouTubeDynamic('top bollywood songs 2026'),
+      searchYouTubeDynamic('punjabi hit songs 2026'),
+      searchYouTubeDynamic('lofi hindi songs chill beats')
     ]);
 
     const sections: Record<string, Song[]> = {
-      '🔥 Trending Hits 2026': trending.length > 0 ? trending.slice(0, 10) : INITIAL_CURATED_SONGS,
-      '🎬 Bollywood Spotlight': bollywood.length > 0 ? bollywood.slice(0, 10) : INITIAL_CURATED_SONGS,
-      '🎹 Punjabi Party Top 20': punjabi.length > 0 ? punjabi.slice(0, 10) : INITIAL_CURATED_SONGS,
-      '☕ Midnight Lo-Fi & Chill': lofi.length > 0 ? lofi.slice(0, 10) : INITIAL_CURATED_SONGS
+      '🔥 Trending YouTube Hits 2026': trending,
+      '🎬 Top Bollywood Spotlight': bollywood,
+      '🎹 Punjabi Party 2026': punjabi,
+      '☕ Midnight Lo-Fi & Chill': lofi
     };
 
-    setCached('home_sections', sections);
+    setCached('yt_home_sections', sections);
     return sections;
   },
 
   async getSongDetails(id: string, _signal?: AbortSignal): Promise<Song | null> {
     if (!id) return null;
-    const cached = getCached<Song>(`details:${id}`);
+    const videoId = id.startsWith('youtube_') ? id.slice(8) : id;
+    const cached = getCached<Song>(`yt_details:${videoId}`);
     if (cached) return cached;
 
+    const song: Song = {
+      id: `youtube_${videoId}`,
+      youtubeVideoId: videoId,
+      title: 'YouTube Track',
+      artist: 'YouTube Music',
+      album: 'YouTube Music',
+      image: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      url: '',
+      duration: 210,
+      source: 'youtube'
+    };
+    setCached(`yt_details:${videoId}`, song);
+    return song;
+  },
+
+  async resolveSong(song: Song, _signal?: AbortSignal, force = false): Promise<Song> {
+    if (song.url && song.url.length > 10) return song;
+
+    const videoId = song.youtubeVideoId || (song.id.startsWith('youtube_') ? song.id.slice(8) : song.id);
+    const cacheKey = `yt_stream:${videoId}:audio`;
+    const cached = !force ? getCached<MediaResolution>(cacheKey) : null;
+    if (cached?.url) {
+      return {
+        ...song,
+        url: cached.url,
+        youtubeVideoId: videoId,
+        source: 'youtube'
+      };
+    }
+
+    // Resolve audio stream via Hugging Face backend proxy
     try {
-      const res = await fetch(`https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&pids=${id}`);
+      const res = await fetch(`${HF_BACKEND_URL}/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: song.id, videoId, title: song.title, artist: song.artist, mode: 'audio' })
+      });
       if (res.ok) {
         const data = await res.json();
-        const details = data[id];
-        if (details) {
-          const song: Song = {
-            id,
-            title: decodeHTMLEntities(details.title || 'Track'),
-            artist: decodeHTMLEntities(details.more_info?.primary_artists || 'Artist'),
-            album: decodeHTMLEntities(details.album || 'Single'),
-            image: (details.image || '').replace('150x150.jpg', '500x500.jpg'),
-            url: details.media_preview_url || details.vlink || 'https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3',
-            duration: parseInt(details.more_info?.duration || '210', 10),
-            source: 'saavn'
+        if (data.url) {
+          setCached(cacheKey, data);
+          return {
+            ...song,
+            url: data.url,
+            youtubeVideoId: videoId,
+            source: 'youtube'
           };
-          setCached(`details:${id}`, song);
-          return song;
         }
       }
     } catch (_) {}
 
-    return INITIAL_CURATED_SONGS[0];
-  },
-
-  async resolveSong(song: Song, _signal?: AbortSignal, _force = false): Promise<Song> {
-    if (song.url && song.url.length > 10) return song;
-
-    const query = `${song.title} ${song.artist}`.trim();
-    const saavnResults = await fetchJioSaavnApi(query);
-    if (saavnResults.length > 0 && saavnResults[0].url) {
-      return {
-        ...song,
-        url: saavnResults[0].url,
-        image: saavnResults[0].image || song.image,
-        source: 'saavn'
-      };
-    }
-
+    // Fallback Invidious audio stream URL
     try {
-      const res = await fetch(`${HF_BACKEND_URL}/media?id=${song.id.replace('youtube_', '')}`);
+      const res = await fetch(`https://invidious.nerdvpn.de/api/v1/videos/${videoId}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.streamUrl) {
+        const audioFormat = (data.adaptiveFormats || []).find((f: any) => f.type && f.type.includes('audio'));
+        if (audioFormat && audioFormat.url) {
           return {
             ...song,
-            url: data.streamUrl,
+            url: audioFormat.url,
+            youtubeVideoId: videoId,
             source: 'youtube'
           };
         }
@@ -291,27 +261,56 @@ export const MusicApi = {
 
     return {
       ...song,
-      url: 'https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3',
-      source: 'saavn'
+      youtubeVideoId: videoId,
+      source: 'youtube'
     };
   },
 
-  async resolveVideo(song: Song, _signal?: AbortSignal, _force = false): Promise<MediaResolution> {
+  async resolveVideo(song: Song, _signal?: AbortSignal, force = false): Promise<MediaResolution> {
     const videoId = song.youtubeVideoId || (song.id.startsWith('youtube_') ? song.id.slice(8) : song.id);
+    const cacheKey = `yt_stream:${videoId}:video`;
+    const cached = !force ? getCached<MediaResolution>(cacheKey) : null;
+    if (cached?.url) return cached;
+
+    try {
+      const res = await fetch(`${HF_BACKEND_URL}/video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: song.id, videoId, title: song.title, artist: song.artist, mode: 'video' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCached(cacheKey, data);
+        return data;
+      }
+    } catch (_) {}
+
     return {
-      url: 'https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3',
+      url: '',
       videoId,
       mode: 'video'
     };
   },
 
   async getRecommendations(songId?: string, seedSong?: Song, limit = 15, _signal?: AbortSignal): Promise<Song[]> {
-    const query = seedSong?.artist || seedSong?.title || songId || 'trending hindi';
-    const saavnSongs = await fetchJioSaavnApi(query);
-    return saavnSongs.length > 0 ? saavnSongs.slice(0, limit) : INITIAL_CURATED_SONGS;
+    const query = seedSong?.artist || seedSong?.title || songId || 'trending hindi songs';
+    const songs = await searchYouTubeDynamic(query);
+    return songs.slice(0, limit);
   },
 
   async getLyrics(song: Song, _signal?: AbortSignal): Promise<string | null> {
-    return `[00:00.00] ♪ (Intro Symphony) ♪\n[00:15.00] ${song.title} - ${song.artist}\n[00:30.00] ♪ Live synchronized karaoke lyrics powered by Rotty Engine ♪`;
+    try {
+      const res = await fetch(`${HF_BACKEND_URL}/lyrics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: song.title, artist: song.artist, duration: song.duration })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lyrics) return data.lyrics;
+      }
+    } catch (_) {}
+
+    return `[00:00.00] ♪ (YouTube Music Symphony) ♪\n[00:15.00] ${song.title} - ${song.artist}\n[00:30.00] ♪ Live synchronized lyrics powered by Rotty Engine ♪`;
   }
 };
