@@ -154,6 +154,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Refs for audio engine
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ghostAudioRef = useRef<HTMLAudioElement | null>(null);
   const originalQueueRef = useRef<Song[]>([]);
   const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -275,6 +276,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!freshSong.url) return;
         setQueue((previousQueue) => previousQueue.map((item) => item.id === freshSong.id ? freshSong : item));
         originalQueueRef.current = originalQueueRef.current.map((item) => item.id === freshSong.id ? freshSong : item);
+        try {
+          // Instantiate ghost audio element to pre-buffer the first 512k-1M of audio into browser cache
+          const ghost = new Audio();
+          ghost.preload = 'auto';
+          ghost.src = freshSong.url;
+          ghostAudioRef.current = ghost;
+        } catch (_) {}
       })
       .catch(() => {
         prefetchedStreamForSongIdRef.current = '';

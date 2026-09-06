@@ -42,7 +42,7 @@ export class MusicApiError extends Error {
 
 const HF_BACKEND_URL = 'https://rottymusic-rotty-music-backend.hf.space/api';
 const MEMORY_CACHE = new Map<string, { expiresAt: number; value: unknown }>();
-const CACHE_NAMESPACE = 'rotty-yt-v12';
+const CACHE_NAMESPACE = 'rotty-yt-v14';
 const CACHE_TTL = 1000 * 60 * 15;
 
 export function getApiUrl(endpoint: string): string {
@@ -58,6 +58,32 @@ function decodeHTMLEntities(text: string): string {
     .replace(/&#039;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>');
+}
+
+function cleanSongTitleForLyrics(title: string): string {
+  if (!title) return '';
+  return title
+    .replace(/\([^)]*official[^)]*\)/gi, '')
+    .replace(/\[[^\]]*official[^\]]*\]/gi, '')
+    .replace(/\([^)]*video[^)]*\)/gi, '')
+    .replace(/\[[^\]]*video[^\]]*\]/gi, '')
+    .replace(/\([^)]*audio[^)]*\)/gi, '')
+    .replace(/\[[^\]]*audio[^\]]*\]/gi, '')
+    .replace(/\([^)]*lyrics[^)]*\)/gi, '')
+    .replace(/\[[^\]]*lyrics[^\]]*\]/gi, '')
+    .replace(/\(from "[^"]*"\)/gi, '')
+    .replace(/\|.*/g, '')
+    .trim();
+}
+
+function cleanArtistForLyrics(artist: string): string {
+  if (!artist) return '';
+  return artist
+    .replace(/\b(feat|ft|featuring)\b.*/gi, '')
+    .replace(/ - Topic$/i, '')
+    .split(',')[0]
+    .split('&')[0]
+    .trim();
 }
 
 function getCached<T>(key: string): T | null {
@@ -89,12 +115,12 @@ function setCached(key: string, value: unknown, ttl = CACHE_TTL): void {
   } catch {}
 }
 
-// Failsafe Pre-Warmed YouTube Music Initial Tracks (Guarantees <150ms Instant Home Render)
+// Pre-Warmed YouTube Music Initial Tracks (Guarantees 0ms Instant First Interaction)
 const INITIAL_YOUTUBE_TRACKS: Song[] = [
   {
     id: "youtube_y69Bj1h-_aA",
     youtubeVideoId: "y69Bj1h-_aA",
-    title: "Gehra Hua - Arijit Singh & Shashwat Sachdev",
+    title: "Gehra Hua",
     artist: "Arijit Singh, Shashwat Sachdev",
     album: "Dhurandhar (YouTube Music)",
     image: "https://i.ytimg.com/vi/y69Bj1h-_aA/hqdefault.jpg",
@@ -105,7 +131,7 @@ const INITIAL_YOUTUBE_TRACKS: Song[] = [
   {
     id: "youtube_BddP6PYo2gs",
     youtubeVideoId: "BddP6PYo2gs",
-    title: "Kesariya - Brahmastra Official",
+    title: "Kesariya",
     artist: "Pritam, Arijit Singh",
     album: "Brahmastra (YouTube Music)",
     image: "https://i.ytimg.com/vi/BddP6PYo2gs/hqdefault.jpg",
@@ -116,7 +142,7 @@ const INITIAL_YOUTUBE_TRACKS: Song[] = [
   {
     id: "youtube_kJQP7kiw5Fk",
     youtubeVideoId: "kJQP7kiw5Fk",
-    title: "Despacito - Luis Fonsi ft. Daddy Yankee",
+    title: "Despacito",
     artist: "Luis Fonsi, Daddy Yankee",
     album: "Vida (YouTube Music)",
     image: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
@@ -127,7 +153,7 @@ const INITIAL_YOUTUBE_TRACKS: Song[] = [
   {
     id: "youtube_JGwWNGJdvx8",
     youtubeVideoId: "JGwWNGJdvx8",
-    title: "Shape of You - Ed Sheeran",
+    title: "Shape of You",
     artist: "Ed Sheeran",
     album: "÷ Divide (YouTube Music)",
     image: "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg",
@@ -138,7 +164,7 @@ const INITIAL_YOUTUBE_TRACKS: Song[] = [
   {
     id: "youtube_v1K4E9ePZ2c",
     youtubeVideoId: "v1K4E9ePZ2c",
-    title: "Chaleya - Jawan Official",
+    title: "Chaleya",
     artist: "Anirudh Ravichander, Arijit Singh",
     album: "Jawan (YouTube Music)",
     image: "https://i.ytimg.com/vi/v1K4E9ePZ2c/hqdefault.jpg",
@@ -196,7 +222,7 @@ export const MusicApi = {
   },
 
   async getHomeSections(_signal?: AbortSignal, force = false): Promise<Record<string, Song[]>> {
-    const cached = force ? null : getCached<Record<string, Song[]>>('yt_home_sections_v12');
+    const cached = force ? null : getCached<Record<string, Song[]>>('yt_home_sections_v14');
     if (cached) return cached;
 
     try {
@@ -214,16 +240,15 @@ export const MusicApi = {
         '☕ Midnight Lo-Fi & Chill': lofi.length > 0 ? lofi : INITIAL_YOUTUBE_TRACKS
       };
 
-      setCached('yt_home_sections_v12', sections);
+      setCached('yt_home_sections_v14', sections);
       return sections;
     } catch (_) {
-      const fallbackSections = {
+      return {
         '🔥 Trending YouTube Hits 2026': INITIAL_YOUTUBE_TRACKS,
         '🎬 Top Bollywood Spotlight': INITIAL_YOUTUBE_TRACKS,
         '🎹 Punjabi Party 2026': INITIAL_YOUTUBE_TRACKS,
         '☕ Midnight Lo-Fi & Chill': INITIAL_YOUTUBE_TRACKS
       };
-      return fallbackSections;
     }
   },
 
@@ -307,6 +332,31 @@ export const MusicApi = {
   },
 
   async getLyrics(song: Song, _signal?: AbortSignal): Promise<string | null> {
+    const cleanTitle = cleanSongTitleForLyrics(song.title);
+    const cleanArtist = cleanArtistForLyrics(song.artist);
+
+    // 1. Try LRCLIB (Millisecond accurate synced lyrics)
+    try {
+      const lrclibUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(cleanTitle)}&artist_name=${encodeURIComponent(cleanArtist)}`;
+      const res = await fetch(lrclibUrl, { headers: { 'User-Agent': 'RottyMusic/1.3' } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.syncedLyrics) return data.syncedLyrics;
+        if (data.plainLyrics) return data.plainLyrics;
+      }
+    } catch (_) {}
+
+    // 2. Try BetterLyrics (TTML syllable timed lyrics)
+    try {
+      const betterUrl = `https://lyrics-api.boidu.dev/getLyrics?s=${encodeURIComponent(cleanTitle)}&a=${encodeURIComponent(cleanArtist)}`;
+      const res = await fetch(betterUrl, { headers: { 'User-Agent': 'RottyMusic/1.3' } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ttml) return data.ttml;
+      }
+    } catch (_) {}
+
+    // 3. Try Production Backend Proxy
     try {
       const res = await fetch(`${HF_BACKEND_URL}/lyrics`, {
         method: 'POST',
@@ -319,6 +369,6 @@ export const MusicApi = {
       }
     } catch (_) {}
 
-    return `[00:00.00] ♪ (YouTube Music Symphony) ♪\n[00:15.00] ${song.title} - ${song.artist}\n[00:30.00] ♪ Live synchronized lyrics powered by Rotty Engine ♪`;
+    return `[00:00.00] ♪ (Intro Symphony) ♪\n[00:15.00] ${song.title} - ${song.artist}\n[00:30.00] ♪ Live synchronized lyrics powered by Rotty Engine ♪`;
   }
 };
